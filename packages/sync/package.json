@@ -1,0 +1,30 @@
+{
+  "name": "@uaf/sync",
+  "version": "0.3.0-rc.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@powersync/web": "^2.3.1",
+    "@uaf/auth": "workspace:*",
+    "@uaf/core": "workspace:*",
+    "@uaf/data": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.0"
+  }
+}

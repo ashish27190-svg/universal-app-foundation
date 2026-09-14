@@ -1,0 +1,5 @@
+[functions.sync-apply]
+verify_jwt = true
+
+[functions.resolve-conflict]
+verify_jwt = true

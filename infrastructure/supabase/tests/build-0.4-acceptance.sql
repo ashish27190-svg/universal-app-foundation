@@ -1,0 +1,13 @@
+-- BUILD 0.4 acceptance scenarios for execution against a Supabase local/staging database.
+-- These are intentionally written as an operator checklist rather than pretending they ran here.
+--
+-- Required evidence before E3 is marked green:
+-- 1. Sign in as User A, call ensure_personal_workspace twice, assert same workspace_id.
+-- 2. Assert exactly one active personal workspace and one active owner membership for User A.
+-- 3. Sign in as User B and create/resolve User B's personal workspace.
+-- 4. As User A, SELECT User B's workspace and membership: expect zero rows.
+-- 5. As User A, UPDATE User B's workspace: expect RLS denial/no affected rows.
+-- 6. As anonymous client, SELECT any shared table: expect denied/zero accessible rows.
+-- 7. As authenticated User A, direct INSERT into workspaces/memberships: expect denied.
+-- 8. As authenticated User A, direct access to processed_mutations: expect denied.
+-- 9. Delete auth User A in a disposable test project only; verify profile/membership cascade behaviour is understood before production.

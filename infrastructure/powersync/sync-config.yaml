@@ -1,0 +1,13 @@
+config:
+  edition: 3
+
+streams:
+  household_vault:
+    auto_subscribe: true
+    queries:
+      - SELECT workspaces.* FROM workspaces INNER JOIN workspace_memberships membership ON membership.workspace_id = workspaces.id WHERE membership.user_id = auth.user_id() AND membership.status = 'active'
+      - SELECT * FROM workspace_memberships WHERE user_id = auth.user_id() AND status = 'active'
+      - SELECT household_assets.* FROM household_assets INNER JOIN workspace_memberships membership ON membership.workspace_id = household_assets.workspace_id WHERE membership.user_id = auth.user_id() AND membership.status = 'active'
+      - SELECT asset_service_records.* FROM asset_service_records INNER JOIN workspace_memberships membership ON membership.workspace_id = asset_service_records.workspace_id WHERE membership.user_id = auth.user_id() AND membership.status = 'active'
+      - SELECT write_conflicts.* FROM write_conflicts INNER JOIN workspace_memberships membership ON membership.workspace_id = write_conflicts.workspace_id WHERE membership.user_id = auth.user_id() AND membership.status = 'active' AND write_conflicts.resolved_at IS NULL
+      - SELECT audit_events.* FROM audit_events INNER JOIN workspace_memberships membership ON membership.workspace_id = audit_events.workspace_id WHERE membership.user_id = auth.user_id() AND membership.status = 'active'

@@ -1,0 +1,51 @@
+{
+  "name": "universal-app-foundation",
+  "version": "0.3.0-rc.1",
+  "private": true,
+  "packageManager": "pnpm@10.15.1",
+  "engines": {
+    "node": "24.21.x"
+  },
+  "scripts": {
+    "dev": "turbo dev --parallel",
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "turbo typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "validate:structure": "node scripts/validate-structure.mjs",
+    "validate:core-boundary": "node scripts/validate-core-boundary.mjs",
+    "validate:config-boundary": "node scripts/validate-config-boundary.mjs",
+    "validate:auth-boundary": "node scripts/validate-auth-boundary.mjs",
+    "validate:supabase-foundation": "node scripts/validate-supabase-foundation.mjs",
+    "validate:data-boundary": "node scripts/validate-data-boundary.mjs",
+    "validate:sync-boundary": "node scripts/validate-sync-boundary.mjs",
+    "validate:ui-boundary": "node scripts/validate-ui-boundary.mjs",
+    "validate:household-domain-boundary": "node scripts/validate-household-domain-boundary.mjs",
+    "validate:household-supabase": "node scripts/validate-household-supabase.mjs",
+    "validate:security": "node scripts/validate-security-gates.mjs",
+    "test:e2e": "pnpm --filter @uaf/reference-app test:e2e",
+    "build:reference": "pnpm --filter @uaf/reference-app build",
+    "deploy:staging": "pnpm --filter @uaf/reference-app build && wrangler deploy --config apps/reference-app/wrangler.jsonc --env staging",
+    "deploy:production": "pnpm --filter @uaf/reference-app build && wrangler deploy --config apps/reference-app/wrangler.jsonc",
+    "validate:conflict-resolution": "node scripts/validate-conflict-resolution.mjs",
+    "validate:pwa-release": "node scripts/validate-pwa-release.mjs",
+    "validate:monitoring": "node scripts/validate-monitoring.mjs",
+    "connected:gate": "node scripts/connected-build-gate.mjs",
+    "connected:e2e": "node scripts/connected-build-gate.mjs --with-e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.0",
+    "globals": "^16.0.0",
+    "prettier": "^3.0.0",
+    "turbo": "^2.5.0",
+    "typescript": "~5.9.0",
+    "typescript-eslint": "^8.0.0",
+    "wrangler": "4.131.1",
+    "supabase": "2.117.0"
+  }
+}

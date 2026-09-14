@@ -1,0 +1,16 @@
+-- BUILD 0.17 connected security acceptance checklist.
+-- Execute in a disposable local/staging project using real User A/User B sessions.
+--
+-- RELEASE-BLOCKING assertions:
+-- 1. Anonymous clients cannot read workspaces, memberships, write_conflicts, audit_events,
+--    household_assets or asset_service_records.
+-- 2. User A cannot SELECT User B's workspace/domain/conflict/audit rows.
+-- 3. User A cannot UPDATE User B's workspace through the client API.
+-- 4. Authenticated browser clients cannot directly INSERT/UPDATE/DELETE household_assets;
+--    domain writes must travel through the UAF write gateway.
+-- 5. Authenticated browser clients cannot access processed_mutations.
+-- 6. A User A token cannot resolve a User B write_conflict through resolve-conflict.
+-- 7. Invalid/expired JWTs receive 401 from sync-apply and resolve-conflict.
+-- 8. No service-role or replication credential appears in built browser assets.
+-- 9. Sync Streams deliver only rows associated with active workspace membership.
+-- 10. Removed/suspended membership stops subsequent data delivery in a staging test.

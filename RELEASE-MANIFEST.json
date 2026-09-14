@@ -1,0 +1,24 @@
+{
+  "release": "UAF v0.3.0 RC1",
+  "version": "0.3.0-rc.1",
+  "tag": "uaf-v0.3.0-rc.1",
+  "sourceBaseline": "BUILD 0.21",
+  "handoffBuild": "BUILD 0.22",
+  "architecture": "UAF v0.1 frozen",
+  "technicalPlan": "UAF v0.2 complete",
+  "toolchain": {
+    "node": "24.21.0",
+    "pnpm": "10.15.1"
+  },
+  "evidence": {
+    "staticValidation": "passed locally",
+    "dependencyBackedBuild": "pending connected Node 24 environment",
+    "supabaseRuntime": "pending",
+    "powersyncRuntime": "pending",
+    "connectedPlaywright": "pending",
+    "androidPwa": "pending",
+    "staging": "pending",
+    "productionPilot": "pending"
+  },
+  "promotionRule": "Do not add feature scope or promote beyond RC until the connected/runtime gates pass."
+}

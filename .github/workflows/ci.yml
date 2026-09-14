@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.15.1 --activate
+      - name: Require dependency lock
+        run: test -f pnpm-lock.yaml || (echo 'pnpm-lock.yaml is required before CI can be green.' && exit 1)
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm validate:structure
+      - run: pnpm validate:core-boundary
+      - run: pnpm validate:config-boundary
+      - run: pnpm validate:auth-boundary
+      - run: pnpm validate:data-boundary
+      - run: pnpm validate:sync-boundary
+      - run: pnpm validate:ui-boundary
+      - run: pnpm validate:household-domain-boundary
+      - run: pnpm validate:supabase-foundation
+      - run: pnpm validate:household-supabase
+      - run: pnpm validate:security
+      - run: pnpm validate:conflict-resolution
+      - run: pnpm validate:pwa-release
+      - run: pnpm validate:monitoring
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build

@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@uaf/core": ["packages/core/src/index.ts"],
+      "@uaf/data": ["packages/data/src/index.ts"]
+    }
+  },
+  "include": [
+    "packages/core/src/index.ts",
+    "packages/data/src/index.ts",
+    "packages/sync/src/index.ts",
+    "packages/auth/src/index.ts",
+    "packages/domain-kit/src/index.ts",
+    "packages/test-kit/src/index.ts"
+  ]
+}

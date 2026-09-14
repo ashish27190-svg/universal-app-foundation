@@ -1,0 +1,36 @@
+name: Connected E2E
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 2 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  household-vault:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VITE_UAF_ENVIRONMENT: staging
+      VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_POWERSYNC_URL: ${{ secrets.STAGING_POWERSYNC_URL }}
+      E2E_EMAIL: ${{ secrets.STAGING_E2E_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.STAGING_E2E_PASSWORD }}
+      E2E_BASE_URL: http://127.0.0.1:4173
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @uaf/reference-app exec playwright install --with-deps chromium
+      - run: pnpm --filter @uaf/reference-app build
+      - name: Start preview server
+        run: pnpm --filter @uaf/reference-app exec vite preview --host 127.0.0.1 --port 4173 > /tmp/uaf-preview.log 2>&1 &
+      - name: Run connected reliability journeys
+        run: pnpm --filter @uaf/reference-app test:e2e

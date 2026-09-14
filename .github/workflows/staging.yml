@@ -1,0 +1,49 @@
+name: Deploy Staging
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: uaf-household-vault-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging
+    env:
+      VITE_UAF_ENVIRONMENT: staging
+      VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_POWERSYNC_URL: ${{ secrets.STAGING_POWERSYNC_URL }}
+      VITE_SENTRY_DSN: ${{ secrets.STAGING_SENTRY_DSN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
+      - name: Apply Supabase migrations
+        run: |
+          pnpm supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          pnpm supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
+      - name: Deploy Supabase Edge Functions
+        run: |
+          pnpm supabase functions deploy sync-apply --project-ref "$SUPABASE_PROJECT_REF"
+          pnpm supabase functions deploy resolve-conflict --project-ref "$SUPABASE_PROJECT_REF"
+      - name: Deploy Cloudflare staging PWA
+        run: pnpm wrangler deploy --config apps/reference-app/wrangler.jsonc --env staging
