@@ -39,7 +39,7 @@ jobs:
       - run: pnpm validate:conflict-resolution
       - run: pnpm validate:pwa-release
       - run: pnpm validate:monitoring
+      - run: pnpm build
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
-      - run: pnpm build

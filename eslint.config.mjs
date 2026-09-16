@@ -24,10 +24,22 @@ export default tseslint.config(
   },
   {
     files: ['apps/**/*.{ts,tsx}', 'packages/ui/**/*.{ts,tsx}'],
-    plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
+    plugins: { 'react-hooks': reactHooks },
     rules: {
       ...reactHooks.configs.recommended.rules,
+    },
+  },
+  {
+    files: ['apps/**/*.tsx'],
+    plugins: { 'react-refresh': reactRefresh },
+    rules: {
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    },
+  },
+  {
+    files: ['apps/reference-app/src/monitoring.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
     },
   },
 );
