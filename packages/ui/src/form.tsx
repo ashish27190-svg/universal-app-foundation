@@ -11,16 +11,16 @@ import { cx } from './utils.js';
 export interface FormFieldProps {
   label: string;
   htmlFor: string;
-  required?: boolean;
-  helperText?: ReactNode;
-  error?: ReactNode;
+  required?: boolean | undefined;
+  helperText?: ReactNode | undefined;
+  error?: ReactNode | undefined;
   children: ReactNode;
-  className?: string;
+  className?: string | undefined;
 }
 
 export function FormField({ label, htmlFor, required, helperText, error, children, className }: FormFieldProps) {
   return (
-    <div className={cx('uaf-field', error && 'uaf-field--error', className)}>
+    <div className={cx('uaf-field', Boolean(error) && 'uaf-field--error', className)}>
       <label className="uaf-field__label" htmlFor={htmlFor}>
         {label}
         {required ? <span className="uaf-field__required" aria-hidden="true"> *</span> : null}
@@ -105,8 +105,8 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
 
 export interface LabeledTextInputProps extends TextInputProps {
   label: string;
-  helperText?: ReactNode;
-  error?: ReactNode;
+  helperText?: ReactNode | undefined;
+  error?: ReactNode | undefined;
 }
 
 export const LabeledTextInput = forwardRef<HTMLInputElement, LabeledTextInputProps>(function LabeledTextInput(

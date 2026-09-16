@@ -9,7 +9,7 @@ export function Card({ interactive = false, className, ...props }: CardProps) {
   return <div {...props} className={cx('uaf-card', interactive && 'uaf-card--interactive', className)} />;
 }
 
-export interface ListRowProps extends HTMLAttributes<HTMLDivElement> {
+export interface ListRowProps extends Omit<HTMLAttributes<HTMLDivElement>, 'title'> {
   title: ReactNode;
   subtitle?: ReactNode;
   leading?: ReactNode;
