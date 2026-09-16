@@ -21,7 +21,7 @@ export function DiagnosticsPanel() {
 
   return (
     <details className="vault-diagnostics" onToggle={(event) => {
-      if ((event.currentTarget as HTMLDetailsElement).open && !data && !loading) void refresh();
+      if (event.currentTarget.open && !data && !loading) void refresh();
     }}>
       <summary>Diagnostics</summary>
       <Card className="vault-diagnostics-card">

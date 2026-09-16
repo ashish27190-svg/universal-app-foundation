@@ -34,7 +34,7 @@ for (const file of files) {
   const text = await readFile(file, 'utf8');
   for (const dependency of forbidden) {
     const escaped = dependency.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const importPattern = new RegExp(`(?:from\\s+|import\\s*\\()(['\"])${escaped}`);
+    const importPattern = new RegExp(`(?:from\\s+|import\\s*\\()(['"])${escaped}`);
     if (importPattern.test(text)) violations.push(`${file}: forbidden dependency ${dependency}`);
   }
 }

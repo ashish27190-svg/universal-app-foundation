@@ -1,5 +1,5 @@
 import { readFile, readdir } from 'node:fs/promises';
-import { join } from 'node:path';
+
 
 const root = new URL('../packages/auth/src/', import.meta.url);
 const allowedExternal = new Set(['@uaf/core', '@supabase/supabase-js', 'vitest']);

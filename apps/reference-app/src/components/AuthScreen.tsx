@@ -44,7 +44,7 @@ export function AuthScreen() {
         <p className="vault-muted">The UAF reference app for reliable offline-first household records.</p>
         {error ? <ErrorState title="Could not continue" description={error} /> : null}
         {message ? <div className="vault-callout" role="status">{message}</div> : null}
-        <form className="vault-form" onSubmit={submit}>
+        <form className="vault-form" onSubmit={(event) => { void submit(event); }}>
           {mode === 'sign-up' ? (
             <FormField label="Name" htmlFor="display-name">
               <TextInput id="display-name" autoComplete="name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} />

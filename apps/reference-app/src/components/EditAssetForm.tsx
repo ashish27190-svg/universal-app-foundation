@@ -5,7 +5,6 @@ import {
   validateHouseholdAsset,
   type AssetCategory,
   type HouseholdAsset,
-  type LocalDate,
 } from '@uaf/household-assets';
 import { Button, DateInput, FormField, Select, TextArea, TextInput } from '@uaf/ui';
 
@@ -30,8 +29,8 @@ export function EditAssetForm({ asset, actorId, onSave, onCancel }: EditAssetFor
     ...asset,
     name: name.trim(),
     category,
-    purchaseDate: purchaseDate ? (purchaseDate as LocalDate) : null,
-    warrantyExpiresOn: warrantyExpiresOn ? (warrantyExpiresOn as LocalDate) : null,
+    purchaseDate: purchaseDate || null,
+    warrantyExpiresOn: warrantyExpiresOn || null,
     notes: notes.trim() || null,
     updatedAt: new Date().toISOString() as IsoDateTime,
     updatedBy: actorId,
@@ -56,7 +55,7 @@ export function EditAssetForm({ asset, actorId, onSave, onCancel }: EditAssetFor
   }
 
   return (
-    <form className="vault-form" onSubmit={submit}>
+    <form className="vault-form" onSubmit={(event) => { void submit(event); }}>
       <FormField label="Asset name" htmlFor={`asset-name-${String(asset.id)}`} required>
         <TextInput
           id={`asset-name-${String(asset.id)}`}

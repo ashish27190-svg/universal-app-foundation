@@ -26,7 +26,7 @@ for (const token of [
 ]) {
   if (!resolver.includes(token)) throw new Error(`Conflict resolver missing invariant: ${token}`);
 }
-if (/\.from\(['\"]household_assets['\"]\)\.update/.test(resolver)) {
+if (/\.from\(['"]household_assets['"]\)\.update/.test(resolver)) {
   throw new Error('Conflict resolver must reuse domain handlers rather than blind-write household assets.');
 }
 

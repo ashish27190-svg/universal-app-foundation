@@ -5,7 +5,6 @@ import {
   hasBlockingIssues,
   type AssetCategory,
   type HouseholdAsset,
-  type LocalDate,
 } from '@uaf/household-assets';
 import { Button, DateInput, FormField, Select, TextArea, TextInput } from '@uaf/ui';
 
@@ -32,8 +31,8 @@ export function AddAssetForm({ workspaceId, actorId, onCreate, onCancel }: AddAs
       {
         name,
         category,
-        purchaseDate: purchaseDate ? (purchaseDate as LocalDate) : null,
-        warrantyExpiresOn: warrantyExpiresOn ? (warrantyExpiresOn as LocalDate) : null,
+        purchaseDate: purchaseDate || null,
+        warrantyExpiresOn: warrantyExpiresOn || null,
         notes: notes || null,
       },
       {
@@ -61,7 +60,7 @@ export function AddAssetForm({ workspaceId, actorId, onCreate, onCancel }: AddAs
   }
 
   return (
-    <form className="vault-form" onSubmit={submit}>
+    <form className="vault-form" onSubmit={(event) => { void submit(event); }}>
       <FormField label="Asset name" htmlFor="asset-name" required>
         <TextInput id="asset-name" required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. Living room TV" />
       </FormField>

@@ -55,12 +55,16 @@ interface HouseholdAssetRow {
   updated_by: string | null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function metadataObject(value: HouseholdAssetRow['metadata']): Readonly<Record<string, unknown>> {
   if (!value) return {};
   if (typeof value === 'object') return value;
   try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : {};
   } catch {
     return {};
   }
