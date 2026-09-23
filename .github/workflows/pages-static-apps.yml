@@ -38,6 +38,9 @@ jobs:
           test -s site/personal-coach/index.html
           grep -q "Personal Coach" site/personal-coach/index.html
           grep -q "viewport" site/personal-coach/index.html
+          test -s site/astroproof/index.html
+          grep -q "AstroProof" site/astroproof/index.html
+          grep -q "viewport" site/astroproof/index.html
 
       - uses: actions/configure-pages@v5
 
