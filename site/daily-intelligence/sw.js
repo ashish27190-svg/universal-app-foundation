@@ -1,4 +1,4 @@
-const CACHE = 'daily-intelligence-v0.8-prebuilt';
+const CACHE = 'daily-intelligence-v0.9-geo';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './news.json'];
 
 self.addEventListener('install', (event) => {
