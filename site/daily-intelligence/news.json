@@ -1,1 +1,1 @@
-{"schemaVersion":1,"generatedAt":null,"window":"24h","source":"scheduled news cache","errors":["Initial scheduled refresh not completed yet"],"items":[]}\n
+{"schemaVersion":1,"generatedAt":"2026-09-23T05:37:39.501690Z","window":"24h","source":"GDELT DOC 2.0","errors":["India: HTTP Error 429: Too Many Requests","World: HTTP Error 429: Too Many Requests","Economy: HTTP Error 429: Too Many Requests","Technology + Science: HTTP Error 429: Too Many Requests"],"items":[]}
