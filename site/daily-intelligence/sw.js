@@ -1,5 +1,5 @@
-const CACHE = 'daily-intelligence-v0.7.2-fast';
-const SHELL = ['./', './index.html', './manifest.webmanifest'];
+const CACHE = 'daily-intelligence-v0.8-prebuilt';
+const SHELL = ['./', './index.html', './manifest.webmanifest', './news.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
