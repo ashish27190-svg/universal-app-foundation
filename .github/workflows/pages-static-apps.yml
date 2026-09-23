@@ -35,6 +35,9 @@ jobs:
           test -s site/mantra-learning/index.html
           grep -q "MantraMitra" site/mantra-learning/index.html
           grep -q "viewport" site/mantra-learning/index.html
+          test -s site/personal-coach/index.html
+          grep -q "Personal Coach" site/personal-coach/index.html
+          grep -q "viewport" site/personal-coach/index.html
 
       - uses: actions/configure-pages@v5
 
