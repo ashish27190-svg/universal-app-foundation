@@ -24,13 +24,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Validate Daily Intelligence static package
+      - name: Validate hosted static apps
         run: |
+          test -s site/index.html
           test -s site/daily-intelligence/index.html
           test -s site/daily-intelligence/manifest.webmanifest
           test -s site/daily-intelligence/sw.js
           grep -q "Daily Intelligence" site/daily-intelligence/index.html
           grep -q "viewport" site/daily-intelligence/index.html
+          test -s site/mantra-learning/index.html
+          grep -q "MantraMitra" site/mantra-learning/index.html
+          grep -q "viewport" site/mantra-learning/index.html
 
       - uses: actions/configure-pages@v5
 
