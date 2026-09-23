@@ -1,4 +1,4 @@
-# Digital Product Estate Standard v1.1
+# Digital Product Estate Standard v1.2
 
 ## Purpose
 
@@ -61,6 +61,68 @@ For projects whose GitHub and hosting integrations are connected and authorized:
 - production credentials remain in the hosting/database secret stores, not in chat or source control
 
 This allows authorized maintenance to happen through the connected development stack while keeping the deployed URL stable.
+
+
+## CTO / ACE cross-project trigger rule
+
+The user should not have to remember to ask for repositories, hosting, deployment, domains, responsive behaviour, persistence, security, monitoring or backups.
+
+When a project discussion in any working thread shows a technical trigger, the CTO/ACE role should proactively evaluate the project and propose the smallest appropriate infrastructure change.
+
+### Triggers
+
+Examples include:
+
+- a new or repeatedly updated HTML/web app
+- repeated manual file downloads or version confusion
+- a requirement to work from both phone and desktop
+- a requirement for one shared current version across multiple users
+- persistent or synced data
+- login, permissions or role-based access
+- API or AI integrations
+- sensitive personal, business or company data
+- a public/customer-facing brand
+- repeated manual deployment steps
+- a project that is becoming a regularly used product
+
+### CTO response
+
+For each triggered project, CTO/ACE should decide and record, as relevant:
+
+- whether hosting is actually needed
+- whether the app should remain static or move to a full-stack architecture
+- repository and source-of-truth location
+- stable URL and whether a dedicated domain is justified
+- hosting platform
+- database / persistence layer
+- authentication / authorization
+- privacy and data classification
+- preview/staging and production flow
+- mobile/desktop/PWA expectations
+- monitoring, backup and rollback
+- API/security implications
+- estimated recurring infrastructure cost
+- migration path from the current artifact without unnecessary rebuilding
+
+### Cross-thread continuity
+
+A material technical decision discovered in one project thread should update the shared project registry / technical standard so later work in another thread does not rediscover the same decision.
+
+The shared registry is the cross-project source of truth. Individual chats remain working surfaces, not the authoritative inventory.
+
+Do not silently modify unrelated live systems. Propose changes when approval is required, and directly maintain connected/authorized low-risk source and deployment workflows where permission already exists.
+
+### Dedicated-link rule
+
+When a project is actively used and repeated file distribution is causing friction, CTO/ACE should proactively recommend a stable hosted link.
+
+Use:
+
+- static hosting for simple HTML/CSS/JS tools
+- full-stack hosting for apps needing server functions, synced persistence, authentication or sensitive data
+- a dedicated branded domain only when the product/business justifies it
+
+A dedicated link is an operational decision, not something the user should have to remember to request.
 
 ## Lifecycle
 
