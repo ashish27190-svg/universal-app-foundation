@@ -1,37 +1,127 @@
 #!/usr/bin/env python3
-import json, re, time, xml.etree.ElementTree as ET
-from datetime import datetime, timezone
-from urllib.parse import urlencode, urlparse
+import json, re, xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 OUT = "site/daily-intelligence/news.json"
+NOW = datetime.now(timezone.utc)
+FRESH_GLOBAL_HOURS = 36
+FRESH_LOCAL_HOURS = 72
 
-FEEDS = [
-    ("India","India","India · national affairs",None,None,"https://news.google.com/rss/search?" + urlencode({"q":"India government parliament supreme court policy security election","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("World","World","World · geopolitics",None,None,"https://news.google.com/rss/search?" + urlencode({"q":"geopolitics diplomacy conflict sanctions ceasefire treaty war tariff trade","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("Economy","Economy","India · economy / money",None,None,"https://news.google.com/rss/search?" + urlencode({"q":"India RBI inflation economy tax budget jobs rupee GDP","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("Technology","Technology + Science","India · technology / science",None,None,"https://news.google.com/rss/search?" + urlencode({"q":"India AI technology cybersecurity semiconductor space climate health energy","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("Region","Delhi-NCR","Delhi-NCR · regional affairs","Region","Delhi-NCR","https://news.google.com/rss/search?" + urlencode({"q":"Delhi NCR Gurugram Noida Ghaziabad Faridabad policy pollution transport infrastructure civic","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("State","Haryana","Haryana · state affairs","State","Haryana","https://news.google.com/rss/search?" + urlencode({"q":"Haryana government policy court infrastructure pollution economy","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("State","Uttar Pradesh","Uttar Pradesh · state affairs","State","Uttar Pradesh","https://news.google.com/rss/search?" + urlencode({"q":"Uttar Pradesh government policy court infrastructure economy","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("State","Delhi","Delhi · state affairs","State","Delhi","https://news.google.com/rss/search?" + urlencode({"q":"Delhi government policy court pollution transport civic","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("State","Rajasthan","Rajasthan · state affairs","State","Rajasthan","https://news.google.com/rss/search?" + urlencode({"q":"Rajasthan government policy court infrastructure economy","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("City","Faridabad","Faridabad · city affairs","City","Faridabad","https://news.google.com/rss/search?" + urlencode({"q":"Faridabad government civic pollution transport infrastructure","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("City","Gurugram","Gurugram · city affairs","City","Gurugram","https://news.google.com/rss/search?" + urlencode({"q":"Gurugram government civic pollution transport infrastructure","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("City","Ghaziabad","Ghaziabad · city affairs","City","Ghaziabad","https://news.google.com/rss/search?" + urlencode({"q":"Ghaziabad government civic pollution transport infrastructure","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
-    ("City","Noida","Noida · city affairs","City","Noida","https://news.google.com/rss/search?" + urlencode({"q":"Noida government civic pollution transport infrastructure","hl":"en-IN","gl":"IN","ceid":"IN:en"})),
+NOISE = (
+    "horoscope","astrology","celebrity","wedding","box office","movie review",
+    "viral video","fashion look","reality show","lottery result"
+)
+
+CITY_STATE = {
+    "Faridabad":"Haryana","Gurugram":"Haryana","Sonipat":"Haryana","Palwal":"Haryana",
+    "Rohtak":"Haryana","Rewari":"Haryana","Panipat":"Haryana","Nuh":"Haryana",
+    "Jhajjar":"Haryana","Bhiwani":"Haryana","Charkhi Dadri":"Haryana",
+    "Mahendragarh":"Haryana","Jind":"Haryana","Karnal":"Haryana",
+    "Delhi":"Delhi","Noida":"Uttar Pradesh","Greater Noida":"Uttar Pradesh",
+    "Ghaziabad":"Uttar Pradesh","Meerut":"Uttar Pradesh","Bulandshahr":"Uttar Pradesh",
+    "Baghpat":"Uttar Pradesh","Hapur":"Uttar Pradesh","Shamli":"Uttar Pradesh",
+    "Muzaffarnagar":"Uttar Pradesh","Lucknow":"Uttar Pradesh",
+    "Alwar":"Rajasthan","Bharatpur":"Rajasthan","Jaipur":"Rajasthan",
+    "Bengaluru":"Karnataka","Mangaluru":"Karnataka","Chennai":"Tamil Nadu",
+    "Hyderabad":"Telangana","Mumbai":"Maharashtra","Pune":"Maharashtra",
+    "Kolkata":"West Bengal","Ahmedabad":"Gujarat",
+    "Thiruvananthapuram":"Kerala"
+}
+
+REGIONS = {
+    "Delhi-NCR": [
+        "Delhi","Faridabad","Gurugram","Sonipat","Palwal","Rohtak","Rewari","Panipat",
+        "Nuh","Jhajjar","Bhiwani","Charkhi Dadri","Mahendragarh","Jind","Karnal",
+        "Noida","Greater Noida","Ghaziabad","Meerut","Bulandshahr","Baghpat","Hapur",
+        "Shamli","Muzaffarnagar","Alwar","Bharatpur"
+    ]
+}
+
+TOPIC_FEEDS = [
+    ("India","India","India · top public-interest developments",
+     "India (government OR parliament OR supreme court OR policy OR regulation OR election OR cabinet) when:1d"),
+    ("Geopolitics","Geopolitics","World · geopolitics",
+     "(geopolitics OR diplomacy OR conflict OR sanctions OR ceasefire OR treaty OR war OR tariff OR NATO OR UN) when:1d"),
+    ("World","World","World · major developments",
+     "(world OR international) (government OR crisis OR disaster OR diplomacy OR economy OR security) when:1d"),
+    ("Economy","Economy","India · economy",
+     "India (RBI OR inflation OR GDP OR economy OR tax OR budget OR jobs OR rupee OR trade) when:1d"),
+    ("Business","Business","India · business",
+     "India (business OR company OR merger OR investment OR manufacturing OR startup OR industry) when:1d"),
+    ("Markets","Markets","India · markets",
+     "India (Sensex OR Nifty OR stock market OR bond OR rupee OR commodities) when:1d"),
+    ("Policy","Policy & Law","India · policy / law / courts",
+     "India (policy OR regulation OR Supreme Court OR High Court OR law OR ministry OR regulator) when:1d"),
+    ("Security","Security & Defence","India / world · security",
+     "India (defence OR security OR military OR border OR cyberattack OR terrorism) when:1d"),
+    ("Technology","Technology & AI","India · technology / AI",
+     "India (AI OR artificial intelligence OR technology OR cybersecurity OR semiconductor OR digital policy) when:1d"),
+    ("Science","Science & Space","India / world · science",
+     "India (science OR research OR ISRO OR space OR discovery OR mission) when:1d"),
+    ("Health","Health","India · public health",
+     "India (health OR disease OR hospital OR medicine OR outbreak OR public health) when:1d"),
+    ("Climate","Climate & Environment","India · climate / environment",
+     "India (climate OR pollution OR environment OR heatwave OR flood OR cyclone OR air quality) when:1d"),
+    ("Energy","Energy","India · energy",
+     "India (energy OR power OR electricity OR oil OR gas OR solar OR renewable OR nuclear) when:1d"),
+    ("Infrastructure","Infrastructure & Transport","India · infrastructure",
+     "India (infrastructure OR metro OR railway OR airport OR highway OR expressway OR transport) when:1d"),
+    ("Consumer","Consumer Impact","India · consumer / practical impact",
+     "India (consumer OR price OR tariff OR GST OR banking OR telecom OR fuel OR LPG OR Aadhaar) when:1d"),
+    ("Education","Education & Jobs","India · education / employment",
+     "India (education OR school OR university OR exam OR employment OR jobs OR labour) when:1d"),
+    ("PublicSafety","Public Safety","India · major safety / disruption",
+     "India (earthquake OR cyclone OR flood OR fire OR crash OR outage OR emergency OR evacuation) when:1d"),
 ]
 
-NOISE=("horoscope","astrology","celebrity","wedding","box office","movie review","viral video","fashion look","reality show")
+def rss_url(query):
+    return "https://news.google.com/rss/search?" + urlencode({
+        "q": query, "hl": "en-IN", "gl": "IN", "ceid": "IN:en"
+    })
 
 def key(title):
     return re.sub(r"[^a-z0-9 ]+"," ",(title or "").lower()).strip()
 
-def fetch_feed(bucket,label,reason,scope_level,scope_key,url):
-    req=Request(url,headers={"User-Agent":"Mozilla/5.0 DailyIntelligence/0.8"})
+def parse_pub(pub):
+    try:
+        dt = parsedate_to_datetime(pub)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return NOW
+
+def feed_specs():
+    specs=[]
+    for category,label,reason,q in TOPIC_FEEDS:
+        specs.append((category,label,reason,None,None,rss_url(q),FRESH_GLOBAL_HOURS,18))
+
+    states=sorted(set(CITY_STATE.values()))
+    for state in states:
+        q=f'"{state}" (government OR policy OR court OR infrastructure OR economy OR pollution OR transport OR public safety) when:2d'
+        specs.append(("State",state,f"{state} · state affairs","State",state,rss_url(q),FRESH_LOCAL_HOURS,10))
+
+    for region,cities in REGIONS.items():
+        city_terms=" OR ".join(f'"{x}"' for x in cities[:8])
+        q=f'("{region}" OR {city_terms}) (policy OR civic OR pollution OR transport OR infrastructure OR court OR economy) when:2d'
+        specs.append(("Region",region,f"{region} · regional affairs","Region",region,rss_url(q),FRESH_LOCAL_HOURS,12))
+
+    for city,state in CITY_STATE.items():
+        q=f'"{city}" "{state}" (civic OR government OR policy OR pollution OR transport OR infrastructure OR court OR economy OR public safety) when:2d'
+        specs.append(("Local",city,f"{city} · city affairs","City",city,rss_url(q),FRESH_LOCAL_HOURS,8))
+    return specs
+
+def fetch_feed(spec):
+    bucket,label,reason,scope_level,scope_key,url,max_hours,max_items=spec
+    req=Request(url,headers={"User-Agent":"Mozilla/5.0 DailyIntelligence/1.0"})
     with urlopen(req,timeout=12) as r:
         root=ET.fromstring(r.read())
     out=[]
+    cutoff=NOW-timedelta(hours=max_hours)
     for item in root.findall(".//item"):
         title=(item.findtext("title") or "").strip()
         link=(item.findtext("link") or "").strip()
@@ -41,67 +131,69 @@ def fetch_feed(bucket,label,reason,scope_level,scope_key,url):
         k=key(title)
         if any(x in k for x in NOISE):
             continue
+        dt=parse_pub(pub)
+        if dt < cutoff or dt > NOW+timedelta(hours=1):
+            continue
         source="Google News"
-        # Google News titles usually append publisher after " - "
         if " - " in title:
             head,pubname=title.rsplit(" - ",1)
-            if head.strip():
-                title=head.strip()
-            if pubname.strip():
-                source=pubname.strip()
-        try:
-            from email.utils import parsedate_to_datetime
-            dt=parsedate_to_datetime(pub)
-            if dt.tzinfo is None:
-                dt=dt.replace(tzinfo=timezone.utc)
-            published=dt.astimezone(timezone.utc).isoformat().replace("+00:00","Z")
-        except Exception:
-            published=datetime.now(timezone.utc).isoformat().replace("+00:00","Z")
+            if head.strip(): title=head.strip()
+            if pubname.strip(): source=pubname.strip()
         out.append({
             "title":title,
             "url":link,
-            "published":published,
+            "published":dt.isoformat().replace("+00:00","Z"),
             "source":source,
             "category":bucket,
             "label":label,
             "reason":reason,
             "scope":{"level":scope_level,"key":scope_key} if scope_level and scope_key else None,
         })
+        if len(out)>=max_items:
+            break
     return out
 
 def main():
+    specs=feed_specs()
     items=[]; errors=[]
-    for spec in FEEDS:
-        try:
-            items.extend(fetch_feed(*spec))
-        except Exception as e:
-            errors.append(f"{spec[1]}: {e}")
-        time.sleep(1.0)
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futures={ex.submit(fetch_feed,s):s for s in specs}
+        for fut in as_completed(futures):
+            spec=futures[fut]
+            try:
+                items.extend(fut.result())
+            except Exception as e:
+                errors.append(f"{spec[1]}: {e}")
 
-    seen=set(); per_source={}; clean=[]
+    seen=set(); per_source={}; per_scope={}; clean=[]
     for x in sorted(items,key=lambda z:z.get("published",""),reverse=True):
         k=key(x["title"])
-        if not k or k in seen:
-            continue
+        if not k or k in seen: continue
         src=x.get("source") or "Publisher"
-        if per_source.get(src,0)>=5:
-            continue
-        seen.add(k); per_source[src]=per_source.get(src,0)+1; clean.append(x)
-        if len(clean)>=100:
-            break
+        if per_source.get(src,0)>=12: continue
+        scope=x.get("scope") or {}
+        sk=(scope.get("level"),scope.get("key"))
+        scope_limit=10 if scope else 999
+        if scope and per_scope.get(sk,0)>=scope_limit: continue
+        seen.add(k)
+        per_source[src]=per_source.get(src,0)+1
+        if scope: per_scope[sk]=per_scope.get(sk,0)+1
+        clean.append(x)
+        if len(clean)>=260: break
 
     payload={
-        "schemaVersion":2,
-        "generatedAt":datetime.now(timezone.utc).isoformat().replace("+00:00","Z"),
-        "window":"24h",
+        "schemaVersion":3,
+        "generatedAt":NOW.isoformat().replace("+00:00","Z"),
+        "window":"36h global / 72h local",
         "source":"Google News RSS discovery",
+        "feedCount":len(specs),
         "errors":errors,
         "items":clean,
     }
     with open(OUT,"w",encoding="utf-8") as fh:
         json.dump(payload,fh,ensure_ascii=False,separators=(",",":"))
         fh.write("\n")
-    print(f"Wrote {len(clean)} reports; {len(errors)} warning(s)")
+    print(f"Wrote {len(clean)} reports from {len(specs)} feeds; {len(errors)} warning(s)")
 
 if __name__=="__main__":
     main()
