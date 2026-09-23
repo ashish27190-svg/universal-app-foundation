@@ -1,4 +1,4 @@
-const CACHE = 'daily-intelligence-v0.4-shell-1';
+const CACHE = 'daily-intelligence-v0.6-shell-1';
 const SHELL = ['./', './index.html', './manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
