@@ -11,15 +11,20 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
-  group: daily-intelligence-news
-  cancel-in-progress: true
+  group: hosted-static-apps-pages
+  cancel-in-progress: false
 
 jobs:
-  refresh:
+  refresh-and-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check out hosted app branch
         uses: actions/checkout@v4
@@ -27,8 +32,22 @@ jobs:
           ref: hosted-static-apps
           fetch-depth: 0
 
-      - name: Build compact news cache
+      - name: Build fresh news cache
         run: python3 scripts/update_daily_intelligence_news.py
+
+      - name: Validate Daily Intelligence cache
+        run: |
+          test -s site/daily-intelligence/news.json
+          python3 - <<'PY'
+          import json
+          p='site/daily-intelligence/news.json'
+          d=json.load(open(p,encoding='utf-8'))
+          assert d.get('generatedAt'), 'generatedAt missing'
+          assert len(d.get('items',[])) >= 20, 'too few news items'
+          print('generatedAt:', d['generatedAt'])
+          print('items:', len(d['items']))
+          print('errors:', len(d.get('errors',[])))
+          PY
 
       - name: Commit refreshed cache
         run: |
@@ -36,16 +55,20 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add site/daily-intelligence/news.json
           if git diff --cached --quiet; then
-            echo "No news cache change"
-            exit 0
+            echo "No cache content change"
+          else
+            git commit -m "data: refresh Daily Intelligence news"
+            git push origin HEAD:hosted-static-apps
           fi
-          git commit -m "data: refresh Daily Intelligence news"
-          git push origin HEAD:hosted-static-apps
 
-# rss-cache-v2
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
 
-# geo-cache-v3
+      - name: Upload complete hosted site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
 
-# live-intelligence-v4
-
-# relevance-filter-v5
+      - name: Deploy refreshed site to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
