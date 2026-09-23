@@ -3,10 +3,25 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="refresh" content="0; url=./daily-intelligence/">
+  <meta name="theme-color" content="#10283f">
   <title>Hosted Apps</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Arial,sans-serif;margin:0;background:#f5f7fa;color:#182635}
+    main{max-width:760px;margin:0 auto;padding:36px 20px 60px}
+    h1{margin:0 0 8px;font-size:30px}.sub{color:#66717e;margin-bottom:28px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+    a{display:block;text-decoration:none;color:inherit;background:#fff;border:1px solid #dfe5eb;border-radius:18px;padding:20px;box-shadow:0 8px 30px rgba(25,45,65,.06)}
+    b{display:block;font-size:18px;margin-bottom:6px}.meta{font-size:13px;color:#687583}
+  </style>
 </head>
 <body>
-  <p><a href="./daily-intelligence/">Open Daily Intelligence</a></p>
+  <main>
+    <h1>Hosted Apps</h1>
+    <p class="sub">Stable web versions maintained from source control.</p>
+    <div class="grid">
+      <a href="./daily-intelligence/"><b>Daily Intelligence</b><span class="meta">v0.4 · hosted baseline</span></a>
+      <a href="./mantra-learning/"><b>Mantra Learning / MantraMitra</b><span class="meta">v0.1 · hosted baseline</span></a>
+    </div>
+  </main>
 </body>
 </html>
