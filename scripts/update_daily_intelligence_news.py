@@ -13,7 +13,23 @@ FRESH_LOCAL_HOURS = 72
 
 NOISE = (
     "horoscope","astrology","celebrity","wedding","box office","movie review",
-    "viral video","fashion look","reality show","lottery result"
+    "viral video","fashion look","reality show","lottery result",
+    "actor ","actress ","film premiere","movie premiere","web series","trailer launch",
+    "fashion week","award show","reality tv"
+)
+
+LOW_VALUE_BY_CATEGORY = {
+    "Consumer": ("smartphone","phone launch","car launched","suv launched","laptop launched","sale starts","discount offer"),
+    "Education": ("college fest","campus fest","annual fest","cultural fest","tech fest"),
+    "Local": ("actor ","actress ","film ","movie ","premiere","celebrity"),
+}
+
+HIGH_SIGNAL = (
+    "government","court","policy","regulation","rbi","inflation","budget","tax","security",
+    "war","ceasefire","sanction","treaty","tariff","trade","diplomacy","pollution","metro",
+    "infrastructure","cybersecurity","energy","earthquake","cyclone","flood","outage",
+    "emergency","gst","aadhaar","fuel","lpg","jobs","defence","border","isro","semiconductor",
+    "interest rate","health","outbreak","recall","ban","fraud","data breach","evacuation"
 )
 
 CITY_STATE = {
@@ -130,6 +146,9 @@ def fetch_feed(spec):
             continue
         k=key(title)
         if any(x in k for x in NOISE):
+            continue
+        low_terms=LOW_VALUE_BY_CATEGORY.get(bucket,())
+        if any(x in k for x in low_terms) and not any(x in k for x in HIGH_SIGNAL):
             continue
         dt=parse_pub(pub)
         if dt < cutoff or dt > NOW+timedelta(hours=1):
