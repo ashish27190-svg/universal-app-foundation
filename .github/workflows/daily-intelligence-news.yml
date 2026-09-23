@@ -43,3 +43,5 @@ jobs:
           git push origin HEAD:hosted-static-apps
 
 # rss-cache-v2
+
+# geo-cache-v3
