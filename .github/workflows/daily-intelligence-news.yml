@@ -2,7 +2,7 @@ name: Refresh Daily Intelligence News
 
 on:
   schedule:
-    - cron: '17 */2 * * *'
+    - cron: '7,37 * * * *'
   workflow_dispatch:
   push:
     branches: [main]
@@ -19,7 +19,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 8
     steps:
       - name: Check out hosted app branch
         uses: actions/checkout@v4
@@ -45,3 +45,5 @@ jobs:
 # rss-cache-v2
 
 # geo-cache-v3
+
+# live-intelligence-v4
