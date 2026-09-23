@@ -1,14 +1,66 @@
-# Digital Product Estate Standard v1.0
+# Digital Product Estate Standard v1.1
 
 ## Purpose
 
-Define a reusable operating model for a portfolio of web apps, PWAs, internal tools and future commercial products without turning them into one tightly coupled system.
+Define a reusable operating model for selected web apps, PWAs, internal tools and future commercial products without turning them into one tightly coupled system.
+
+The primary operational problem this standard solves is version drift from downloadable HTML files. For selected apps, the product should have one stable URL that works across phone and desktop. Source code is updated centrally; users should not need to repeatedly download replacement HTML files.
 
 ## Core principle
 
 One digital estate, independently deployable apps, shared standards.
 
 Projects may reuse foundation packages, design patterns, release practices and governance, but they retain separate deployment, data, access and failure boundaries where appropriate.
+
+## Selective hosting rule
+
+Not every project needs a website.
+
+A project should be moved to a hosted app when one or more of these are true:
+
+- the user repeatedly receives replacement HTML files after changes
+- the same app is used across phone and desktop
+- more than one person needs the same current version
+- data or configuration must persist across sessions/devices
+- frequent updates are expected
+- a stable URL materially improves the workflow
+
+Projects that are still ideas, documents, one-off calculators, content pilots or inactive experiments may remain outside the hosted-app estate until this need appears.
+
+## Default update path
+
+For selected apps, use this delivery model by default:
+
+GitHub source → preview deployment → automated checks → production deployment → same stable URL
+
+The live URL is the product entry point. Downloaded HTML files are build/source artifacts, not the distribution mechanism.
+
+Where the app is still a simple standalone HTML/CSS/JavaScript tool, do not rewrite it merely to host it. Put the existing source under version control, make it responsive, deploy it as a static site, and evolve the architecture only when product requirements justify it.
+
+## Cross-device rule
+
+A hosted app must be tested at minimum for:
+
+- desktop browser
+- common mobile viewport
+- touch interaction where applicable
+- responsive layout
+- navigation and form usability
+- installability/offline behaviour when the product is intended to be a PWA
+
+One codebase should serve supported phone and desktop use unless there is a documented reason for platform-specific builds.
+
+## Direct-maintenance rule
+
+For projects whose GitHub and hosting integrations are connected and authorized:
+
+- code changes should be made in the repository, not by generating replacement files for manual distribution
+- preview deployments should be used for meaningful changes
+- production should update from the approved repository state
+- rollback must remain possible
+- production credentials remain in the hosting/database secret stores, not in chat or source control
+
+This allows authorized maintenance to happen through the connected development stack while keeping the deployed URL stable.
 
 ## Lifecycle
 
@@ -27,7 +79,7 @@ A project must not be described as production-ready unless the required runtime,
 
 ## Project Passport
 
-Every project must maintain a small operational record covering:
+Every hosted project must maintain a small operational record covering:
 
 - project name and purpose
 - owner / accountable user
