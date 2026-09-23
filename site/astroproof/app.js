@@ -30,7 +30,77 @@ function vimshottari(date,moonLon){const span=360/27,ix=Math.floor(mod(moonLon,3
 function chinese(date,timeKnown,localHour){const y=date.getUTCFullYear(),cy=mod(y-1984,60),ys=cy%10,yb=cy%12;const dayNum=Math.floor(Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),date.getUTCDate())/86400000);const ref=Math.floor(Date.UTC(1984,1,2)/86400000);const dc=mod(dayNum-ref,60),ds=dc%10,db=dc%12;let hour=null;if(timeKnown){const hb=localHour>=23||localHour<1?0:Math.floor((localHour+1)/2)%12,hs=mod((ds%5)*2+hb,10);hour={stem:STEMS[hs],branch:BR[hb]}}return {year:{stem:STEMS[ys],branch:BR[yb],animal:ANIMALS[yb]},day:{stem:STEMS[ds],branch:BR[db],element:CH_ELEMENTS[ds],polarity:ds%2?'Yin':'Yang'},hour,method:'Sexagenary year/day/hour browser research convention; month pillar and true-solar-time refinement remain pending in this hosted build.'}}
 function calculateChart(p){const timeKnown=!p.timeunknown;const t=timeKnown?p.birthtime:'12:00',date=localToUtc(p.birthdate,t,p.timezone);const trop=planetary(date),asc=timeKnown?ascendant(date,p.latitude,p.longitude):null;houses(trop,asc);const ay=ayanamsaApprox(date),sid={};for(const [k,v] of Object.entries(trop))sid[k]=signInfo(v.longitude-ay);houses(sid,asc==null?null:mod(asc-ay,360));const vd=vimshottari(date,sid.Moon.longitude);const n=numerology(p.birthdate,p.birth_name);const c=chinese(date,timeKnown,Number(t.split(':')[0]));return {meta:{utc:date.toISOString(),time_known:timeKnown,place:p.place,latitude:p.latitude,longitude:p.longitude,timezone:p.timezone,ayanamsa_deg:ay,engine:'Astronomy Engine (MIT) tropical + approximate Lahiri-style sidereal conversion'},western:{planets:trop,ascendant:asc==null?null:signInfo(asc),aspects:aspects(trop)},vedic:{planets:sid,ascendant:asc==null?null:signInfo(mod(asc-ay,360)),moon_nakshatra:vd.nakshatra,moon_pada:vd.pada,dasha:vd,divisional:{D9:{Sun:divisional(sid.Sun.longitude,9),Moon:divisional(sid.Moon.longitude,9),Ascendant:asc==null?null:divisional(mod(asc-ay,360),9)},D10:{Sun:divisional(sid.Sun.longitude,10),Saturn:divisional(sid.Saturn.longitude,10),Ascendant:asc==null?null:divisional(mod(asc-ay,360),10)}}},numerology:n,chinese:c,warnings:['Astrology/numerology interpretations are traditional frameworks, not established predictors of individual outcomes.','Hosted Vedic sidereal conversion is an approximation pending independent production certification.']}}
 function wheel(group,label){const polar=(d,r)=>{const a=(d-90)*Math.PI/180;return[180+r*Math.cos(a),180+r*Math.sin(a)]};let s=`<svg class="wheel" viewBox="0 0 360 360" role="img" aria-label="${esc(label)} zodiac wheel"><circle cx="180" cy="180" r="164" fill="#0e1020" stroke="#8f7cff"/><circle cx="180" cy="180" r="126" fill="none" stroke="#4b5278"/>`;Z.forEach((z,i)=>{const[a,b]=polar(i*30,126),[c,d]=polar(i*30,164),[x,y]=polar(i*30+15,145);s+=`<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" stroke="#4b5278"/><text x="${x}" y="${y}" text-anchor="middle" fill="#e0c279" font-size="9">${z.slice(0,3)}</text>`});Object.entries(group.planets).forEach(([n,p],i)=>{const[x,y]=polar(p.longitude,105-(i%3)*8);s+=`<circle cx="${x}" cy="${y}" r="3" fill="#f0d492"/><text x="${x}" y="${y-6}" text-anchor="middle" fill="#eee8ff" font-size="7">${n.slice(0,2)}</text>`});return s+`<text x="180" y="179" text-anchor="middle" fill="#fff" font-size="12">${esc(label)}</text></svg>`}
-function renderOverview(){if(!chart)return;$('overview-note').innerHTML='<b>Atlas calculated locally.</b> '+chart.warnings.map(esc).join(' ');$('metrics').innerHTML=[['Western Sun',chart.western.planets.Sun.sign],['Vedic Moon',chart.vedic.moon_nakshatra],['Life Path',chart.numerology.life_path],['Chinese year',chart.chinese.year.animal]].map(x=>`<div class="metric"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('')}
+
+function transitForecast(days,stepDays){
+  if(!chart)return[];
+  const natal={Sun:chart.western.planets.Sun,Moon:chart.western.planets.Moon,Mercury:chart.western.planets.Mercury,Venus:chart.western.planets.Venus,Mars:chart.western.planets.Mars,Jupiter:chart.western.planets.Jupiter,Saturn:chart.western.planets.Saturn};
+  if(chart.western.ascendant)natal.Ascendant=chart.western.ascendant;
+  const movers=['Jupiter','Saturn','Mars','Uranus','Neptune','Pluto'];
+  const asp=[['conjunction',0],['sextile',60],['square',90],['trine',120],['opposition',180]];
+  const start=new Date(),best={};
+  for(let d=0;d<=days;d+=stepDays){
+    const when=new Date(start.getTime()+d*86400000),p=planetary(when);
+    for(const m of movers)for(const [n,np] of Object.entries(natal)){
+      let sep=Math.abs(p[m].longitude-np.longitude);sep=Math.min(sep,360-sep);
+      for(const [an,aa] of asp){
+        const orb=Math.abs(sep-aa);
+        if(orb<=2.5){
+          const key=m+'|'+an+'|'+n;
+          if(!best[key]||orb<best[key].orb)best[key]={mover:m,aspect:an,target:n,date:when.toISOString().slice(0,10),orb};
+        }
+      }
+    }
+  }
+  const weight={Jupiter:5,Saturn:5,Mars:2,Uranus:4,Neptune:3,Pluto:4};
+  return Object.values(best).sort((a,b)=>(weight[b.mover]-b.orb)-(weight[a.mover]-a.orb)).slice(0,6);
+}
+function forecastMeaning(h){
+  const pm={
+    Jupiter:'expansion, opportunity, learning and broader perspective',
+    Saturn:'responsibility, structure, limits and long-term consolidation',
+    Mars:'drive, urgency, competition and decisive action',
+    Uranus:'change, disruption, independence and experimentation',
+    Neptune:'imagination, ambiguity, ideals and boundary-testing',
+    Pluto:'deep pressure, transformation, control and renewal'
+  };
+  const am={
+    conjunction:'concentrates the theme',
+    trine:'is traditionally read as easier flow',
+    sextile:'is traditionally read as an opening that still needs action',
+    square:'is traditionally read as friction that pushes adjustment',
+    opposition:'is traditionally read as a polarity requiring balance'
+  };
+  return pm[h.mover]+'. '+am[h.aspect]+'.';
+}
+function buildLifeBrief(){
+  const w=chart.western, v=chart.vedic, n=chart.numerology, c=chart.chinese;
+  const asc=w.ascendant?w.ascendant.sign:null;
+  const base=[
+    {t:'Core orientation',x:`Western Sun in ${w.planets.Sun.sign}, Moon in ${w.planets.Moon.sign}${asc?', Ascendant '+asc:''}. Traditional emphasis: ${THEMES[w.planets.Sun.sign].join(', ')} with an emotional style colored by ${THEMES[w.planets.Moon.sign].join(', ')}.`},
+    {t:'Vedic anchor',x:`Sidereal Moon falls in ${v.moon_nakshatra}, pada ${v.moon_pada}. This is the timing anchor used for the current Vimshottari period.`},
+    {t:'Recurring style',x:`Life Path ${n.life_path} adds a numerology theme of ${(NUM_THEMES[n.life_path]||['reflection']).join(', ')}.`},
+    {t:'Chinese lens',x:`Day Master is ${c.day.polarity} ${c.day.element}; use this as a traditional pattern lens, not a deterministic personality fact.`}
+  ];
+  if(v.dasha.active)base.push({t:'Current life phase',x:`Vimshottari is in ${v.dasha.active.mahadasha}–${v.dasha.active.antardasha} from ${v.dasha.active.start} to ${v.dasha.active.end}. The app should treat this as a period theme and combine it with actual transits before making any forecast statement.`});
+  return base;
+}
+function renderOverview(){
+  if(!chart)return;
+  $('overview-note').innerHTML='<b>Atlas calculated locally.</b> '+chart.warnings.map(esc).join(' ');
+  $('metrics').innerHTML=[['Western Sun',chart.western.planets.Sun.sign],['Vedic Moon',chart.vedic.moon_nakshatra],['Life Path',chart.numerology.life_path],['Chinese year',chart.chinese.year.animal]].map(x=>`<div class="metric"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('');
+  let dash=$('forecast-dashboard');
+  if(!dash){dash=document.createElement('div');dash.id='forecast-dashboard';$('metrics').insertAdjacentElement('afterend',dash)}
+  const brief=buildLifeBrief(),f90=transitForecast(90,3),f365=transitForecast(365,7);
+  const fc=(arr)=>arr.length?arr.map(h=>`<div class="report-section"><h3>${h.mover} ${h.aspect} natal ${h.target}</h3><p class="muted">Peak sample: ${h.date} · orb ${h.orb.toFixed(2)}°</p><p>${esc(forecastMeaning(h))}</p><span class="hint">Traditional transit forecast window; sampled peak, not a guaranteed event.</span></div>`).join(''):'<p class="muted">No major sampled transit hit found in this window under the current orb settings.</p>';
+  dash.innerHTML=`
+    <div class="section"><span class="eyebrow">YOUR LIFE BRIEF</span><h2>What the chart says first</h2>
+      <div class="grid2">${brief.map(b=>`<div class="card"><b>${esc(b.t)}</b><p>${esc(b.x)}</p></div>`).join('')}</div>
+    </div>
+    <div class="section"><span class="eyebrow">TRADITIONAL FORECAST WINDOWS</span><h2>What becomes active next</h2>
+      <div class="grid2"><div class="card"><h3>Next 90 days</h3>${fc(f90)}</div><div class="card"><h3>Next 12 months</h3>${fc(f365)}</div></div>
+      <div class="notice"><b>How to read this:</b> these are astrology-based timing interpretations generated from current transits to your natal chart. They are not scientifically validated predictions of events. The next architecture step is to combine these windows with Vedic dasha activation, progressions, solar returns and stronger Vedic strength rules before ranking forecast importance.</div>
+    </div>`;
+}
 function planetTable(g){return `<table class="table"><thead><tr><th>Body</th><th>Position</th><th>House</th></tr></thead><tbody>${Object.entries(g.planets).map(([k,v])=>`<tr><td>${k}</td><td>${v.sign} ${v.degree_in_sign.toFixed(2)}°</td><td>${v.house||'—'}</td></tr>`).join('')}</tbody></table>`}
 function renderCharts(){if(!chart){$('charts-area').textContent='Create a birth profile first.';return}$('charts-area').className='';$('charts-area').innerHTML=`<div class="wheel-wrap"><div class="wheel-card"><span class="eyebrow">WESTERN · TROPICAL</span>${wheel(chart.western,'Western')}</div><div class="wheel-card"><span class="eyebrow">VEDIC · SIDEREAL APPROX</span>${wheel(chart.vedic,'Vedic')}</div></div><div class="grid2" style="margin-top:14px"><div class="card"><h3>Western positions</h3>${planetTable(chart.western)}<p class="hint">Ascendant: ${chart.western.ascendant?chart.western.ascendant.sign+' '+chart.western.ascendant.degree_in_sign.toFixed(2)+'°':'unknown'}</p></div><div class="card"><h3>Vedic positions</h3>${planetTable(chart.vedic)}<p class="hint">Moon nakshatra: ${chart.vedic.moon_nakshatra}, pada ${chart.vedic.moon_pada}. Current dasha: ${chart.vedic.dasha.active?chart.vedic.dasha.active.mahadasha+'–'+chart.vedic.dasha.active.antardasha:'not resolved'}</p><p class="hint">D9 Asc ${chart.vedic.divisional.D9.Ascendant||'—'} · D10 Asc ${chart.vedic.divisional.D10.Ascendant||'—'}</p></div></div>`}
 function houseSign(group,h){if(!group.ascendant)return null;return Z[mod(group.ascendant.sign_index+h-1,12)]}
