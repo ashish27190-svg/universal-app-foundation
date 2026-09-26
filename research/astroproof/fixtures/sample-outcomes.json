@@ -1,0 +1,5 @@
+[
+  {"event_id":"e-demo-001","person_id":"fictional-a","life_area":"career","event_date":"2022-03-28","source_quality":"demo"},
+  {"event_id":"e-demo-002","person_id":"fictional-a","life_area":"family","event_date":"2023-07-19","source_quality":"demo"},
+  {"event_id":"e-demo-003","person_id":"fictional-b","life_area":"money","event_date":"2021-09-17","source_quality":"demo"}
+]
