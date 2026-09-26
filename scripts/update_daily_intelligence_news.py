@@ -452,8 +452,11 @@ def fetch_feed(spec):
             if head.strip(): title=head.strip()
             if pubname.strip(): source=pubname.strip()
         category=infer_category(bucket,title,context)
-        if scope_level is None and bucket in TOPIC_ANCHORS and category==bucket and not topic_supported(bucket,title,context):
-            continue
+        if scope_level is None and bucket in TOPIC_ANCHORS:
+            supported_original=topic_supported(bucket,title,context)
+            supported_inferred=(category!=bucket and topic_supported(category,title,context))
+            if not (supported_original or supported_inferred):
+                continue
         report=report_fields(category,title,context,lang)
         out.append({
             "title":title,
