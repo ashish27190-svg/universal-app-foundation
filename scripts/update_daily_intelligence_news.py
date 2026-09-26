@@ -15,13 +15,15 @@ NOISE = (
     "horoscope","astrology","celebrity","wedding","box office","movie review",
     "viral video","fashion look","reality show","lottery result",
     "actor ","actress ","film premiere","movie premiere","web series","trailer launch",
-    "fashion week","award show","reality tv"
+    "fashion week","award show","reality tv",
+    "फिल्म","बॉक्स ऑफिस","अभिनेता","अभिनेत्री","सेलिब्रिटी","राशिफल","ज्योतिष",
+    "पेंटिंग प्रतियोगिता","भाषण प्रतियोगिता","सांस्कृतिक कार्यक्रम","फैशन"
 )
 
 LOW_VALUE_BY_CATEGORY = {
     "Consumer": ("smartphone","phone launch","car launched","suv launched","laptop launched","sale starts","discount offer"),
-    "Education": ("college fest","campus fest","annual fest","cultural fest","tech fest"),
-    "Local": ("actor ","actress ","film ","movie ","premiere","celebrity"),
+    "Education": ("college fest","campus fest","annual fest","cultural fest","tech fest","प्रतियोगिता","कॉलेज फेस्ट","स्कूल कार्यक्रम","सांस्कृतिक कार्यक्रम"),
+    "Local": ("actor ","actress ","film ","movie ","premiere","celebrity","अभिनेता","अभिनेत्री","फिल्म","प्रीमियर","सेलिब्रिटी"),
 }
 
 HIGH_SIGNAL = (
@@ -29,7 +31,10 @@ HIGH_SIGNAL = (
     "war","ceasefire","sanction","treaty","tariff","trade","diplomacy","pollution","metro",
     "infrastructure","cybersecurity","energy","earthquake","cyclone","flood","outage",
     "emergency","gst","aadhaar","fuel","lpg","jobs","defence","border","isro","semiconductor",
-    "interest rate","health","outbreak","recall","ban","fraud","data breach","evacuation"
+    "interest rate","health","outbreak","recall","ban","fraud","data breach","evacuation",
+    "सरकार","अदालत","नीति","आरबीआई","महंगाई","बजट","टैक्स","सुरक्षा","युद्ध","प्रतिबंध",
+    "व्यापार","कूटनीति","प्रदूषण","मेट्रो","इन्फ्रास्ट्रक्चर","ऊर्जा","भूकंप","चक्रवात",
+    "बाढ़","आपातकाल","जीएसटी","आधार","ईंधन","नौकरी","रक्षा","सीमा","इसरो","नियम"
 )
 
 CITY_STATE = {
