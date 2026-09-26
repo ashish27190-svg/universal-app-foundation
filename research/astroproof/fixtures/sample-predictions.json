@@ -1,0 +1,6 @@
+[
+  {"prediction_id":"p-demo-001","person_id":"fictional-a","life_area":"career","window_start":"2022-03-01","window_end":"2022-04-15","rank_score":8.2,"specificity_class":"moderate","frozen_at":"2021-12-31T00:00:00Z"},
+  {"prediction_id":"p-demo-002","person_id":"fictional-a","life_area":"relationships","window_start":"2023-07-01","window_end":"2023-08-10","rank_score":6.1,"specificity_class":"moderate","frozen_at":"2021-12-31T00:00:00Z"},
+  {"prediction_id":"p-demo-003","person_id":"fictional-b","life_area":"money","window_start":"2021-09-01","window_end":"2021-10-01","rank_score":7.4,"specificity_class":"moderate","frozen_at":"2020-12-31T00:00:00Z"},
+  {"prediction_id":"p-demo-004","person_id":"fictional-b","life_area":"travel","window_start":"2022-05-01","window_end":"2022-06-15","rank_score":4.7,"specificity_class":"broad","frozen_at":"2020-12-31T00:00:00Z"}
+]
