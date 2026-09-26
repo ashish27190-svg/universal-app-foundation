@@ -74,3 +74,5 @@ jobs:
         uses: actions/deploy-pages@v4
 
 # bilingual-v1.1-trigger
+
+# hindi-relevance-v1.1b
