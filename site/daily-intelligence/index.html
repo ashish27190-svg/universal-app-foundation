@@ -261,22 +261,64 @@ function download(name,text){const blob=new Blob([text],{type:'application/json'
 async function importJSON(e){const f=e.target.files?.[0];if(!f)return;if(f.size>250000){alert('File too large (250 KB max).');return}try{const text=await f.text();const parsed=validateImport(JSON.parse(text));if(putStorage(LS.brief,parsed)){brief=parsed;briefCategory='All';renderStories();renderSaved();tab('today');alert('Briefing imported and saved on this device. Please confirm its source review before relying on it.')}}catch(err){alert('Import rejected: '+err.message)}finally{e.target.value=''}}
 function savePrefs(silent=false){const regionPref=el('region').value||'auto',p=geoProfile(el('city').value,el('state').value,regionPref);prefs={city:p.city,state:p.state,region:regionPref,duration:el('duration').value,language:el('language').value||'en'};if(putStorage(LS.prefs,prefs)){el('city').value=p.city;el('state').value=p.state;el('region').value=regionPref;wire=[];el('feedCoverage').textContent='';briefCategory='All';renderStories();previewGeography();sourceCategory='All';renderSourceDesk();renderLiveToday();refreshLiveNews();if(!silent)alert('Saved: '+geographicNames(p).join(' → ')+'.')}}
 function init(){
- const restored=geoProfile();prefs={...prefs,city:restored.city,state:restored.state,region:prefs.region||'auto',language:prefs.language||'en'};
- el('city').value=prefs.city||'';el('state').value=prefs.state||'';el('region').value=prefs.region||'auto';el('duration').value=prefs.duration||'5';el('language').value=prefs.language||'en';el('languageQuick').value=prefs.language||'en';
+ const restored=geoProfile();
+ prefs={...prefs,city:restored.city,state:restored.state,region:prefs.region||'auto',language:prefs.language||'en'};
+ el('city').value=prefs.city||'';
+ el('state').value=prefs.state||'';
+ el('region').value=prefs.region||'auto';
+ el('duration').value=prefs.duration||'5';
+ el('language').value=prefs.language||'en';
+ el('languageQuick').value=prefs.language||'en';
+
  el('city').addEventListener('change',()=>{previewGeography();savePrefs(true)});
  el('state').addEventListener('change',()=>{const r=GEO.cities[el('city').value];if(r&&r.state!==el('state').value)el('city').value='';previewGeography();savePrefs(true)});
- el('region').addEventListener('change',()=>{previewGeography();savePrefs(true)});const changeLanguage=v=>{prefs.language=v;el('language').value=v;el('languageQuick').value=v;putStorage(LS.prefs,prefs);liveNews=[];liveUpdatedAt='';renderLiveToday();refreshLiveNews()};el('language').addEventListener('change',()=>changeLanguage(el('language').value));el('languageQuick').addEventListener('change',()=>changeLanguage(el('languageQuick').value));putStorage(LS.prefs,prefs);populateVoices()});putStorage(LS.prefs,prefs)});
+ el('region').addEventListener('change',()=>{previewGeography();savePrefs(true)});
+
+ const changeLanguage=v=>{
+  prefs.language=v;
+  el('language').value=v;
+  el('languageQuick').value=v;
+  putStorage(LS.prefs,prefs);
+  liveNews=[];
+  liveUpdatedAt='';
+  renderLiveToday();
+  refreshLiveNews();
+ };
+ el('language').addEventListener('change',()=>changeLanguage(el('language').value));
+ el('languageQuick').addEventListener('change',()=>changeLanguage(el('languageQuick').value));
+
  el('exampleLocation').addEventListener('click',()=>{el('city').value='Faridabad';el('region').value='auto';previewGeography();savePrefs(false)});
- el('editLocation').addEventListener('click',()=>tab('settings'));el('openSources').addEventListener('click',()=>tab('sources'));
+ el('editLocation').addEventListener('click',()=>tab('settings'));
+ el('openSources').addEventListener('click',()=>tab('sources'));
  document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>tab(b.dataset.tab)));
- el('listenBtn').addEventListener('click',listen);el('quickFive').addEventListener('click',()=>switchDuration(5));el('fullTen').addEventListener('click',()=>switchDuration(10));
+
+ el('listenBtn').addEventListener('click',listen);
+ el('quickFive').addEventListener('click',()=>switchDuration(5));
+ el('fullTen').addEventListener('click',()=>switchDuration(10));
  el('readBtn').addEventListener('click',()=>{tab('today');el('stories').scrollIntoView({behavior:'smooth'})});
- el('closeDetail').addEventListener('click',hideDetail);el('detailScreen').addEventListener('click',e=>{if(e.target===el('detailScreen'))hideDetail()});document.addEventListener('keydown',e=>{if(e.key==='Escape')hideDetail()});
- el('refreshBtn').addEventListener('click',refreshWire);el('refreshTodayBtn').addEventListener('click',refreshLiveNews);el('allLiveBtn').addEventListener('click',()=>tab('headlines'));el('wireSearch').addEventListener('input',renderWire);
- el('savePrefs').addEventListener('click',()=>savePrefs(false));el('importFile').addEventListener('change',importJSON);el('duration').addEventListener('change',()=>{switchDuration(Number(el('duration').value));savePrefs(true)});
+ el('closeDetail').addEventListener('click',hideDetail);
+ el('detailScreen').addEventListener('click',e=>{if(e.target===el('detailScreen'))hideDetail()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')hideDetail()});
+
+ el('refreshBtn').addEventListener('click',refreshWire);
+ el('refreshTodayBtn').addEventListener('click',refreshLiveNews);
+ el('allLiveBtn').addEventListener('click',()=>tab('headlines'));
+ el('wireSearch').addEventListener('input',renderWire);
+ el('savePrefs').addEventListener('click',()=>savePrefs(false));
+ el('importFile').addEventListener('change',importJSON);
+ el('duration').addEventListener('change',()=>{switchDuration(Number(el('duration').value));savePrefs(true)});
  el('exportBtn').addEventListener('click',()=>download(`daily-intelligence-${brief.date}.json`,JSON.stringify(brief,null,2)));
  el('resetBtn').addEventListener('click',()=>{if(confirm('Restore original pilot edition? Your currently imported briefing will be replaced in this browser. Export it first if needed.')){brief=seed;putStorage(LS.brief,seed);briefCategory='All';renderStories();renderSaved();tab('today')}});
- el('clock').textContent='India time: '+timeFrom(new Date().toISOString());renderLiveToday();prepareWireFromLive();renderStories();renderSaved();renderSourceDesk();previewGeography();
+
+ el('clock').textContent='India time: '+timeFrom(new Date().toISOString());
+ try{
+  loadLiveCache();
+  renderLiveToday();
+  prepareWireFromLive();
+  renderStories();
+  renderSaved();
+  renderSourceDesk();
+  previewGeography();
   if(shouldRefreshDaily())setTimeout(refreshLiveNews,50);
  }catch(err){
   console.error('[Daily Intelligence init]',err);
@@ -284,7 +326,10 @@ function init(){
  }
  setInterval(()=>{if(document.visibilityState==='visible'&&shouldRefreshDaily())refreshLiveNews()},10*60*1000);
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&shouldRefreshDaily())refreshLiveNews()});
- window.addEventListener('online',()=>{if(shouldRefreshDaily())refreshLiveNews()});scheduleIndiaMidnightRefresh();putStorage(LS.lastVisit,new Date().toISOString());purgeOldAppCaches();
+ window.addEventListener('online',()=>{if(shouldRefreshDaily())refreshLiveNews()});
+ scheduleIndiaMidnightRefresh();
+ putStorage(LS.lastVisit,new Date().toISOString());
+ purgeOldAppCaches();
  window.__DAILY_INTELLIGENCE_READY__=true;
 }init();
 })();
