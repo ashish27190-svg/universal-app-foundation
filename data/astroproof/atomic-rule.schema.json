@@ -1,0 +1,26 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"AstroProof Atomic Rule",
+  "type":"object",
+  "required":["rule_id","tradition","school","source_ids","topic","conditions","claim","rights_status","status"],
+  "properties":{
+    "rule_id":{"type":"string"},
+    "tradition":{"enum":["vedic","western","bazi","numerology"]},
+    "school":{"type":"string"},
+    "source_ids":{"type":"array","items":{"type":"string"},"minItems":1},
+    "topic":{"type":"array","items":{"type":"string"}},
+    "conditions":{"type":"array","items":{"type":"object"}},
+    "claim":{"type":"string"},
+    "timing_scope":{"type":["string","null"]},
+    "specificity_class":{"enum":["broad","moderate","specific"]},
+    "conflicting_rule_ids":{"type":"array","items":{"type":"string"}},
+    "rights_status":{"enum":["public_domain","open_license","licensed","metadata_only","unclear"]},
+    "status":{"enum":["R0_extracted","R1_source_verified","R2_calc_tested","R3_historical_exploratory","R4_holdout_supported","R5_prospective_supported","R6_replicated"]},
+    "source_locator":{"type":["string","null"]},
+    "source_text_hash":{"type":["string","null"]},
+    "sample_size":{"type":["integer","null"]},
+    "metrics":{"type":"object"},
+    "notes":{"type":"string"}
+  },
+  "additionalProperties":true
+}
