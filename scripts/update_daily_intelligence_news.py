@@ -216,6 +216,14 @@ WATCH_HI = {
     "Local":"आगे स्थानीय प्राधिकरण नोटिस, ट्रैफिक/सेवा बदलाव और व्यावहारिक असर देखें।",
 }
 
+def keyword_hit(text, keyword):
+    k=(keyword or "").lower()
+    if not k:
+        return False
+    if re.search(r"[^\x00-\x7F]", k):
+        return k in text
+    return re.search(r"(?<![a-z0-9])"+re.escape(k)+r"(?![a-z0-9])", text) is not None
+
 def impact_for_story(category, title, lang):
     t=(title or "").lower()
     hi=(lang=="hi")
@@ -275,6 +283,16 @@ def impact_for_story(category, title, lang):
          "संघर्ष सुरक्षा, ऊर्जा कीमत, व्यापार मार्ग, बाजार और कूटनीतिक फैसलों को प्रभावित कर सकता है।",
          "Watch verified battlefield/diplomatic developments, ceasefire terms, sanctions and commodity-market reaction.",
          "पुष्ट सैन्य/कूटनीतिक घटनाक्रम, संघर्षविराम शर्तें, प्रतिबंध और कमोडिटी बाजार प्रतिक्रिया देखें।"),
+        (("police","public safety","crime","law and order","पुलिस","सार्वजनिक सुरक्षा","अपराध","कानून व्यवस्था"),
+         "Policing and public-safety changes can affect local security, enforcement, emergency response and how public spaces are managed.",
+         "पुलिसिंग और सार्वजनिक सुरक्षा में बदलाव स्थानीय सुरक्षा, प्रवर्तन, आपात प्रतिक्रिया और सार्वजनिक स्थानों के प्रबंधन को प्रभावित कर सकते हैं।",
+         "Watch where measures are implemented, staffing/enforcement details and whether incident or response data improves.",
+         "कहां उपाय लागू होते हैं, स्टाफ/प्रवर्तन का विवरण और घटना या प्रतिक्रिया डेटा में सुधार देखें।"),
+        (("crash","accident","collision","दुर्घटना","हादसा","टक्कर"),
+         "A major transport accident can expose safety, maintenance, training or regulatory gaps and may lead to operational changes.",
+         "बड़ी परिवहन दुर्घटना सुरक्षा, रखरखाव, प्रशिक्षण या नियामक खामियां उजागर कर सकती है और संचालन में बदलाव ला सकती है।",
+         "Watch the official investigation, confirmed cause, safety recommendations and any fleet or operating changes.",
+         "आधिकारिक जांच, पुष्ट कारण, सुरक्षा सिफारिशें और बेड़े/संचालन में बदलाव देखें।"),
         (("flood","cyclone","earthquake","fire","emergency","बाढ़","चक्रवात","भूकंप","आग","आपातकाल"),
          "Major disruptions can immediately affect safety, transport, power, public services and local business activity.",
          "बड़ी आपदा या व्यवधान तुरंत सुरक्षा, परिवहन, बिजली, सार्वजनिक सेवाओं और स्थानीय कारोबार को प्रभावित कर सकता है।",
@@ -297,7 +315,7 @@ def impact_for_story(category, title, lang):
          "पुष्ट निवेश राशि, स्थान, समयसीमा, नौकरियां और नियामक मंजूरी देखें।"),
     ]
     for keys,en_why,hi_why,en_watch,hi_watch in rules:
-        if any(k in t for k in keys):
+        if any(keyword_hit(t,k) for k in keys):
             return (hi_why if hi else en_why, hi_watch if hi else en_watch)
     return (
         IMPACT_HI.get(category,"यह घटनाक्रम सार्वजनिक नीति, अर्थव्यवस्था या दैनिक जीवन पर असर डाल सकता है।") if hi else IMPACT_EN.get(category,"This development could have meaningful policy, economic or practical consequences."),
