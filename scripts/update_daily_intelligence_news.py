@@ -216,17 +216,100 @@ WATCH_HI = {
     "Local":"आगे स्थानीय प्राधिकरण नोटिस, ट्रैफिक/सेवा बदलाव और व्यावहारिक असर देखें।",
 }
 
+def impact_for_story(category, title, lang):
+    t=(title or "").lower()
+    hi=(lang=="hi")
+    rules=[
+        (("rbi","repo rate","interest rate","ब्याज","आरबीआई","रेपो"),
+         "RBI/rate decisions can change borrowing costs, deposit returns, the rupee and market expectations.",
+         "आरबीआई/ब्याज दर से कर्ज की लागत, जमा पर रिटर्न, रुपया और बाजार की उम्मीदें बदल सकती हैं।",
+         "Watch the policy statement, bank rate changes, loan/FD pricing and market reaction.",
+         "नीति बयान, बैंक दर, लोन/एफडी कीमत और बाजार प्रतिक्रिया देखें।"),
+        (("tariff","sanction","trade war","import duty","export","टैरिफ","प्रतिबंध","आयात","निर्यात"),
+         "Trade restrictions can change import costs, export demand, supply chains and consumer prices.",
+         "व्यापार प्रतिबंध आयात लागत, निर्यात मांग, सप्लाई चेन और उपभोक्ता कीमतों को बदल सकते हैं।",
+         "Watch the final tariff rate, affected products, exemptions and India’s response.",
+         "अंतिम टैरिफ दर, प्रभावित उत्पाद, छूट और भारत की प्रतिक्रिया देखें।"),
+        (("supreme court","high court","court","tribunal","सुप्रीम कोर्ट","हाई कोर्ट","अदालत"),
+         "A court decision can change how a law, policy or government action is applied and may set a wider precedent.",
+         "अदालत का फैसला कानून, नीति या सरकारी कार्रवाई के लागू होने का तरीका बदल सकता है और व्यापक मिसाल बन सकता है।",
+         "Watch the written order, implementation timeline and whether governments or regulators appeal or comply.",
+         "लिखित आदेश, लागू होने की समयसीमा और सरकार/नियामक की अगली कार्रवाई देखें।"),
+        (("pollution","aqi","smog","air quality","प्रदूषण","वायु गुणवत्ता"),
+         "Air-quality deterioration can affect health, schools, construction, traffic rules and workplace restrictions.",
+         "वायु गुणवत्ता खराब होने से स्वास्थ्य, स्कूल, निर्माण, ट्रैफिक नियम और कार्यस्थल प्रतिबंध प्रभावित हो सकते हैं।",
+         "Watch official AQI readings, GRAP/local restrictions, school advisories and weather conditions.",
+         "आधिकारिक AQI, GRAP/स्थानीय प्रतिबंध, स्कूल सलाह और मौसम की स्थिति देखें।"),
+        (("railway","train","kavach","रेलवे","ट्रेन","कवच"),
+         "Rail-safety and network upgrades can reduce accident risk and affect capacity, punctuality and passenger operations.",
+         "रेल सुरक्षा और नेटवर्क अपग्रेड दुर्घटना जोखिम कम कर सकते हैं और क्षमता, समयपालन व यात्री संचालन पर असर डाल सकते हैं।",
+         "Watch deployment coverage, safety certification, operating results and rollout to more routes.",
+         "तैनाती का दायरा, सुरक्षा प्रमाणन, संचालन परिणाम और अन्य मार्गों पर विस्तार देखें।"),
+        (("metro","expressway","highway","airport","infrastructure","मेट्रो","एक्सप्रेसवे","हाईवे","एयरपोर्ट","इन्फ्रास्ट्रक्चर"),
+         "Transport infrastructure can change commute time, logistics costs, connectivity and nearby economic activity.",
+         "परिवहन इन्फ्रास्ट्रक्चर यात्रा समय, लॉजिस्टिक्स लागत, कनेक्टिविटी और आसपास की आर्थिक गतिविधि बदल सकता है।",
+         "Watch opening/closure dates, tolls or fares, traffic diversions and actual usage after launch.",
+         "खुलने/बंद होने की तारीख, टोल/किराया, ट्रैफिक डायवर्जन और वास्तविक उपयोग देखें।"),
+        (("gst","tax","income tax","जीएसटी","टैक्स","कर"),
+         "Tax changes can directly affect household prices, business margins, compliance and government revenue.",
+         "टैक्स बदलाव सीधे घरेलू कीमत, व्यवसाय मार्जिन, अनुपालन और सरकारी राजस्व को प्रभावित कर सकते हैं।",
+         "Watch the notification, effective date, affected slabs/sectors and compliance guidance.",
+         "अधिसूचना, लागू तारीख, प्रभावित स्लैब/सेक्टर और अनुपालन निर्देश देखें।"),
+        (("fuel","petrol","diesel","lpg","oil price","ईंधन","पेट्रोल","डीजल","एलपीजी","तेल"),
+         "Fuel and energy-price changes feed into household budgets, transport costs and inflation.",
+         "ईंधन और ऊर्जा कीमतों में बदलाव घरेलू बजट, परिवहन लागत और महंगाई पर असर डालते हैं।",
+         "Watch retail-price changes, taxes/subsidies and whether transport or inflation data moves.",
+         "खुदरा कीमत, टैक्स/सब्सिडी और परिवहन या महंगाई डेटा में बदलाव देखें।"),
+        (("jobs","employment","hiring","layoff","नौकरी","रोजगार","भर्ती","छंटनी"),
+         "Employment changes affect household income, labour demand, wage pressure and consumer confidence.",
+         "रोजगार में बदलाव घरेलू आय, श्रम मांग, वेतन दबाव और उपभोक्ता भरोसे को प्रभावित करते हैं।",
+         "Watch official job data, company hiring plans, wage trends and sector-level demand.",
+         "आधिकारिक रोजगार डेटा, कंपनी भर्ती योजना, वेतन रुझान और सेक्टर मांग देखें।"),
+        (("cyber","data breach","hack","cyberattack","साइबर","डेटा ब्रीच","हैक"),
+         "Cyber incidents can disrupt services, expose personal or business data and trigger regulatory or security action.",
+         "साइबर घटना सेवाएं बाधित कर सकती है, निजी/व्यावसायिक डेटा उजागर कर सकती है और नियामक कार्रवाई ला सकती है।",
+         "Watch confirmed scope, affected users, restoration status and official security guidance.",
+         "पुष्ट दायरा, प्रभावित उपयोगकर्ता, सेवा बहाली और आधिकारिक सुरक्षा सलाह देखें।"),
+        (("war","conflict","ceasefire","border","military","युद्ध","संघर्ष","संघर्षविराम","सीमा","सेना"),
+         "Conflict can affect security, energy prices, trade routes, markets and diplomatic choices.",
+         "संघर्ष सुरक्षा, ऊर्जा कीमत, व्यापार मार्ग, बाजार और कूटनीतिक फैसलों को प्रभावित कर सकता है।",
+         "Watch verified battlefield/diplomatic developments, ceasefire terms, sanctions and commodity-market reaction.",
+         "पुष्ट सैन्य/कूटनीतिक घटनाक्रम, संघर्षविराम शर्तें, प्रतिबंध और कमोडिटी बाजार प्रतिक्रिया देखें।"),
+        (("flood","cyclone","earthquake","fire","emergency","बाढ़","चक्रवात","भूकंप","आग","आपातकाल"),
+         "Major disruptions can immediately affect safety, transport, power, public services and local business activity.",
+         "बड़ी आपदा या व्यवधान तुरंत सुरक्षा, परिवहन, बिजली, सार्वजनिक सेवाओं और स्थानीय कारोबार को प्रभावित कर सकता है।",
+         "Watch official alerts, closures, casualty/damage updates and restoration timelines.",
+         "आधिकारिक अलर्ट, बंदी, नुकसान/हताहत अपडेट और सेवा बहाली की समयसीमा देखें।"),
+        (("ai","artificial intelligence","semiconductor","chip","एआई","कृत्रिम बुद्धिमत्ता","सेमीकंडक्टर","चिप"),
+         "AI and semiconductor developments can affect productivity, investment, jobs, cybersecurity and strategic technology capability.",
+         "एआई और सेमीकंडक्टर घटनाक्रम उत्पादकता, निवेश, नौकरियों, साइबर सुरक्षा और रणनीतिक तकनीकी क्षमता पर असर डाल सकते हैं।",
+         "Watch real deployment, investment commitments, regulation, security implications and measurable adoption.",
+         "वास्तविक तैनाती, निवेश, नियमन, सुरक्षा असर और मापने योग्य अपनाने के संकेत देखें।"),
+        (("outbreak","disease","health","hospital","vaccine","प्रकोप","बीमारी","स्वास्थ्य","अस्पताल","टीका"),
+         "Health developments can affect disease risk, healthcare capacity, treatment access and public guidance.",
+         "स्वास्थ्य घटनाक्रम बीमारी के जोखिम, स्वास्थ्य क्षमता, इलाज की उपलब्धता और सार्वजनिक सलाह को प्रभावित कर सकते हैं।",
+         "Watch health-authority guidance, case/severity data, treatment evidence and local advisories.",
+         "स्वास्थ्य प्राधिकरण की सलाह, केस/गंभीरता डेटा, इलाज के प्रमाण और स्थानीय दिशा-निर्देश देखें।"),
+        (("investment","factory","manufacturing","plant","merger","acquisition","निवेश","फैक्ट्री","विनिर्माण","विलय","अधिग्रहण"),
+         "Large business investment or consolidation can affect jobs, capacity, competition, supply chains and regional growth.",
+         "बड़ा निवेश या विलय नौकरियों, उत्पादन क्षमता, प्रतिस्पर्धा, सप्लाई चेन और क्षेत्रीय विकास को प्रभावित कर सकता है।",
+         "Watch confirmed capex, location, timelines, jobs created and regulatory approvals.",
+         "पुष्ट निवेश राशि, स्थान, समयसीमा, नौकरियां और नियामक मंजूरी देखें।"),
+    ]
+    for keys,en_why,hi_why,en_watch,hi_watch in rules:
+        if any(k in t for k in keys):
+            return (hi_why if hi else en_why, hi_watch if hi else en_watch)
+    return (
+        IMPACT_HI.get(category,"यह घटनाक्रम सार्वजनिक नीति, अर्थव्यवस्था या दैनिक जीवन पर असर डाल सकता है।") if hi else IMPACT_EN.get(category,"This development could have meaningful policy, economic or practical consequences."),
+        WATCH_HI.get(category,"आगे आधिकारिक पुष्टि, लागू होने की स्थिति और वास्तविक असर देखें।") if hi else WATCH_EN.get(category,"Watch for official confirmation, implementation and measurable real-world impact.")
+    )
+
 def report_fields(category, title, lang):
-    if lang=="hi":
-        return {
-            "report":f"यह खबर मुख्य रूप से इस घटनाक्रम के बारे में है: {title}",
-            "why":IMPACT_HI.get(category,"यह महत्वपूर्ण सार्वजनिक घटनाक्रम है।"),
-            "watch":WATCH_HI.get(category,"आगे आधिकारिक पुष्टि और व्यावहारिक असर देखें।"),
-        }
+    why,watch=impact_for_story(category,title,lang)
     return {
-        "report":f"This story is primarily about this development: {title}",
-        "why":IMPACT_EN.get(category,"This is an important public-interest development."),
-        "watch":WATCH_EN.get(category,"Watch for official confirmation and practical consequences."),
+        "report":"",
+        "why":why,
+        "watch":watch,
     }
 
 def key(title):
