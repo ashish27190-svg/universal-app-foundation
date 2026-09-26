@@ -246,6 +246,30 @@ CATEGORY_RULES=[
     ("Education",("exam","university","school","admission","student","employment","jobs","परीक्षा","विश्वविद्यालय","स्कूल","प्रवेश","छात्र","रोजगार","नौकरी")),
 ]
 
+TOPIC_ANCHORS={
+    "Economy":("rbi","inflation","gdp","economy","tax","budget","jobs","rupee","trade","आरबीआई","महंगाई","जीडीपी","अर्थव्यवस्था","बजट","रुपया"),
+    "Business":("business","company","merger","acquisition","investment","manufacturing","startup","industry","व्यापार","कंपनी","विलय","अधिग्रहण","निवेश","विनिर्माण","उद्योग"),
+    "Markets":("nifty","sensex","stock market","shares","equity","bond","commodities","निफ्टी","सेंसेक्स","शेयर बाजार","बॉन्ड"),
+    "Policy":("policy","regulation","court","law","ministry","regulator","नीति","नियम","अदालत","कानून","मंत्रालय"),
+    "Security":("defence","security","military","border","terror","cyberattack","रक्षा","सुरक्षा","सेना","सीमा","आतंक","साइबर हमला"),
+    "Technology":("artificial intelligence","technology","cybersecurity","semiconductor","digital policy","कृत्रिम बुद्धिमत्ता","तकनीक","साइबर सुरक्षा","सेमीकंडक्टर","डिजिटल नीति"),
+    "Science":("science","research","isro","space","discovery","mission","विज्ञान","अनुसंधान","इसरो","अंतरिक्ष","खोज","मिशन"),
+    "Health":("health","disease","hospital","medicine","outbreak","public health","स्वास्थ्य","बीमारी","अस्पताल","दवा","प्रकोप","सार्वजनिक स्वास्थ्य"),
+    "Climate":("climate","pollution","environment","heatwave","flood","cyclone","air quality","जलवायु","प्रदूषण","पर्यावरण","हीटवेव","बाढ़","चक्रवात","वायु गुणवत्ता"),
+    "Energy":("energy","power","electricity","oil","gas","solar","renewable","nuclear","green hydrogen","ऊर्जा","बिजली","तेल","गैस","सौर","नवीकरणीय","परमाणु","ग्रीन हाइड्रोजन"),
+    "Infrastructure":("infrastructure","metro","railway","airport","highway","expressway","transport","इन्फ्रास्ट्रक्चर","मेट्रो","रेलवे","एयरपोर्ट","हाईवे","एक्सप्रेसवे","परिवहन"),
+    "Consumer":("consumer","price","gst","banking","telecom","fuel","lpg","aadhaar","उपभोक्ता","कीमत","जीएसटी","बैंकिंग","टेलीकॉम","ईंधन","एलपीजी","आधार"),
+    "Education":("education","school","university","exam","student","employment","jobs","labour","शिक्षा","स्कूल","विश्वविद्यालय","परीक्षा","छात्र","रोजगार","नौकरी","श्रम"),
+    "PublicSafety":("earthquake","cyclone","flood","fire","crash","accident","outage","emergency","evacuation","भूकंप","चक्रवात","बाढ़","आग","दुर्घटना","हादसा","आउटेज","आपातकाल","निकासी"),
+}
+
+def topic_supported(bucket, title, context):
+    terms=TOPIC_ANCHORS.get(bucket)
+    if not terms:
+        return True
+    text=(" "+(title or "")+" "+(context or "")+" ").lower()
+    return any(keyword_hit(text,t) for t in terms)
+
 def infer_category(bucket, title, context):
     text=(" "+(title or "")+" "+(context or "")+" ").lower()
     for cat,terms in CATEGORY_RULES:
@@ -428,6 +452,8 @@ def fetch_feed(spec):
             if head.strip(): title=head.strip()
             if pubname.strip(): source=pubname.strip()
         category=infer_category(bucket,title,context)
+        if scope_level is None and bucket in TOPIC_ANCHORS and category==bucket and not topic_supported(bucket,title,context):
+            continue
         report=report_fields(category,title,context,lang)
         out.append({
             "title":title,
