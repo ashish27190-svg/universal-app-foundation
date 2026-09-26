@@ -82,6 +82,33 @@ function transitForecast(days,stepDays){
   const weight={Jupiter:5,Saturn:5,Mars:2,Uranus:4,Neptune:3,Pluto:4};
   return Object.values(best).sort((a,b)=>(weight[b.mover]-b.orb)-(weight[a.mover]-a.orb)).slice(0,6);
 }
+function forecastTopic(h){
+  const p=chart.western.planets[h.target]||chart.western.ascendant;
+  const house=p?.house||null;
+  if([10,6].includes(house))return 'career';
+  if([2,8,11].includes(house))return 'money';
+  if([5,7].includes(house))return 'relationships';
+  if(house===4)return 'family';
+  if([3,9].includes(house))return 'learning';
+  if(house===12)return 'travel';
+  if(house===1)return 'overview';
+  const bodyMap={Sun:'career',Moon:'family',Mercury:'learning',Venus:'relationships',Mars:'career',Jupiter:'learning',Saturn:'career',Ascendant:'overview'};
+  return bodyMap[h.target]||'overview';
+}
+function dashaSupport(topic){
+  const a=vedicAreaFacts(topic);
+  if(!a.available)return {count:0,levels:[]};
+  return {count:a.activated.length,levels:a.activated.map(x=>x.role+':'+x.planet)};
+}
+function rankForecasts(items){
+  const w={Jupiter:5,Saturn:5,Uranus:4,Pluto:4,Neptune:3,Mars:2};
+  return items.map(h=>{
+    const topic=forecastTopic(h),ds=dashaSupport(topic);
+    const exactness=Math.max(0,2.5-h.orb);
+    const score=(w[h.mover]||1)+exactness+ds.count*1.75;
+    return {...h,topic,dasha_support:ds,score};
+  }).sort((a,b)=>b.score-a.score);
+}
 function forecastMeaning(h){
   const pm={
     Jupiter:'expansion, opportunity, learning and broader perspective',
@@ -118,8 +145,8 @@ function renderOverview(){
   $('metrics').innerHTML=[['Western Sun',chart.western.planets.Sun.sign],['Vedic Moon',chart.vedic.moon_nakshatra],['Life Path',chart.numerology.life_path],['Chinese year',chart.chinese.year.animal]].map(x=>`<div class="metric"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('');
   let dash=$('forecast-dashboard');
   if(!dash){dash=document.createElement('div');dash.id='forecast-dashboard';$('metrics').insertAdjacentElement('afterend',dash)}
-  const brief=buildLifeBrief(),f90=transitForecast(90,3),f365=transitForecast(365,7);
-  const fc=(arr)=>arr.length?arr.map(h=>`<div class="report-section"><h3>${h.mover} ${h.aspect} natal ${h.target}</h3><p class="muted">Peak sample: ${h.date} · orb ${h.orb.toFixed(2)}°</p><p>${esc(forecastMeaning(h))}</p><span class="hint">Traditional transit forecast window; sampled peak, not a guaranteed event.</span></div>`).join(''):'<p class="muted">No major sampled transit hit found in this window under the current orb settings.</p>';
+  const brief=buildLifeBrief(),f90=rankForecasts(transitForecast(90,3)),f365=rankForecasts(transitForecast(365,7));
+  const fc=(arr)=>arr.length?arr.slice(0,6).map(h=>`<div class="report-section"><h3>${TOPICS[h.topic]?.[1]||'Life'} · ${h.mover} ${h.aspect} natal ${h.target}</h3><p class="muted">Peak sample: ${h.date} · orb ${h.orb.toFixed(2)}° · ranking score ${h.score.toFixed(1)}</p><p>${esc(forecastMeaning(h))}</p><p><b>Cross-system support:</b> ${h.dasha_support.count?h.dasha_support.count+' active Vimshottari level(s): '+h.dasha_support.levels.map(esc).join(', '):'No direct MD/AD/PD house activation found for this life area.'}</p><span class="hint">Ranking combines transit importance, aspect exactness and Vedic timing overlap. It is not a probability of the event occurring.</span></div>`).join(''):'<p class="muted">No major sampled transit hit found in this window under the current orb settings.</p>';
   dash.innerHTML=`
     <div class="section"><span class="eyebrow">YOUR LIFE BRIEF</span><h2>What the chart says first</h2>
       <div class="grid2">${brief.map(b=>`<div class="card"><b>${esc(b.t)}</b><p>${esc(b.x)}</p></div>`).join('')}</div>
