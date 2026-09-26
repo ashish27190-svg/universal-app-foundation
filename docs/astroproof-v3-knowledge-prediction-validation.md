@@ -465,3 +465,117 @@ Instead:
 “We found 37 documented rules relevant to this question across 6 schools. 14 are calculable under your selected conventions. 5 are active in your chart. 3 point in one direction, 1 is neutral, 1 contradicts. Two of the active rule families have out-of-sample support in our current research set; three are traditional-only. Your birth-time uncertainty materially affects one result.”
 
 That is the AstroProof standard.
+
+
+## 21. Guidance, remedies, prayers and practical action
+
+AstroProof should answer not only “what does this period traditionally indicate?” but also “what can I do with this information?”
+
+This layer must remain separate from prediction and must never claim that a remedy guarantees an outcome.
+
+### Guidance hierarchy
+
+Every important reading may offer up to five clearly separated response types:
+
+1. **Practical action**
+   - planning
+   - communication
+   - documentation
+   - skill building
+   - budgeting
+   - rest/routine
+   - relationship conversation
+   - preparation for a known high-pressure period
+
+2. **Reflection**
+   - journaling prompts
+   - questions to consider
+   - behavioural patterns to observe
+   - Reality Check prompts
+
+3. **Traditional practice**
+   - tradition-specific observances
+   - charity/service suggestions
+   - fasting/ritual references where appropriate
+   - clearly labelled as traditional belief/practice, not proven intervention
+
+4. **Prayer / mantra**
+   - exact prayer/mantra title
+   - tradition / deity / purpose
+   - source/provenance
+   - original-script text only when rights/source are clear
+   - transliteration
+   - plain-language meaning
+   - suggested traditional timing/recitation practice only when sourced
+   - no claim that recitation guarantees a material event
+
+5. **Avoid / caution**
+   - what the user may wish to avoid during a traditionally difficult period
+   - always framed as optional caution, not fear-based prohibition
+   - never override medical, legal, employment, financial or safety advice
+
+### Recommendation object
+
+Each recommendation should store:
+- recommendation_id
+- linked_insight_id / prediction_id
+- category: practical | reflection | traditional_remedy | prayer_mantra | caution
+- title
+- instruction
+- rationale
+- tradition
+- source_ids
+- evidence_level
+- contraindications
+- safety_notes
+- start/end window if relevant
+- optional recurrence
+- user_feedback
+- created_at
+- version
+
+### Evidence labels
+
+Recommendations must display one of:
+- **Practical / non-astrological**
+- **Traditional practice**
+- **Source-backed mantra/prayer**
+- **Experimental / personal reflection**
+
+Do not collapse these into one “remedy score”.
+
+### Remedy safety rules
+
+- No guaranteed cure, wealth, marriage, job, conception, legal outcome or protection claim.
+- No replacement for medical care, therapy, legal advice, financial advice or emergency action.
+- Avoid expensive gemstones, paid rituals, donations or products as default recommendations.
+- If gemstones are ever added, they require a dedicated source/safety/convention review because schools disagree and users can spend significant money.
+- Do not use fear (“bad period”, “danger will happen”) to push remedies.
+- Prefer low-cost, reversible, optional practices.
+- Preserve school disagreements.
+
+### User experience
+
+Each major insight should end with:
+
+**What you can do now**
+- 1–3 practical suggestions
+
+**If you want a traditional practice**
+- optional prayer/mantra/remedy, source-labelled
+
+**What to watch**
+- observable behaviour/event for Reality Check
+
+### Personalization
+
+A user may choose:
+- practical-only
+- practical + reflective
+- include traditional remedies
+- include prayers/mantras
+- preferred language/script
+- preferred tradition
+
+Default should be practical + reflective.
+Traditional remedies/prayers are opt-in.
