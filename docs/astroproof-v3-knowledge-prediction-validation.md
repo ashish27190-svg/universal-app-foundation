@@ -579,3 +579,45 @@ A user may choose:
 
 Default should be practical + reflective.
 Traditional remedies/prayers are opt-in.
+
+
+## Implementation checkpoint — v0.8 (2026-09-27)
+
+Implemented in the hosted research prototype:
+- Mean-node Rahu/Ketu with explicit convention metadata.
+- Retrograde state for non-luminary planets using geocentric longitudinal motion sampling.
+- Working combustion convention with solar separation exposed.
+- Parashari full graha-drishti baseline: universal 7th; Mars 4/7/8; Jupiter 5/7/9; Saturn 3/7/10. Node drishti is excluded by default because conventions disagree.
+- Full-planet D9 and D10 sign mappings rather than a small subset.
+- Small, rule-ID-based yoga candidate set. Structural formation is separated from promised effects.
+- Moon-relative Jupiter/Saturn/Rahu/Ketu gochar baseline.
+- Jupiter and Saturn Vedha checks where Phaladeepika chapter 26 provides an explicit mapping.
+- Sade-Sati phase arithmetic as a structural transit period, without fear-based deterministic event claims.
+- Deterministic browser self-tests for node, D9/D10 and drishti invariants.
+- Advice layer separated into practical actions and optional BPHS-derived devotional/traditional practices.
+- Versioned rule/source registry on the research branch.
+
+Still blocked from being called production-grade:
+- Hosted sidereal conversion remains approximate rather than independently certified against a production ephemeris.
+- True-node option is not yet exposed.
+- Combustion thresholds still require primary-edition provenance audit.
+- Shadbala is not implemented.
+- Bhavabala is not implemented.
+- Ashtakavarga is not implemented.
+- Full gochar Vedha/dignity/Ashtakavarga integration is incomplete.
+- Yoga corpus is intentionally small and not yet source-complete.
+- D9/D10 interpretation remains lighter than the calculation layer.
+- No blinded cohort has yet established useful predictive performance.
+- No live AI Council, cloud account, or production security layer.
+
+### Next calculation gate
+
+Do not code Shadbala or Ashtakavarga directly from blog summaries. First produce:
+1. a component-by-component mathematical specification,
+2. source/edition mapping for every term,
+3. reference fixtures from independent calculators or published worked examples,
+4. unit tests with fictional birth data,
+5. tolerance rules,
+6. only then production implementation.
+
+This gate is stricter than the earlier browser prototype standard because an incorrect strength engine would contaminate yoga qualification, dasha interpretation, gochar weighting, advice and validation simultaneously.
