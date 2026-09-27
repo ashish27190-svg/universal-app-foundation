@@ -1,0 +1,28 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"AstroProof Prediction Object",
+  "type":"object",
+  "required":["prediction_id","person_id","life_area","claim","window_start","window_end","supporting_rule_ids","calculation_version","frozen_at"],
+  "properties":{
+    "prediction_id":{"type":"string"},
+    "person_id":{"type":"string"},
+    "life_area":{"enum":["overview","career","money","relationships","family","wellbeing","learning","travel","other","any"]},
+    "claim":{"type":"string"},
+    "specificity_class":{"enum":["broad","moderate","specific"]},
+    "window_start":{"type":"string","format":"date"},
+    "window_end":{"type":"string","format":"date"},
+    "peak_dates":{"type":"array","items":{"type":"string","format":"date-time"}},
+    "supporting_rule_ids":{"type":"array","items":{"type":"string"}},
+    "contradicting_rule_ids":{"type":"array","items":{"type":"string"}},
+    "supporting_techniques":{"type":"array","items":{"type":"string"}},
+    "contradicting_techniques":{"type":"array","items":{"type":"string"}},
+    "birth_time_sensitivity":{"type":["string","object","null"]},
+    "convention_sensitivity":{"type":["string","object","null"]},
+    "calculation_version":{"type":"string"},
+    "rank_score":{"type":["number","null"]},
+    "calibration_event_ids":{"type":"array","items":{"type":"string"}},
+    "frozen_at":{"type":"string","format":"date-time"},
+    "reality_check_eligible":{"type":"boolean"}
+  },
+  "additionalProperties":true
+}
