@@ -15,6 +15,11 @@ const VEDIC_DEBIL={Sun:'Libra',Moon:'Scorpio',Mars:'Cancer',Mercury:'Pisces',Jup
 const COMBUSTION_ORB={Mars:{direct:17,retrograde:17},Mercury:{direct:14,retrograde:12},Jupiter:{direct:11,retrograde:11},Venus:{direct:10,retrograde:8},Saturn:{direct:15,retrograde:15}};
 const MAHAPURUSHA_NAME={Mars:'Ruchaka',Mercury:'Bhadra',Jupiter:'Hamsa',Venus:'Malavya',Saturn:'Sasa'};
 const GOCHAR_FAVORABLE={Sun:[3,6,10,11],Moon:[1,3,6,7,10,11],Mars:[3,6,11],Mercury:[2,4,6,8,10,11],Jupiter:[2,5,7,9,11],Venus:[1,2,3,4,5,8,9,11,12],Saturn:[3,6,11],Rahu:[3,6,10,11],Ketu:[3,6,10,11]};
+const GOCHAR_VEDHA={
+  Jupiter:{2:12,5:4,7:3,9:10,11:8},
+  Saturn:{3:12,6:9,11:5}
+};
+
 
 const AREA_HOUSES={overview:[1,10,7,2],career:[10,6,2,11],relationships:[7,5,2],money:[2,11,5,9],family:[4,2],wellbeing:[1,6,8],learning:[3,5,9],travel:[3,9,12]};
 const HOUSE_MEANING={1:'identity and approach',2:'resources, speech and accumulated wealth',3:'skills, communication and initiative',4:'home, roots and inner security',5:'creativity, study and children',6:'work routines, service and competition',7:'partnerships and contracts',8:'shared resources, change and vulnerability',9:'higher learning, beliefs and long journeys',10:'career, public role and responsibility',11:'gains, networks and long-range goals',12:'retreat, foreign links, endings and expenditure'};
@@ -71,12 +76,17 @@ function moonRelativeHouse(transitPos,natalMoon){return mod(transitPos.sign_inde
 function currentVedicGochar(natalSid,date=new Date()){
   const ay=ayanamsaApprox(date),trop=planetary(date,true),sid={};for(const [k,v] of Object.entries(trop)){sid[k]=signInfo(v.longitude-ay);if('retrograde' in v)sid[k].retrograde=v.retrograde}
   const rahu=signInfo(meanLunarNodeTropical(date)-ay);rahu.retrograde=true;sid.Rahu=rahu;sid.Ketu=signInfo(rahu.longitude+180);sid.Ketu.retrograde=true;
-  const rows=['Jupiter','Saturn','Rahu','Ketu'].map(name=>{const h=moonRelativeHouse(sid[name],natalSid.Moon);return {planet:name,sign:sid[name].sign,house_from_moon:h,baseline_favorable:GOCHAR_FAVORABLE[name].includes(h),retrograde:!!sid[name].retrograde}});
+  const houseByPlanet={};for(const [name,p] of Object.entries(sid))houseByPlanet[name]=moonRelativeHouse(p,natalSid.Moon);
+  const rows=['Jupiter','Saturn','Rahu','Ketu'].map(name=>{
+    const h=houseByPlanet[name],baseline=GOCHAR_FAVORABLE[name].includes(h),vedhaHouse=GOCHAR_VEDHA[name]?.[h]||null;
+    let blockers=[];
+    if(baseline&&vedhaHouse)blockers=Object.entries(houseByPlanet).filter(([other,oh])=>other!==name&&oh===vedhaHouse&&!(name==='Saturn'&&other==='Sun')).map(([other])=>other);
+    return {planet:name,sign:sid[name].sign,house_from_moon:h,baseline_favorable:baseline,vedha_house:vedhaHouse,vedha_blocked_by:blockers,effective_favorable:baseline&&blockers.length===0,retrograde:!!sid[name].retrograde};
+  });
   const sh=rows.find(x=>x.planet==='Saturn').house_from_moon;
   const sade=sh===12?'phase 1 — Saturn 12th from Moon':sh===1?'phase 2 — Saturn over Moon sign':sh===2?'phase 3 — Saturn 2nd from Moon':null;
-  return {date:date.toISOString(),rows,sade_sati:sade,convention:'Moon-relative whole-sign gochar baseline; Vedha/Ashtakavarga not yet applied'};
+  return {date:date.toISOString(),rows,sade_sati:sade,convention:'Moon-relative whole-sign gochar. Jupiter/Saturn Vedha applied where the chapter-26 mapping is explicit; Rahu/Ketu remain baseline-only. Ashtakavarga not yet applied.'};
 }
-
 function vimshottari(date,moonLon,atDate=new Date()){
   const span=360/27,ix=Math.floor(mod(moonLon,360)/span),li=ix%9,elapsed=mod(moonLon,span)/span;
   let mdStart=new Date(date.getTime()-DASHA_YEARS[li]*elapsed*365.2425*86400000),now=atDate,active=null;
@@ -319,14 +329,14 @@ function renderCharts(){
   if(!chart){$('charts-area').textContent='Create a birth profile first.';return}
   const v=chart.vedic,cond=Object.entries(v.conditions).map(([n,x])=>`<tr><td>${n}</td><td>${x.retrograde?'Retrograde':'Direct'}</td><td>${x.solar_separation.toFixed(2)}°</td><td>${x.combust?'Combust':'Not combust'} (≤${x.combustion_threshold}°)</td></tr>`).join('');
   const yoga=v.yogas.map(y=>`<div class="record"><b>${esc(y.name)}</b><p>${esc(y.evidence)}</p><span class="hint">${esc(y.status)} · Rule ${esc(y.rule_id)} · ${esc(y.convention)}</span></div>`).join('')||'<p class="muted">No structural matches from the small audited yoga set.</p>';
-  const go=v.gochar.rows.map(x=>`<tr><td>${x.planet}</td><td>${x.sign}</td><td>${x.house_from_moon}</td><td>${x.baseline_favorable?'Baseline favorable':'Not in baseline favorable set'}</td></tr>`).join('');
+  const go=v.gochar.rows.map(x=>`<tr><td>${x.planet}</td><td>${x.sign}</td><td>${x.house_from_moon}</td><td>${x.baseline_favorable?(x.vedha_blocked_by?.length?'Baseline favorable, Vedha by '+x.vedha_blocked_by.join(', '):'Favorable after implemented Vedha check'):'Not in baseline favorable set'}</td></tr>`).join('');
   const d9=Object.entries(v.divisional.D9).filter(([k])=>k!=='Ascendant').map(([k,s])=>k+' '+s).join(' · ');
   const d10=Object.entries(v.divisional.D10).filter(([k])=>k!=='Ascendant').map(([k,s])=>k+' '+s).join(' · ');
   $('charts-area').className='';
   $('charts-area').innerHTML=`<div class="wheel-wrap"><div class="wheel-card"><span class="eyebrow">WESTERN · TROPICAL</span>${wheel(chart.western,'Western')}</div><div class="wheel-card"><span class="eyebrow">VEDIC · SIDEREAL APPROX</span>${wheel(chart.vedic,'Vedic')}</div></div>
   <div class="grid2" style="margin-top:14px"><div class="card"><h3>Western positions</h3>${planetTable(chart.western)}<p class="hint">Ascendant: ${chart.western.ascendant?chart.western.ascendant.sign+' '+chart.western.ascendant.degree_in_sign.toFixed(2)+'°':'unknown'}</p></div><div class="card"><h3>Vedic positions + mean nodes</h3>${planetTable(chart.vedic)}<p class="hint">Moon nakshatra: ${v.moon_nakshatra}, pada ${v.moon_pada}. Rahu/Ketu convention: mean lunar node / exact opposite.</p></div></div>
   <div class="grid2" style="margin-top:14px"><div class="card"><h3>Planet condition facts</h3><div class="table-wrap"><table><thead><tr><th>Planet</th><th>Motion</th><th>Sun separation</th><th>Combustion</th></tr></thead><tbody>${cond}</tbody></table></div><p class="hint">Combustion thresholds are an explicit working convention and remain source-versioned; they are not a universal astronomical property.</p></div><div class="card"><h3>Parāśari full graha drishti</h3><p>${v.drishti.slice(0,18).map(x=>`${x.from}→${x.to} (${x.count}th)`).join(' · ')||'—'}</p><p class="hint">Default: all classical grahas 7th; Mars 4/7/8, Jupiter 5/7/9, Saturn 3/7/10. Node drishti is deliberately not asserted.</p></div></div>
-  <div class="grid2" style="margin-top:14px"><div class="card"><h3>Audited yoga candidates</h3>${yoga}</div><div class="card"><h3>Current Vedic gochar baseline</h3><div class="table-wrap"><table><thead><tr><th>Planet</th><th>Sidereal sign</th><th>From natal Moon</th><th>Phaladeepika baseline</th></tr></thead><tbody>${go}</tbody></table></div><p><b>Sade Sati:</b> ${v.gochar.sade_sati||'Not in the 12th/1st/2nd Saturn-from-Moon zone.'}</p><p class="hint">${esc(v.gochar.convention)}. “Favorable” here is only the chapter-26 baseline; Vedha and Ashtakavarga are not yet applied.</p></div></div>
+  <div class="grid2" style="margin-top:14px"><div class="card"><h3>Audited yoga candidates</h3>${yoga}</div><div class="card"><h3>Current Vedic gochar baseline</h3><div class="table-wrap"><table><thead><tr><th>Planet</th><th>Sidereal sign</th><th>From natal Moon</th><th>Phaladeepika baseline</th></tr></thead><tbody>${go}</tbody></table></div><p><b>Sade Sati:</b> ${v.gochar.sade_sati||'Not in the 12th/1st/2nd Saturn-from-Moon zone.'}</p><p class="hint">${esc(v.gochar.convention)}. Jupiter/Saturn Vedha is now checked when the source mapping is explicit; Rahu/Ketu remain baseline-only. Ashtakavarga is not yet applied.</p></div></div>
   <div class="grid2" style="margin-top:14px"><div class="card"><h3>D9 · Navamsa evidence</h3><p><b>Ascendant:</b> ${v.divisional.D9.Ascendant||'—'}</p><p class="muted">${esc(d9)}</p></div><div class="card"><h3>D10 · Dasamsa evidence</h3><p><b>Ascendant:</b> ${v.divisional.D10.Ascendant||'—'}</p><p class="muted">${esc(d10)}</p></div></div>`;
 }
 function houseSign(group,h){if(!group.ascendant)return null;return Z[mod(group.ascendant.sign_index+h-1,12)]}
