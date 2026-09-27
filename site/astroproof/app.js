@@ -87,6 +87,21 @@ function currentVedicGochar(natalSid,date=new Date()){
   const sade=sh===12?'phase 1 — Saturn 12th from Moon':sh===1?'phase 2 — Saturn over Moon sign':sh===2?'phase 3 — Saturn 2nd from Moon':null;
   return {date:date.toISOString(),rows,sade_sati:sade,convention:'Moon-relative whole-sign gochar. Jupiter/Saturn Vedha applied where the chapter-26 mapping is explicit; Rahu/Ketu remain baseline-only. Ashtakavarga not yet applied.'};
 }
+function engineSelfTest(){
+  const checks=[];
+  const add=(name,ok,detail='')=>checks.push({name,ok:!!ok,detail});
+  const node=meanLunarNodeTropical(new Date('2000-01-01T12:00:00Z'));
+  add('Meeus mean node J2000',Math.abs(node-125.0445479)<0.01,node.toFixed(6)+'°');
+  add('D9 Aries 0°',divisional(0,9)==='Aries',divisional(0,9));
+  add('D9 Taurus 0°',divisional(30,9)==='Capricorn',divisional(30,9));
+  add('D10 Taurus 0°',divisional(30,10)==='Capricorn',divisional(30,10));
+  const fixture={Sun:signInfo(0),Moon:signInfo(30),Mercury:signInfo(60),Venus:signInfo(90),Mars:signInfo(0),Jupiter:signInfo(120),Saturn:signInfo(300),Rahu:signInfo(210),Ketu:signInfo(30)};
+  const dr=vedicDrishtiPure(fixture);
+  add('Mars 4th drishti',dr.some(x=>x.from==='Mars'&&x.to==='Venus'&&x.count===4));
+  add('Jupiter 9th drishti',dr.some(x=>x.from==='Jupiter'&&x.to==='Sun'&&x.count===9));
+  add('Saturn 3rd drishti',dr.some(x=>x.from==='Saturn'&&x.to==='Sun'&&x.count===3));
+  return {passed:checks.filter(x=>x.ok).length,total:checks.length,ok:checks.every(x=>x.ok),checks};
+}
 function vimshottari(date,moonLon,atDate=new Date()){
   const span=360/27,ix=Math.floor(mod(moonLon,360)/span),li=ix%9,elapsed=mod(moonLon,span)/span;
   let mdStart=new Date(date.getTime()-DASHA_YEARS[li]*elapsed*365.2425*86400000),now=atDate,active=null;
@@ -327,13 +342,14 @@ function renderTimeSensitivity(){
 }
 function renderCharts(){
   if(!chart){$('charts-area').textContent='Create a birth profile first.';return}
+  const self=engineSelfTest();
   const v=chart.vedic,cond=Object.entries(v.conditions).map(([n,x])=>`<tr><td>${n}</td><td>${x.retrograde?'Retrograde':'Direct'}</td><td>${x.solar_separation.toFixed(2)}°</td><td>${x.combust?'Combust':'Not combust'} (≤${x.combustion_threshold}°)</td></tr>`).join('');
   const yoga=v.yogas.map(y=>`<div class="record"><b>${esc(y.name)}</b><p>${esc(y.evidence)}</p><span class="hint">${esc(y.status)} · Rule ${esc(y.rule_id)} · ${esc(y.convention)}</span></div>`).join('')||'<p class="muted">No structural matches from the small audited yoga set.</p>';
   const go=v.gochar.rows.map(x=>`<tr><td>${x.planet}</td><td>${x.sign}</td><td>${x.house_from_moon}</td><td>${x.baseline_favorable?(x.vedha_blocked_by?.length?'Baseline favorable, Vedha by '+x.vedha_blocked_by.join(', '):'Favorable after implemented Vedha check'):'Not in baseline favorable set'}</td></tr>`).join('');
   const d9=Object.entries(v.divisional.D9).filter(([k])=>k!=='Ascendant').map(([k,s])=>k+' '+s).join(' · ');
   const d10=Object.entries(v.divisional.D10).filter(([k])=>k!=='Ascendant').map(([k,s])=>k+' '+s).join(' · ');
   $('charts-area').className='';
-  $('charts-area').innerHTML=`<div class="wheel-wrap"><div class="wheel-card"><span class="eyebrow">WESTERN · TROPICAL</span>${wheel(chart.western,'Western')}</div><div class="wheel-card"><span class="eyebrow">VEDIC · SIDEREAL APPROX</span>${wheel(chart.vedic,'Vedic')}</div></div>
+  $('charts-area').innerHTML=`<div class="notice"><b>Engine self-test:</b> ${self.ok?'PASS':'FAIL'} · ${self.passed}/${self.total} deterministic checks${self.ok?'':' · '+self.checks.filter(x=>!x.ok).map(x=>x.name).join(', ')}</div><div class="wheel-wrap"><div class="wheel-card"><span class="eyebrow">WESTERN · TROPICAL</span>${wheel(chart.western,'Western')}</div><div class="wheel-card"><span class="eyebrow">VEDIC · SIDEREAL APPROX</span>${wheel(chart.vedic,'Vedic')}</div></div>
   <div class="grid2" style="margin-top:14px"><div class="card"><h3>Western positions</h3>${planetTable(chart.western)}<p class="hint">Ascendant: ${chart.western.ascendant?chart.western.ascendant.sign+' '+chart.western.ascendant.degree_in_sign.toFixed(2)+'°':'unknown'}</p></div><div class="card"><h3>Vedic positions + mean nodes</h3>${planetTable(chart.vedic)}<p class="hint">Moon nakshatra: ${v.moon_nakshatra}, pada ${v.moon_pada}. Rahu/Ketu convention: mean lunar node / exact opposite.</p></div></div>
   <div class="grid2" style="margin-top:14px"><div class="card"><h3>Planet condition facts</h3><div class="table-wrap"><table><thead><tr><th>Planet</th><th>Motion</th><th>Sun separation</th><th>Combustion</th></tr></thead><tbody>${cond}</tbody></table></div><p class="hint">Combustion thresholds are an explicit working convention and remain source-versioned; they are not a universal astronomical property.</p></div><div class="card"><h3>Parāśari full graha drishti</h3><p>${v.drishti.slice(0,18).map(x=>`${x.from}→${x.to} (${x.count}th)`).join(' · ')||'—'}</p><p class="hint">Default: all classical grahas 7th; Mars 4/7/8, Jupiter 5/7/9, Saturn 3/7/10. Node drishti is deliberately not asserted.</p></div></div>
   <div class="grid2" style="margin-top:14px"><div class="card"><h3>Audited yoga candidates</h3>${yoga}</div><div class="card"><h3>Current Vedic gochar baseline</h3><div class="table-wrap"><table><thead><tr><th>Planet</th><th>Sidereal sign</th><th>From natal Moon</th><th>Phaladeepika baseline</th></tr></thead><tbody>${go}</tbody></table></div><p><b>Sade Sati:</b> ${v.gochar.sade_sati||'Not in the 12th/1st/2nd Saturn-from-Moon zone.'}</p><p class="hint">${esc(v.gochar.convention)}. Jupiter/Saturn Vedha is now checked when the source mapping is explicit; Rahu/Ketu remain baseline-only. Ashtakavarga is not yet applied.</p></div></div>
