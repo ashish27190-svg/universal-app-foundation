@@ -1,0 +1,270 @@
+{
+  "version": "0.1",
+  "policy": "AstroProof calls these traditional forecasting/interpretive systems, not scientifically established predictive sciences. Each system remains conventionally independent until synthesis.",
+  "systems": [
+    {
+      "id": "parashari",
+      "region": "pan-Indian",
+      "name": "Parashari Jyotisha",
+      "best_use": [
+        "life pattern",
+        "dasha timing",
+        "gochar",
+        "vargas"
+      ],
+      "inputs": [
+        "birth date",
+        "birth time",
+        "birthplace"
+      ],
+      "automation": "high after ephemeris certification",
+      "status": "partly implemented",
+      "notes": "Core current Vedic engine."
+    },
+    {
+      "id": "jaimini",
+      "region": "pan-Indian",
+      "name": "Jaimini Jyotisha",
+      "best_use": [
+        "independent natal judgement",
+        "Chara Dasha timing",
+        "arudha/image"
+      ],
+      "inputs": [
+        "birth date",
+        "accurate birth time",
+        "birthplace"
+      ],
+      "automation": "high after convention lock",
+      "status": "research queue",
+      "notes": "Keep rasi drishti, chara karaka and dasha rules separate from Parashari."
+    },
+    {
+      "id": "kp",
+      "region": "Tamil Nadu / South India",
+      "name": "Krishnamurti Paddhati (KP)",
+      "best_use": [
+        "specific event questions",
+        "yes/no judgement",
+        "event timing"
+      ],
+      "inputs": [
+        "very accurate birth time or horary moment",
+        "place"
+      ],
+      "automation": "high with precise cusps/ayanamsa",
+      "status": "priority research queue",
+      "notes": "Sub-lord/cuspal system; do not use approximate birth time as if precise."
+    },
+    {
+      "id": "tajika",
+      "region": "Indian annual tradition with Perso-Arabic influence",
+      "name": "Tajika / Varshaphala",
+      "best_use": [
+        "annual forecast",
+        "birthday-to-birthday themes"
+      ],
+      "inputs": [
+        "birth data",
+        "target solar-return year/place convention"
+      ],
+      "automation": "high",
+      "status": "research queue",
+      "notes": "Annual system; not silently blended with Parashari."
+    },
+    {
+      "id": "prashna-marga",
+      "region": "Kerala",
+      "name": "Prashna Marga / Horary",
+      "best_use": [
+        "specific current question",
+        "situation diagnosis",
+        "when birth time is unavailable"
+      ],
+      "inputs": [
+        "question",
+        "exact question time",
+        "question place"
+      ],
+      "automation": "medium-high for chart portion",
+      "status": "priority Ask-mode research",
+      "notes": "Question moment is the chart; natal data is optional context."
+    },
+    {
+      "id": "ashtamangala",
+      "region": "Kerala / Tulu Nadu",
+      "name": "Ashtamangala Prashna",
+      "best_use": [
+        "traditional situational/temple/family-property questions"
+      ],
+      "inputs": [
+        "question moment",
+        "place",
+        "traditional object/ritual observations"
+      ],
+      "automation": "partial only",
+      "status": "research only",
+      "notes": "Do not call an ordinary digital horary chart full Ashtamangala without required physical/ritual inputs."
+    },
+    {
+      "id": "panchapakshi",
+      "region": "Tamil tradition",
+      "name": "Panchapakshi / Panchapatchi",
+      "best_use": [
+        "personal daily/hour timing",
+        "action timing"
+      ],
+      "inputs": [
+        "birth nakshatra",
+        "fortnight/paksha",
+        "date",
+        "location/sunrise convention"
+      ],
+      "automation": "high after source audit",
+      "status": "priority timing research",
+      "notes": "Five-bird state across day/night jamams; useful as a personal clock, not a natal life-story engine."
+    },
+    {
+      "id": "muhurta",
+      "region": "pan-Indian",
+      "name": "Muhurta + Panchanga",
+      "best_use": [
+        "choosing a time to begin an action"
+      ],
+      "inputs": [
+        "action type",
+        "date range",
+        "location"
+      ],
+      "automation": "high after rule corpus",
+      "status": "later module",
+      "notes": "Action selection is not event prediction."
+    },
+    {
+      "id": "nadi-palmleaf",
+      "region": "Tamil Nadu",
+      "name": "Palm-leaf Nadi tradition",
+      "best_use": [
+        "traditional manuscript reading"
+      ],
+      "inputs": [
+        "authentic reader/archive workflow; often thumbprint and matching process"
+      ],
+      "automation": "not authentic from ordinary chart data",
+      "status": "do not simulate",
+      "notes": "AstroProof must never fabricate a palm-leaf reading."
+    },
+    {
+      "id": "nadi-calculable",
+      "region": "South Indian / multiple lineages",
+      "name": "Calculable Nadi-style rule traditions",
+      "best_use": [
+        "event sequencing",
+        "planetary linkage analysis"
+      ],
+      "inputs": [
+        "birth data",
+        "lineage-specific rules"
+      ],
+      "automation": "possible only after lineage/source formalization",
+      "status": "research queue",
+      "notes": "Do not collapse multiple Nadi schools into one."
+    },
+    {
+      "id": "nimitta",
+      "region": "pan-Indian with regional schools",
+      "name": "Nimitta / Shakuna",
+      "best_use": [
+        "interpretation of observed omens/context"
+      ],
+      "inputs": [
+        "actual observation",
+        "time/context"
+      ],
+      "automation": "input-dependent",
+      "status": "optional future module",
+      "notes": "Never fabricate observations."
+    },
+    {
+      "id": "samudrika",
+      "region": "pan-Indian",
+      "name": "Samudrika / Hasta traditions",
+      "best_use": [
+        "traditional body/hand/face interpretation"
+      ],
+      "inputs": [
+        "explicit observations or consented images"
+      ],
+      "automation": "separate multimodal module only",
+      "status": "outside core",
+      "notes": "Do not infer from birth data; privacy-sensitive."
+    },
+    {
+      "id": "swara",
+      "region": "Indian yogic/divinatory tradition",
+      "name": "Swara traditions",
+      "best_use": [
+        "moment/action interpretation"
+      ],
+      "inputs": [
+        "current breath/nostril observation",
+        "time/context"
+      ],
+      "automation": "input-dependent",
+      "status": "optional research",
+      "notes": "Requires real-time user observation."
+    }
+  ],
+  "routing": [
+    {
+      "question": "What shaped my past / what is happening in my life?",
+      "route": [
+        "parashari",
+        "jaimini"
+      ],
+      "fallback": [
+        "western",
+        "bazi",
+        "numerology"
+      ]
+    },
+    {
+      "question": "Will/when will a specific event happen?",
+      "route": [
+        "kp",
+        "prashna-marga"
+      ],
+      "condition": "only after those engines pass validation gates"
+    },
+    {
+      "question": "What is this year about?",
+      "route": [
+        "tajika",
+        "parashari"
+      ]
+    },
+    {
+      "question": "What time today is traditionally favourable?",
+      "route": [
+        "panchapakshi",
+        "muhurta"
+      ]
+    },
+    {
+      "question": "I do not know my birth time",
+      "route": [
+        "prashna-marga",
+        "birth-time rectification"
+      ],
+      "notes": "Do not invent precise houses."
+    },
+    {
+      "question": "Give me a Nadi reading",
+      "route": [
+        "nadi-palmleaf",
+        "nadi-calculable"
+      ],
+      "notes": "Explicitly distinguish authentic manuscript reading from calculable Nadi-style methods."
+    }
+  ]
+}
