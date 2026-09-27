@@ -82,12 +82,12 @@ function transitForecast(days,stepDays){
   if(chart.western.ascendant)natal.Ascendant=chart.western.ascendant;
   const movers=['Jupiter','Saturn','Mars','Uranus','Neptune','Pluto'];
   const asp=[['conjunction',0],['sextile',60],['square',90],['trine',120],['opposition',180]];
+  const weight={Jupiter:5,Saturn:5,Mars:2,Uranus:4,Neptune:3,Pluto:4};
   const start=new Date(),end=new Date(start.getTime()+days*86400000),stepMs=Math.min(1,Math.max(.5,Number(stepDays)||1))*86400000;
-  const active=new Map(),hits=[];
+  const active=new Map(),candidates=[];
   const finish=(key,run)=>{
     if(!run)return;
-    const refined=refineTransitPeak(run.best.when,run.mover,run.targetLon,run.angle,stepMs);
-    hits.push({mover:run.mover,aspect:run.aspect,target:run.target,date:refined.when.toISOString().slice(0,10),peak_at:refined.when.toISOString(),orb:refined.orb,window_start:run.start.toISOString().slice(0,10),window_end:run.last.toISOString().slice(0,10),timing_precision:'peak refined numerically; window boundaries day-resolution'});
+    candidates.push({...run,sample_score:(weight[run.mover]||1)+(3-run.best.orb)});
     active.delete(key);
   };
   for(let t=start.getTime();t<=end.getTime()+1;t+=stepMs){
@@ -103,7 +103,11 @@ function transitForecast(days,stepDays){
     if(when.getTime()===end.getTime())break;
   }
   for(const [key,run] of [...active.entries()])finish(key,run);
-  const weight={Jupiter:5,Saturn:5,Mars:2,Uranus:4,Neptune:3,Pluto:4};
+  const shortlist=candidates.sort((a,b)=>b.sample_score-a.sample_score).slice(0,30);
+  const hits=shortlist.map(run=>{
+    const refined=refineTransitPeak(run.best.when,run.mover,run.targetLon,run.angle,stepMs);
+    return {mover:run.mover,aspect:run.aspect,target:run.target,date:refined.when.toISOString().slice(0,10),peak_at:refined.when.toISOString(),orb:refined.orb,window_start:run.start.toISOString().slice(0,10),window_end:run.last.toISOString().slice(0,10),timing_precision:'peak refined numerically; window boundaries day-resolution'};
+  });
   return hits.sort((a,b)=>(weight[b.mover]-b.orb)-(weight[a.mover]-a.orb)).slice(0,18);
 }
 function forecastTopic(h){
