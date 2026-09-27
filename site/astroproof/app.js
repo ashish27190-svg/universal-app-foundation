@@ -308,40 +308,83 @@ function birthTimeQuality(){
   const p=state.profile;if(!p)return 'Not set';
   return {recorded:'Recorded / high',approx5:'Approx ±5m',approx15:'Approx ±15m',approx30:'Approx ±30m',unknown:'Unknown'}[p.time_precision||'recorded']||'Recorded / high';
 }
+function phasePlainTitle(p){
+  const map={Sun:'Visibility & responsibility',Moon:'Home & emotional priorities',Mars:'Action & pressure',Mercury:'Learning & decisions',Jupiter:'Growth & opportunity',Venus:'Relationships & values',Saturn:'Structure & responsibility',Rahu:'Change & experimentation',Ketu:'Simplification & reorientation'};
+  if(!p)return 'Life transition';
+  return (map[p.mahadasha]||'Life direction')+' → '+(map[p.antardasha]||'secondary theme');
+}
+function plainForecastSummary(h){
+  if(!h)return {headline:'No unusually strong timing signal',body:'The current engine does not find a major concentrated window in this horizon. That is a valid result; you do not need to force a prediction.',watch:[]};
+  const area=TOPICS[h.topic]?.[1]||'Life';
+  const mode={
+    Jupiter:'more room for growth, learning or opportunity',
+    Saturn:'more responsibility, structure, delay or consolidation',
+    Mars:'more urgency, action, competition or friction',
+    Uranus:'a stronger push toward change, independence or disruption',
+    Neptune:'more uncertainty, imagination, ideals or blurred boundaries',
+    Pluto:'deeper restructuring, pressure or a change in what you can no longer ignore'
+  }[h.mover]||'a stronger-than-usual emphasis';
+  const tone={conjunction:'concentrated',trine:'comparatively smoother',sextile:'an opening that still needs action',square:'more demanding and adjustment-heavy',opposition:'a balancing or push-pull situation'}[h.aspect]||'active';
+  const examples=(forecastPlain(h).examples||[]).slice(0,3);
+  return {headline:area+' is the clearest theme',body:`This period puts extra emphasis on ${area.toLowerCase()}. Traditionally, the pattern points to ${mode}; the way it develops looks ${tone}. Read this as a theme to watch, not as a promise that one specific event must happen.`,watch:examples};
+}
 function renderOverview(){
   if(!chart)return;
-  $('overview-note').innerHTML='<b>Prediction-first research view.</b> Past phases below are generated without reading your validation-holdout events. Forecasts are traditional interpretations, not established probabilities.';
+  $('overview-note').innerHTML='<b>Your reading is ready.</b> Start with section 1 and move down. Technical astrology is hidden unless you open “How was this calculated?”';
   document.querySelectorAll('[data-now-range]').forEach(b=>b.classList.toggle('active',b.dataset.nowRange===nowRange));
-  let dash=$('forecast-dashboard');
-  if(!dash){dash=document.createElement('div');dash.id='forecast-dashboard';$('metrics').insertAdjacentElement('afterend',dash)}
-  const cfg={today:[1,1,'Today'],week:[7,1,'This week'],month:[30,1,'This month'],year:[365,1,'This year']}[nowRange]||[7,1,'This week'];
-  const currentRanked=rankForecasts(transitForecast(cfg[0],cfg[1]));
-  const yearRanked=cfg[0]===365?currentRanked:rankForecasts(transitForecast(365,1));
-  const top=currentRanked.slice(0,3),future=yearRanked.slice(0,4),phase=chart.vedic.dasha.active,history=historicalPhases();
-  const strongest=top[0]||future[0]||null,next=future[0]||null;
+
+  const cfg={today:[1,1,'today'],week:[7,1,'this week'],month:[30,1,'this month'],year:[365,1,'this year']}[nowRange]||[7,1,'this week'];
+  const current=rankForecasts(transitForecast(cfg[0],cfg[1]));
+  const year=cfg[0]===365?current:rankForecasts(transitForecast(365,1));
+  const main=current[0]||year[0]||null;
+  const upcoming=year.filter(x=>!main||x.mover!==main.mover||x.target!==main.target||x.aspect!==main.aspect).slice(0,3);
+  const phase=chart.vedic.dasha.active;
+  const history=historicalPhases().slice(-3);
+  const nowText=plainForecastSummary(main);
+  const advice=practiceLayer(main?.topic||'overview');
+
   $('metrics').innerHTML=[
-    ['Current phase',phase?`${phase.mahadasha}–${phase.antardasha}`:'Not resolved'],
-    ['Strongest area',strongest?(TOPICS[strongest.topic]?.[1]||'Life'):'No strong signal'],
-    ['Next window',next?(next.window_start||next.date):'No major hit'],
-    ['Birth-time quality',birthTimeQuality()]
+    ['Main focus',main?(TOPICS[main.topic]?.[1]||'Life'):'No strong signal'],
+    ['Next window',upcoming[0]?(upcoming[0].window_start||upcoming[0].date):'No major window'],
+    ['Background theme',phase?phasePlainTitle(phase).split(' → ')[0]:'Not resolved'],
+    ['Birth-time certainty',birthTimeQuality()]
   ].map(x=>`<div class="metric"><span>${x[0]}</span><b>${esc(x[1])}</b></div>`).join('');
-  const card=h=>{const p=forecastPlain(h);return `<div class="report-section"><h3>${esc(p.area)} · ${esc(h.window_start||h.date)} → ${esc(h.window_end||h.date)}</h3><p>${esc(p.meaning)}</p><p><b>Could show up as:</b> ${p.examples.map(esc).join(' · ')}</p><p class="muted">Strongest calculated peak: ${esc(h.date)} · priority ${h.score.toFixed(1)}. This is a ranking, not a probability.</p><details><summary>Why this is here</summary><p>${esc(h.mover)} ${esc(h.aspect)} natal ${esc(h.target)}; orb ${h.orb.toFixed(3)}°. ${h.dasha_support.count?h.dasha_support.count+' Vimshottari layer(s) also connect to this life area: '+h.dasha_support.levels.map(esc).join(', '):'No direct MD/AD/PD house activation found.'}</p><p class="hint"><b>Evidence ladder:</b> ${evidenceLadder(h).map(([n,s])=>esc(n)+' '+(s==='pass'?'✓':'pending')).join(' · ')}</p></details></div>`};
-  const hist=history.map(p=>`<div class="card"><span class="eyebrow">${esc(p.start)} → ${esc(p.end)}</span><h3>${esc(p.mahadasha)}–${esc(p.antardasha)}</h3><p>${esc(phaseNarrative(p))}</p><span class="hint">Generated from timing rules only. Your saved past events were not used to create this paragraph.</span></div>`).join('');
-  const advice=practiceLayer(strongest?.topic||'overview');
-  dash.innerHTML=`
-    <div class="section"><span class="eyebrow">YOUR STORY · PAST</span><h2>Recent life phases</h2><p class="muted">This is the part we should eventually test against your recorded history. It is deliberately generated before looking at validation-holdout events.</p><div class="grid2">${hist||'<div class="notice">Not enough historical timing data for this profile.</div>'}</div></div>
-    <div class="section"><span class="eyebrow">NOW</span><h2>What appears most active</h2><div class="grid2"><div class="card"><h3>Current background phase</h3><p>${esc(phaseNarrative(phase))}</p><p class="muted">${phase?`AD ${phase.start} → ${phase.end}${phase.pratyantar_start?'; PD '+phase.pratyantar_start+' → '+phase.pratyantar_end:''}`:'Exact birth time improves timing layers.'}</p></div><div>${top.length?top.map(card).join(''):'<div class="notice">No major transit hit found in the selected horizon under the current settings.</div>'}</div></div></div>
-    <div class="section"><span class="eyebrow">NEXT</span><h2>Strongest upcoming windows</h2><p class="muted">These are the highest-ranked windows found in the next 12 months by the currently implemented engine. They are not guarantees that an event will occur.</p><div class="grid2">${future.length?future.map(card).join(''):'<div class="notice">No major upcoming window resolved.</div>'}</div></div>
-    <div class="section"><span class="eyebrow">WHAT YOU CAN DO</span><h2>Practical response</h2><div class="grid2"><div class="card"><h3>Practical first</h3><ul>${advice.slice(0,2).map(x=>'<li>'+esc(x)+'</li>').join('')}</ul></div><div class="card"><h3>Optional traditional practice</h3><p>${esc(advice[2]||'No traditional practice suggested.')}</p><p class="hint">${esc(advice[3]||'')}</p></div></div></div>
-    <div class="section"><span class="eyebrow">INDIAN FORECASTING COUNCIL · EXPANSION</span><h2>More traditions, kept independent</h2><div class="grid3">
-      <div class="card"><b>Jaimini</b><p class="muted">Chara karakas, rasi drishti, arudha and Chara Dasha. Research/implementation pending.</p></div>
-      <div class="card"><b>KP · Tamil Nadu</b><p class="muted">Sub-lords, cuspal significators, ruling planets and specific event timing. Pending precise cusp/ayanamsa engine.</p></div>
-      <div class="card"><b>Tajika / Varshaphala</b><p class="muted">Annual solar-return intelligence. Pending.</p></div>
-      <div class="card"><b>Panchapakshi · Tamil</b><p class="muted">Personal day/hour timing from nakshatra and five-bird cycles. Source audit pending.</p></div>
-      <div class="card"><b>Prashna Marga · Kerala</b><p class="muted">Question-moment analysis. It will be a separate Ask mode rather than pretending every answer comes from the birth chart.</p></div>
-      <div class="card"><b>Nadi traditions</b><p class="muted">Kept separate. AstroProof will not fake a palm-leaf Nadi reading from ordinary chart data.</p></div>
-    </div></div>
-    <div class="notice"><b>AstroProof v0.9 direction:</b> read the prediction first; open Evidence & Charts only when you want to inspect planets, houses, yogas, sources and calculation conventions.</div>`;
+
+  const tech=h=>`<details class="tech-details"><summary>How was this calculated?</summary><p class="muted">${esc(h.mover)} ${esc(h.aspect)} natal ${esc(h.target)} · calculated peak ${esc(h.date)} · orb ${h.orb.toFixed(3)}°. ${h.dasha_support.count?h.dasha_support.count+' current Vedic timing layer(s) also connect to the same life area.':'No direct MD/AD/PD house activation was found.'}</p><button class="ghost" data-page="charts">Open full calculation details</button></details>`;
+
+  const futureCard=h=>{
+    const p=plainForecastSummary(h);
+    return `<div class="plain-card"><span class="outlook-pill">${esc(h.window_start||h.date)} → ${esc(h.window_end||h.date)}</span><h3>${esc(p.headline)}</h3><p class="lead">${esc(p.body)}</p>${p.watch.length?'<p><b>What this could look like:</b></p><ul class="simple-list">'+p.watch.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':''}<p class="hint">This is a traditional timing interpretation, not an event probability.</p>${tech(h)}</div>`;
+  };
+
+  const pastCards=history.map(p=>`<div class="plain-card"><span class="outlook-pill">${esc(p.start)} → ${esc(p.end)}</span><h3>${esc(phasePlainTitle(p))}</h3><p class="lead">${esc(phaseNarrative(p).replace(/^.*?: /,''))}</p><p class="hint">This paragraph was generated from the timing model before consulting any validation-holdout events you recorded.</p><details class="tech-details"><summary>Show the technical period</summary><p class="muted">${esc(p.mahadasha)}–${esc(p.antardasha)} timing period.</p></details></div>`).join('');
+
+  const nowWatch=nowText.watch.length?'<ul class="simple-list">'+nowText.watch.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'';
+
+  $('forecast-dashboard').innerHTML=`
+    <div class="section reading-block" id="reading-now">
+      <div class="section-head"><div class="big-no">1</div><div><span class="eyebrow">READ THIS FIRST</span><h2>What seems to be going on now</h2><p class="muted">This is the single most important message for ${esc(cfg[2])}.</p></div></div>
+      <div class="plain-card"><span class="outlook-pill">Current reading</span><h3>${esc(nowText.headline)}</h3><p class="lead">${esc(nowText.body)}</p>${nowWatch}<p class="hint">If this does not resemble your current life, that matters. AstroProof should record misses as well as matches.</p>${main?tech(main):''}</div>
+    </div>
+
+    <div class="section reading-block" id="reading-next">
+      <div class="section-head"><div class="big-no">2</div><div><span class="eyebrow">LOOK AHEAD</span><h2>What may become important next</h2><p class="muted">These are the three strongest windows found in the next 12 months—not three guaranteed events.</p></div></div>
+      <div class="grid3">${upcoming.length?upcoming.map(futureCard).join(''):'<div class="notice">No concentrated upcoming window was found under the current rules.</div>'}</div>
+      <div class="small-actions"><button class="ghost" data-page="timeline">Check a particular date</button><button class="ghost" data-page="council">Ask a specific question</button></div>
+    </div>
+
+    <div class="section reading-block" id="reading-past">
+      <div class="section-head"><div class="big-no">3</div><div><span class="eyebrow">CHECK THE PAST</span><h2>Do these recent phases resemble your life?</h2><p class="muted">Do not try to make them fit. A mismatch is useful evidence too.</p></div></div>
+      <div class="grid3">${pastCards||'<div class="notice">Not enough historical timing information is available.</div>'}</div>
+      <div class="small-actions"><button class="ghost" data-page="history">Record what actually happened</button><button class="ghost" data-page="ledger">Check predictions later</button></div>
+    </div>
+
+    <div class="section reading-block" id="reading-action">
+      <div class="section-head"><div class="big-no">4</div><div><span class="eyebrow">FINISH HERE</span><h2>What you can do with this</h2><p class="muted">Practical action comes first. Traditional practices are optional.</p></div></div>
+      <div class="grid2"><div class="plain-card"><h3>Practical next steps</h3><ul class="simple-list">${advice.slice(0,2).map(x=>'<li>'+esc(x)+'</li>').join('')}</ul></div><div class="plain-card"><h3>If traditional practice matters to you</h3><p class="lead">${esc(advice[2]||'No traditional practice suggested.')}</p><p class="hint">${esc(advice[3]||'')}</p></div></div>
+    </div>
+
+    <div class="notice"><b>What to do next:</b> If the reading makes sense, ask one specific question. If it does not, record that too. AstroProof is meant to become more testable, not simply more convincing.</div>`;
 }
 function transitHitsOn(target){
   if(!chart)return[];
@@ -452,7 +495,7 @@ function exportFile(name,data,type='application/json'){const b=new Blob([data],{
 function populate(){const p=$('preset');p.innerHTML='<option value="">Custom coordinates / timezone</option>'+Object.keys(PLACES).map(x=>`<option>${x}</option>`).join('');for(const [k,[,n]] of Object.entries(TOPICS))$('topic').insertAdjacentHTML('beforeend',`<option value="${k}">${n}</option>`);$('life-grid').innerHTML=Object.entries(TOPICS).map(([k,[s,n]])=>`<div class="life" data-topic="${k}"><div class="symbol">${s}</div><b>${n}</b><span>Open report →</span></div>`).join('')}
 function fillProfile(){const p=state.profile;if(!p)return;$('nickname').value=p.nickname||'';$('birth-name').value=p.birth_name||'';$('birthdate').value=p.birthdate;$('birthtime').value=p.birthtime||'';$('timeunknown').checked=!!p.timeunknown;$('birthtime').disabled=!!p.timeunknown;$('preset').value=p.preset||'';$('custom-fields').hidden=!!p.preset;$('latitude').value=p.latitude;$('longitude').value=p.longitude;$('timezone').value=p.timezone;$('bazi-gender').value=p.bazi_gender||'';$('time-precision').value=p.time_precision||(p.timeunknown?'unknown':'recorded');$('consent').checked=true;renderTimeSensitivity()}
 function formProfile(){const preset=$('preset').value;let lat=Number($('latitude').value),lon=Number($('longitude').value),tz=$('timezone').value.trim(),place='Custom place';if(preset){[lat,lon,tz]=PLACES[preset];place=preset}return {nickname:$('nickname').value.trim(),birth_name:$('birth-name').value.trim(),birthdate:$('birthdate').value,birthtime:$('birthtime').value,timeunknown:$('timeunknown').checked,time_precision:$('timeunknown').checked?'unknown':$('time-precision').value,preset,place,latitude:lat,longitude:lon,timezone:tz,bazi_gender:$('bazi-gender').value}}
-function listeners(){document.addEventListener('click',e=>{const r=e.target.closest('[data-page]');if(r)return page(r.dataset.page);const nr=e.target.closest('[data-now-range]');if(nr){nowRange=nr.dataset.nowRange;renderOverview();return}const to=e.target.closest('[data-timeline-offset]');if(to){const d=new Date();d.setDate(d.getDate()+Number(to.dataset.timelineOffset));$('timeline-date').value=d.toISOString().slice(0,10);renderTimeline();return}const t=e.target.closest('[data-topic]');if(t){$('topic').value=t.dataset.topic;page('reports');return}const q=e.target.closest('[data-question]');if(q){$('question').value=q.dataset.question;page('council')}});$('preset').onchange=()=>{$('custom-fields').hidden=!!$('preset').value};$('timeunknown').onchange=()=>{const u=$('timeunknown').checked;$('birthtime').disabled=u;if(u)$('time-precision').value='unknown';else if($('time-precision').value==='unknown')$('time-precision').value='recorded'};$('birth-form').onsubmit=e=>{e.preventDefault();if(!$('consent').checked)return toast('Consent is required.');const p=formProfile();if(!p.birthdate)return toast('Birth date is required.');if(!p.timeunknown&&!p.birthtime)return toast('Enter birth time or mark it unknown.');if(!Number.isFinite(p.latitude)||!Number.isFinite(p.longitude)||!p.timezone)return toast('Birthplace coordinates and timezone are required.');try{chart=calculateChart(p);state.profile=p;save();renderOverview();renderCharts();renderTimeSensitivity();renderReport();renderTimeline();renderCouncil();renderLifeEvents();page('overview');toast('Personal atlas calculated in your browser.')}catch(err){toast('Calculation error: '+err.message)}};['topic','depth','horizon'].forEach(id=>$(id).onchange=()=>{renderReport();renderCouncil()});$('timeline-date').onchange=renderTimeline;$('life-event-form').onsubmit=e=>{e.preventDefault();const event_type=$('life-event-type').value,event_date=$('life-event-date').value,date_precision=$('life-event-precision').value,purpose=$('life-event-purpose').value,note=$('life-event-note').value.trim();if(!event_date)return toast('Event date is required.');state.lifeEvents.push({id:'le-'+Date.now(),event_type,event_date,date_precision,purpose,note:note.slice(0,300),created_at:new Date().toISOString()});save();e.target.reset();renderLifeEvents();toast(purpose==='validation_holdout'?'Saved as validation holdout. Prediction code will not use it.':'Saved for rectification/calibration; it will not count as independent validation.');};
+function listeners(){document.addEventListener('click',e=>{const r=e.target.closest('[data-page]');if(r)return page(r.dataset.page);const sc=e.target.closest('[data-scroll-target]');if(sc){document.getElementById(sc.dataset.scrollTarget)?.scrollIntoView({behavior:'smooth',block:'start'});return}const nr=e.target.closest('[data-now-range]');if(nr){nowRange=nr.dataset.nowRange;renderOverview();return}const to=e.target.closest('[data-timeline-offset]');if(to){const d=new Date();d.setDate(d.getDate()+Number(to.dataset.timelineOffset));$('timeline-date').value=d.toISOString().slice(0,10);renderTimeline();return}const t=e.target.closest('[data-topic]');if(t){$('topic').value=t.dataset.topic;page('reports');return}const q=e.target.closest('[data-question]');if(q){$('question').value=q.dataset.question;page('council')}});$('preset').onchange=()=>{$('custom-fields').hidden=!!$('preset').value};$('timeunknown').onchange=()=>{const u=$('timeunknown').checked;$('birthtime').disabled=u;if(u)$('time-precision').value='unknown';else if($('time-precision').value==='unknown')$('time-precision').value='recorded'};$('birth-form').onsubmit=e=>{e.preventDefault();if(!$('consent').checked)return toast('Consent is required.');const p=formProfile();if(!p.birthdate)return toast('Birth date is required.');if(!p.timeunknown&&!p.birthtime)return toast('Enter birth time or mark it unknown.');if(!Number.isFinite(p.latitude)||!Number.isFinite(p.longitude)||!p.timezone)return toast('Birthplace coordinates and timezone are required.');try{chart=calculateChart(p);state.profile=p;save();renderOverview();renderCharts();renderTimeSensitivity();renderReport();renderTimeline();renderCouncil();renderLifeEvents();page('overview');toast('Personal atlas calculated in your browser.')}catch(err){toast('Calculation error: '+err.message)}};['topic','depth','horizon'].forEach(id=>$(id).onchange=()=>{renderReport();renderCouncil()});$('timeline-date').onchange=renderTimeline;$('life-event-form').onsubmit=e=>{e.preventDefault();const event_type=$('life-event-type').value,event_date=$('life-event-date').value,date_precision=$('life-event-precision').value,purpose=$('life-event-purpose').value,note=$('life-event-note').value.trim();if(!event_date)return toast('Event date is required.');state.lifeEvents.push({id:'le-'+Date.now(),event_type,event_date,date_precision,purpose,note:note.slice(0,300),created_at:new Date().toISOString()});save();e.target.reset();renderLifeEvents();toast(purpose==='validation_holdout'?'Saved as validation holdout. Prediction code will not use it.':'Saved for rectification/calibration; it will not count as independent validation.');};
 $('life-events').onclick=e=>{const b=e.target.closest('.delete-life-event');if(!b)return;const card=b.closest('[data-event-id]');state.lifeEvents=state.lifeEvents.filter(x=>x.id!==card.dataset.eventId);save();renderLifeEvents();};
 $('ask').onclick=()=>{if(!chart)return toast('Create a profile first.');const q=$('question').value.trim();if(q.length<3)return toast('Type or choose a question.');$('answer-area').innerHTML=`<div class="notice"><b>Chart-based response</b><p>${esc(answer(q))}</p><span class="hint">Deterministic browser review; live AI astrologer agents are not connected yet.</span></div>`};$('export-chart').onclick=()=>chart?exportFile('astroproof-chart.json',JSON.stringify(chart,null,2)):toast('Create a chart first.');$('export-report').onclick=()=>report?exportFile('astroproof-report.txt',document.querySelector('#report-area').innerText,'text/plain'):toast('Generate a report first.');$('record-form').onsubmit=e=>{e.preventDefault();const s=$('statement').value.trim(),c=$('criteria').value.trim(),d=$('deadline').value;if(!s||!c||!d)return;state.records.push({id:String(Date.now()),statement:s,criteria:c,deadline:d,createdAt:new Date().toISOString(),events:[]});save();e.target.reset();renderLedger();toast('Statement frozen locally.')};$('records').onclick=e=>{const b=e.target.closest('.review');if(!b)return;const card=b.closest('[data-id]'),r=state.records.find(x=>x.id===card.dataset.id),res=card.querySelector('.outcome').value,note=prompt('What happened?');if(note===null)return;r.events.push({result:res,note:note.slice(0,500),at:new Date().toISOString()});save();renderLedger()};$('export-data').onclick=()=>exportFile('astroproof-backup.json',JSON.stringify(state,null,2));$('import-data').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(!j||!Array.isArray(j.records))throw Error('Invalid backup');state=j;if(!Array.isArray(state.lifeEvents))state.lifeEvents=[];save();fillProfile();chart=state.profile?calculateChart(state.profile):null;renderOverview();renderCharts();renderTimeSensitivity();renderReport();renderTimeline();renderLifeEvents();renderCouncil();renderLedger();toast('Backup imported.')}catch(err){toast('Import failed: '+err.message)}e.target.value=''};$('delete-data').onclick=()=>{if(prompt('Type DELETE to remove AstroProof data from this browser:')!=='DELETE')return;localStorage.removeItem(KEY);state={profile:null,records:[],lifeEvents:[]};chart=null;location.reload()}}
 function init(){populate();listeners();load();fillProfile();renderLifeEvents();renderLedger();$('deadline').min=new Date(Date.now()+86400000).toISOString().slice(0,10);if(state.profile){try{chart=calculateChart(state.profile);renderOverview();renderCharts();renderTimeSensitivity();renderReport();renderTimeline();renderLifeEvents();renderCouncil()}catch(err){toast('Saved profile needs review: '+err.message)}}}
