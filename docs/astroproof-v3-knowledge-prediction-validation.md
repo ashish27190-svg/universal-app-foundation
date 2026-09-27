@@ -621,3 +621,175 @@ Do not code Shadbala or Ashtakavarga directly from blog summaries. First produce
 6. only then production implementation.
 
 This gate is stricter than the earlier browser prototype standard because an incorrect strength engine would contaminate yoga qualification, dasha interpretation, gochar weighting, advice and validation simultaneously.
+
+
+## Product correction — Life first, astrology underneath (2026-09-27)
+
+### User intent
+
+Most users do not open an astrology product primarily to inspect planets, houses, vargas or rule IDs. They want understandable answers to:
+- What seems to have shaped my past?
+- What is happening in my life now?
+- What may happen next?
+- Which life area is most active?
+- When is the strongest window?
+- What should I do?
+- Why is the system saying this?
+
+Therefore AstroProof must be **prediction/story first** and **chart/evidence second**.
+
+### Default consumer flow
+
+1. **Your Story — Past**
+   - major historical timing phases;
+   - strongest life-area themes;
+   - generated independently of validation-holdout events;
+   - optional later comparison to the Life Event Archive.
+
+2. **Now**
+   - current MD/AD/PD;
+   - strongest converging themes;
+   - current gochar;
+   - explicit contradictions;
+   - plain-language manifestation examples.
+
+3. **Next**
+   - 30 days;
+   - 90 days;
+   - 12 months;
+   - longer horizon only when timing quality supports it;
+   - exact/refined peaks where the engine can calculate them.
+
+4. **Ask**
+   - route by question type to the relevant tradition rather than running every system.
+
+5. **What can I do?**
+   - practical action;
+   - reflection;
+   - optional traditional/devotional practice;
+   - no guaranteed remedy claim.
+
+6. **Why?**
+   - hidden by default;
+   - opens calculation facts, rule IDs, sources, convention, contradictions and validation status.
+
+### Indian forecasting system map
+
+Do not treat “Vedic astrology” as one undifferentiated method.
+
+#### A. Birth-chart predictive systems
+
+**Parashari Jyotisha**
+- D1/vargas, graha/bhava lordship, yogas, Vimshottari, gochar, Shadbala, Ashtakavarga.
+
+**Jaimini**
+- Chara karakas;
+- rasi drishti;
+- arudha padas;
+- Chara Dasha and other sign dashas.
+- Must remain conventionally independent from Parashari rules.
+
+**Krishnamurti Paddhati (KP)**
+- developed in South India / Madras;
+- KP ayanamsa;
+- Placidus cusps;
+- star lord / sub-lord / sub-sub lord;
+- cusp sub-lord;
+- house significators;
+- ruling planets;
+- dasha + transit timing.
+- Strong candidate for specific, falsifiable event questions, but requires precise birth time and precise cusps.
+
+**Tajika / Varshaphala**
+- annual solar-return chart;
+- Muntha;
+- Sahams;
+- Tajika aspects/yogas;
+- annual lordship/timing.
+- Use for year-ahead forecasting, not as an invisible Parashari add-on.
+
+**Nadi traditions**
+- Treat multiple traditions separately.
+- Authentic Tamil palm-leaf Nadi is a located-manuscript reading and must NOT be simulated from ordinary birth-chart calculations.
+- Calculable Nadi-style rule traditions may be researched separately only when a formal source/rule corpus exists.
+
+#### B. Question-moment systems
+
+**Prashna / Horary**
+- chart of the moment/place a sincere question is received;
+- useful when birth time is unavailable or the question is narrow.
+
+**Kerala Prashna Marga**
+- horary judgement plus omen/nimitta traditions;
+- separate engine and source corpus.
+
+**Ashtamangala Prashna**
+- Kerala/Tulu Nadu tradition involving additional physical/ritual inputs;
+- AstroProof must not label a normal digital horary chart “full Ashtamangala” without the required inputs.
+
+**KP Prashna**
+- numbered/question-moment workflow using KP sub-lords/ruling planets;
+- separate from natal KP.
+
+#### C. Fine timing / action-selection systems
+
+**Panchapakshi / Panchapatchi (Tamil)**
+- five-bird system linked to birth nakshatra/fortnight;
+- day/night jamam timing;
+- suitable as an optional “best hours / personal clock” layer after source audit.
+
+**Muhurta + Panchanga**
+- action-selection calendar;
+- never confuse “good time to begin” with “event prediction.”
+
+#### D. Observation-dependent traditional systems
+
+**Nimitta / Shakuna**
+- requires observed omen/context input.
+- cannot be fabricated from chart data.
+
+**Samudrika / Hasta traditions**
+- requires body/hand/face observations or images and explicit consent.
+- separate optional module, not inferred from birth data.
+
+**Swara traditions**
+- require current breath/nostril/time observations.
+- separate optional module if ever researched.
+
+### Routing rule
+
+AstroProof should not run every tradition on every question.
+
+- “What is my life pattern?” -> Parashari + selected natal traditions.
+- “What is active now?” -> dasha + gochar + validated annual/fine-timing methods.
+- “Will X happen / when?” -> KP or Prashna may be relevant after their engines are validated.
+- “What is this year about?” -> Varshaphala/Tajika.
+- “What time today is traditionally favourable?” -> Panchapakshi/Muhurta.
+- “I do not know my birth time” -> Prashna and/or rectification; do not fabricate precise natal houses.
+- “Nadi reading” -> never simulate palm-leaf Nadi; explain whether a calculable Nadi-style method or an authentic manuscript-reading workflow is being used.
+
+### Ensemble rule
+
+Traditions first produce independent outputs.
+
+Then synthesis may report:
+- agreement,
+- disagreement,
+- unique signals,
+- convention sensitivity.
+
+No majority vote.
+No manufactured consensus.
+No system receives extra weight merely because it is culturally prestigious or popular.
+
+### UX priority
+
+The home screen should NOT show Western Sun, Vedic Moon, Life Path and Chinese year as the primary dashboard.
+
+Replace the primary dashboard with:
+- Current life phase
+- Strongest active life area
+- Next important window
+- Birth-time confidence
+
+Move signs, planets, houses, yogas, nodes, vargas and technical tables to Evidence & Charts.
