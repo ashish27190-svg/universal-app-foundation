@@ -14,6 +14,11 @@ let seed=Number((args.find(x=>x.startsWith('--seed='))||'--seed=42').split('=')[
 const predictions=JSON.parse(fs.readFileSync(predPath,'utf8'));
 const outcomes=JSON.parse(fs.readFileSync(outPath,'utf8'));
 if(!Array.isArray(predictions)||!Array.isArray(outcomes)) throw new Error('Both files must contain JSON arrays.');
+const leakedOutcomes=outcomes.filter(o=>o.used_for_rectification===true||o.purpose==='rectification');
+if(leakedOutcomes.length) throw new Error('Leakage guard: rectification/calibration events cannot be scored as validation outcomes: '+leakedOutcomes.map(o=>o.event_id).join(', '));
+const outcomeIds=new Set(outcomes.map(o=>o.event_id));
+const leakedPredictions=predictions.filter(p=>(p.calibration_event_ids||[]).some(id=>outcomeIds.has(id)));
+if(leakedPredictions.length) throw new Error('Leakage guard: prediction calibration_event_ids overlap validation outcomes: '+leakedPredictions.map(p=>p.prediction_id).join(', '));
 
 const msDay=86400000;
 const toMs=s=>{const t=Date.parse(s);if(!Number.isFinite(t)) throw new Error('Invalid date: '+s);return t;};
@@ -65,8 +70,8 @@ const mean=k=>sims.length?sims.reduce((a,x)=>a+x[k],0)/sims.length:0;
 const ge=k=>sims.length?sims.filter(x=>x[k]>=observed[k]).length/sims.length:null;
 
 console.log(JSON.stringify({
-  protocol:'AstroProof historical holdout evaluator v0.1',
-  warning:'This measures dataset performance only. It does not establish causal or scientific validity and should be interpreted with data-quality and leakage checks.',
+  protocol:'AstroProof historical holdout evaluator v0.2',
+  warning:'This measures dataset performance only. It does not establish causal or scientific validity. Rectification events and overlapping calibration events are rejected by leakage guards.',
   observed,
   random_control:{permutations,mean_precision:mean('precision'),mean_recall:mean('recall'),mean_f1:mean('f1'),mean_hit_at_3:mean('hit_at_3'),empirical_p_ge_observed_f1:ge('f1'),empirical_p_ge_observed_hit_at_3:ge('hit_at_3')}
 },null,2));
