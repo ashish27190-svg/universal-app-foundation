@@ -1,0 +1,14 @@
+{
+  "version":"0.1",
+  "event_to_life_area":{
+    "career_change":"career","promotion":"career","job_loss":"career","business_start":"career",
+    "income_change":"money","property":"money",
+    "education":"learning",
+    "relationship_start":"relationships","marriage":"relationships","separation":"relationships",
+    "child_birth":"family","family_event":"family",
+    "health_event":"wellbeing",
+    "relocation":"travel","travel":"travel",
+    "other":"other"
+  },
+  "rule":"A single primary life_area is used for scoring. Secondary areas may be stored separately later, but must not be added after outcome reveal merely to create a match."
+}
