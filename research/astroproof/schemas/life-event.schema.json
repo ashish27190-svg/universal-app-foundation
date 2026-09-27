@@ -1,0 +1,21 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "title":"AstroProof Life Event",
+  "type":"object",
+  "required":["event_id","person_id","event_type","life_area","event_date","date_precision","purpose"],
+  "properties":{
+    "event_id":{"type":"string"},
+    "person_id":{"type":"string"},
+    "event_type":{"enum":["career_change","promotion","job_loss","business_start","income_change","education","relationship_start","marriage","separation","child_birth","relocation","property","family_event","health_event","travel","other"]},
+    "life_area":{"enum":["career","money","relationships","family","wellbeing","learning","travel","other"]},
+    "event_date":{"type":"string","format":"date"},
+    "event_end":{"type":["string","null"],"format":"date"},
+    "date_precision":{"enum":["exact","month","year"]},
+    "purpose":{"enum":["validation_holdout","rectification"]},
+    "used_for_rectification":{"type":"boolean"},
+    "source_quality":{"type":["string","null"]},
+    "note":{"type":"string","maxLength":300},
+    "revealed_at":{"type":["string","null"],"format":"date-time"}
+  },
+  "additionalProperties":true
+}
