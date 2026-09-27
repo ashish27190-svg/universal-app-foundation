@@ -57,6 +57,12 @@
       "title": "Asta combustion threshold cross-check with edition note",
       "url": "https://astrocentral.com/articles/combust-planets-asta",
       "tier": "secondary methodology cross-check; primary-edition audit pending"
+    },
+    {
+      "source_id": "SRC-BPHS-84-VEDICPUPIL",
+      "title": "Brihat Parashara Hora Shastra, Chapter 84 — Graha Shanti",
+      "url": "https://vedicpupil.in/library/brihat-parashara-hora-shastra-book-by-parashara/grahashanty-ch84",
+      "tier": "classical-text presentation with Sanskrit and translation; edition audit pending"
     }
   ],
   "rules": [
@@ -145,6 +151,16 @@
       "convention": "transiting sidereal Saturn 12th/1st/2nd from natal sidereal Moon",
       "source_ids": [],
       "notes": "Period arithmetic only; fear-based deterministic event claims prohibited."
+    },
+    {
+      "rule_id": "VED-PRACTICE-BPHS-84-01",
+      "status": "implemented-as-optional-traditional-layer",
+      "type": "practice/remedy provenance",
+      "convention": "worship, mantra recitation and charity are surfaced as devotional/traditional practices, not scientifically proven causal remedies",
+      "source_ids": [
+        "SRC-BPHS-84-VEDICPUPIL"
+      ],
+      "notes": "No gemstone purchase or expensive ritual is recommended by the research prototype."
     }
   ]
 }
