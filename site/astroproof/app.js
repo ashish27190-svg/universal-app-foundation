@@ -260,30 +260,89 @@ function buildLifeBrief(){
   if(v.dasha.active)base.push({t:'Current life phase',x:`Vimshottari is in ${v.dasha.active.mahadasha}–${v.dasha.active.antardasha} from ${v.dasha.active.start} to ${v.dasha.active.end}. The app should treat this as a period theme and combine it with actual transits before making any forecast statement.`});
   return base;
 }
+function dashaTheme(lord){
+  return {
+    Sun:'visibility, authority, identity and responsibility',
+    Moon:'home, emotional life, belonging and changing needs',
+    Mars:'action, competition, courage, conflict and decisive movement',
+    Mercury:'learning, communication, trade, analysis and negotiation',
+    Jupiter:'growth, mentors, education, opportunity and expansion',
+    Venus:'relationships, comforts, values, creativity and resources',
+    Saturn:'duty, pressure, limits, endurance and long-term restructuring',
+    Rahu:'ambition, novelty, uncertainty, foreign/unusual directions and appetite for change',
+    Ketu:'detachment, simplification, endings, inward focus and reorientation'
+  }[lord]||'a changing life emphasis';
+}
+function historicalPhases(years=12){
+  if(!chart)return[];
+  const birth=new Date(chart.meta.utc),moon=chart.vedic.planets.Moon.longitude,now=new Date();
+  const floor=new Date(now);floor.setUTCFullYear(floor.getUTCFullYear()-years);
+  const begin=new Date(Math.max(birth.getTime(),floor.getTime()));
+  const seen=new Map();
+  for(let t=begin.getTime();t<=now.getTime();t+=45*86400000){
+    const d=vimshottari(birth,moon,new Date(t)).active;if(!d)continue;
+    const key=d.mahadasha+'|'+d.antardasha;
+    if(!seen.has(key))seen.set(key,{...d,key});
+  }
+  return [...seen.values()].sort((a,b)=>a.start.localeCompare(b.start)).slice(-6);
+}
+function phaseNarrative(p){
+  if(!p)return 'No phase resolved.';
+  return `${p.mahadasha}–${p.antardasha}: a traditional combination of ${dashaTheme(p.mahadasha)} with a secondary emphasis on ${dashaTheme(p.antardasha)}.`;
+}
+function forecastPlain(h){
+  const manifestations={
+    career:['responsibility or reporting changes','a demanding project or role shift','greater visibility or pressure to formalize work'],
+    money:['income/expense priorities changing','a need to structure resources','a new opportunity that still needs independent financial checks'],
+    relationships:['an important conversation or boundary','a relationship becoming more defined','a need to balance closeness and independence'],
+    family:['changes in home responsibilities','family conversations or caregiving themes','attention returning to security and belonging'],
+    wellbeing:['routines needing adjustment','pressure making rest and recovery more important','a need to make health decisions from qualified evidence, not astrology'],
+    learning:['study, certification or mentoring','a new skill or intellectual direction','communication and decision-making becoming more important'],
+    travel:['travel, relocation or foreign-link themes','planning around movement or distance','a change of environment becoming more relevant'],
+    overview:['a broader change in priorities','identity and direction becoming more active','a period that asks for deliberate choices rather than autopilot']
+  };
+  const area=TOPICS[h.topic]?.[1]||'Life';
+  return {area,meaning:forecastMeaning(h),examples:manifestations[h.topic]||manifestations.overview};
+}
+function birthTimeQuality(){
+  const p=state.profile;if(!p)return 'Not set';
+  return {recorded:'Recorded / high',approx5:'Approx ±5m',approx15:'Approx ±15m',approx30:'Approx ±30m',unknown:'Unknown'}[p.time_precision||'recorded']||'Recorded / high';
+}
 function renderOverview(){
   if(!chart)return;
-  $('overview-note').innerHTML='<b>Atlas calculated locally.</b> '+chart.warnings.map(esc).join(' ');
-  $('metrics').innerHTML=[['Western Sun',chart.western.planets.Sun.sign],['Vedic Moon',chart.vedic.moon_nakshatra],['Life Path',chart.numerology.life_path],['Chinese year',chart.chinese.year.animal]].map(x=>`<div class="metric"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('');
+  $('overview-note').innerHTML='<b>Prediction-first research view.</b> Past phases below are generated without reading your validation-holdout events. Forecasts are traditional interpretations, not established probabilities.';
   document.querySelectorAll('[data-now-range]').forEach(b=>b.classList.toggle('active',b.dataset.nowRange===nowRange));
   let dash=$('forecast-dashboard');
   if(!dash){dash=document.createElement('div');dash.id='forecast-dashboard';$('metrics').insertAdjacentElement('afterend',dash)}
-  const cfg={today:[1,1,'Today'],week:[7,1,'This week'],month:[30,2,'This month'],year:[365,7,'This year']}[nowRange]||[7,1,'This week'];
-  const ranked=rankForecasts(transitForecast(cfg[0],cfg[1]));
-  const brief=buildLifeBrief();
-  const top=ranked.slice(0,3);
-  const phase=chart.vedic.dasha.active;
-  const item=h=>`<div class="report-section"><h3>${TOPICS[h.topic]?.[1]||'Life'} · ${h.mover} ${h.aspect} natal ${h.target}</h3><p class="muted">Peak sample: ${h.date} · orb ${h.orb.toFixed(2)}° · priority ${h.score.toFixed(1)}</p><p>${esc(forecastMeaning(h))}</p><p><b>Why it ranked:</b> ${h.dasha_support.count?h.dasha_support.count+' Vimshottari layer(s) also activate this life area: '+h.dasha_support.levels.map(esc).join(', '):'transit strength/exactness only; no direct MD/AD/PD house activation found.'}</p><p class="hint"><b>Evidence ladder:</b> \${evidenceLadder(h).map(([n,s])=>n+' '+(s==='pass'?'✓':'pending')).join(' · ')}</p><span class="hint">Traditional timing interpretation; priority rank is not an event probability.</span></div>`;
+  const cfg={today:[1,1,'Today'],week:[7,1,'This week'],month:[30,1,'This month'],year:[365,1,'This year']}[nowRange]||[7,1,'This week'];
+  const currentRanked=rankForecasts(transitForecast(cfg[0],cfg[1]));
+  const yearRanked=cfg[0]===365?currentRanked:rankForecasts(transitForecast(365,1));
+  const top=currentRanked.slice(0,3),future=yearRanked.slice(0,4),phase=chart.vedic.dasha.active,history=historicalPhases();
+  const strongest=top[0]||future[0]||null,next=future[0]||null;
+  $('metrics').innerHTML=[
+    ['Current phase',phase?`${phase.mahadasha}–${phase.antardasha}`:'Not resolved'],
+    ['Strongest area',strongest?(TOPICS[strongest.topic]?.[1]||'Life'):'No strong signal'],
+    ['Next window',next?(next.window_start||next.date):'No major hit'],
+    ['Birth-time quality',birthTimeQuality()]
+  ].map(x=>`<div class="metric"><span>${x[0]}</span><b>${esc(x[1])}</b></div>`).join('');
+  const card=h=>{const p=forecastPlain(h);return `<div class="report-section"><h3>${esc(p.area)} · ${esc(h.window_start||h.date)} → ${esc(h.window_end||h.date)}</h3><p>${esc(p.meaning)}</p><p><b>Could show up as:</b> ${p.examples.map(esc).join(' · ')}</p><p class="muted">Strongest calculated peak: ${esc(h.date)} · priority ${h.score.toFixed(1)}. This is a ranking, not a probability.</p><details><summary>Why this is here</summary><p>${esc(h.mover)} ${esc(h.aspect)} natal ${esc(h.target)}; orb ${h.orb.toFixed(3)}°. ${h.dasha_support.count?h.dasha_support.count+' Vimshottari layer(s) also connect to this life area: '+h.dasha_support.levels.map(esc).join(', '):'No direct MD/AD/PD house activation found.'}</p><p class="hint"><b>Evidence ladder:</b> ${evidenceLadder(h).map(([n,s])=>esc(n)+' '+(s==='pass'?'✓':'pending')).join(' · ')}</p></details></div>`};
+  const hist=history.map(p=>`<div class="card"><span class="eyebrow">${esc(p.start)} → ${esc(p.end)}</span><h3>${esc(p.mahadasha)}–${esc(p.antardasha)}</h3><p>${esc(phaseNarrative(p))}</p><span class="hint">Generated from timing rules only. Your saved past events were not used to create this paragraph.</span></div>`).join('');
+  const advice=practiceLayer(strongest?.topic||'overview');
   dash.innerHTML=`
-    <div class="section"><span class="eyebrow">CURRENT PHASE</span><h2>What matters now</h2>
-      <div class="grid2">
-        <div class="card"><h3>Vimshottari phase</h3><p>${phase?`${phase.mahadasha}–${phase.antardasha}${phase.pratyantar?'–'+phase.pratyantar:''}`:'Not resolved'}</p><p class="muted">${phase?`AD ${phase.start} → ${phase.end}${phase.pratyantar_start?'; PD '+phase.pratyantar_start+' → '+phase.pratyantar_end:''}`:'Create an exact-time profile for full timing.'}</p></div>
-        <div class="card"><h3>${cfg[2]} · strongest themes</h3>${top.length?top.map(item).join(''):'<p class="muted">No major sampled transit hit found under the current orb settings.</p>'}</div>
-      </div>
-    </div>
-    <div class="section"><span class="eyebrow">YOUR LIFE BRIEF</span><h2>Your stable pattern</h2><div class="grid2">${brief.map(b=>`<div class="card"><b>${esc(b.t)}</b><p>${esc(b.x)}</p></div>`).join('')}</div></div>
-    <div class="notice"><b>AstroProof v0.6:</b> the home screen now prioritizes current phase and ranked themes. Use Life Atlas for stable natal patterns, Timeline for any date, and Evidence for the full chart.</div>`;
+    <div class="section"><span class="eyebrow">YOUR STORY · PAST</span><h2>Recent life phases</h2><p class="muted">This is the part we should eventually test against your recorded history. It is deliberately generated before looking at validation-holdout events.</p><div class="grid2">${hist||'<div class="notice">Not enough historical timing data for this profile.</div>'}</div></div>
+    <div class="section"><span class="eyebrow">NOW</span><h2>What appears most active</h2><div class="grid2"><div class="card"><h3>Current background phase</h3><p>${esc(phaseNarrative(phase))}</p><p class="muted">${phase?`AD ${phase.start} → ${phase.end}${phase.pratyantar_start?'; PD '+phase.pratyantar_start+' → '+phase.pratyantar_end:''}`:'Exact birth time improves timing layers.'}</p></div><div>${top.length?top.map(card).join(''):'<div class="notice">No major transit hit found in the selected horizon under the current settings.</div>'}</div></div></div>
+    <div class="section"><span class="eyebrow">NEXT</span><h2>Strongest upcoming windows</h2><p class="muted">These are the highest-ranked windows found in the next 12 months by the currently implemented engine. They are not guarantees that an event will occur.</p><div class="grid2">${future.length?future.map(card).join(''):'<div class="notice">No major upcoming window resolved.</div>'}</div></div>
+    <div class="section"><span class="eyebrow">WHAT YOU CAN DO</span><h2>Practical response</h2><div class="grid2"><div class="card"><h3>Practical first</h3><ul>${advice.slice(0,2).map(x=>'<li>'+esc(x)+'</li>').join('')}</ul></div><div class="card"><h3>Optional traditional practice</h3><p>${esc(advice[2]||'No traditional practice suggested.')}</p><p class="hint">${esc(advice[3]||'')}</p></div></div></div>
+    <div class="section"><span class="eyebrow">INDIAN FORECASTING COUNCIL · EXPANSION</span><h2>More traditions, kept independent</h2><div class="grid3">
+      <div class="card"><b>Jaimini</b><p class="muted">Chara karakas, rasi drishti, arudha and Chara Dasha. Research/implementation pending.</p></div>
+      <div class="card"><b>KP · Tamil Nadu</b><p class="muted">Sub-lords, cuspal significators, ruling planets and specific event timing. Pending precise cusp/ayanamsa engine.</p></div>
+      <div class="card"><b>Tajika / Varshaphala</b><p class="muted">Annual solar-return intelligence. Pending.</p></div>
+      <div class="card"><b>Panchapakshi · Tamil</b><p class="muted">Personal day/hour timing from nakshatra and five-bird cycles. Source audit pending.</p></div>
+      <div class="card"><b>Prashna Marga · Kerala</b><p class="muted">Question-moment analysis. It will be a separate Ask mode rather than pretending every answer comes from the birth chart.</p></div>
+      <div class="card"><b>Nadi traditions</b><p class="muted">Kept separate. AstroProof will not fake a palm-leaf Nadi reading from ordinary chart data.</p></div>
+    </div></div>
+    <div class="notice"><b>AstroProof v0.9 direction:</b> read the prediction first; open Evidence & Charts only when you want to inspect planets, houses, yogas, sources and calculation conventions.</div>`;
 }
-
 function transitHitsOn(target){
   if(!chart)return[];
   const p=planetary(target);
