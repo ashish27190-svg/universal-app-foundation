@@ -44,6 +44,19 @@
       "title": "Gajakesari source-variant cross-check",
       "url": "https://sarbanirath.com/jyoti%E1%B9%A3a/saka%E1%B9%ADa-muku%E1%B9%ADa-gajakesari-yoga/",
       "tier": "secondary/source quotation; variants explicitly retained"
+    },
+    {
+      "source_id": "SRC-PD-26-WISDOMLIB",
+      "title": "Phaladeepika Chapter 26 — text and translation",
+      "year": 1950,
+      "url": "https://www.wisdomlib.org/hinduism/book/phaladeepika-by-mantreswara-text-and-translation/d/doc1621598.html",
+      "tier": "classical translation/OCR; page-level proofreading warnings retained"
+    },
+    {
+      "source_id": "SRC-COMBUSTION-CROSSCHECK",
+      "title": "Asta combustion threshold cross-check with edition note",
+      "url": "https://astrocentral.com/articles/combust-planets-asta",
+      "tier": "secondary methodology cross-check; primary-edition audit pending"
     }
   ],
   "rules": [
@@ -72,7 +85,9 @@
       "status": "implemented-working-convention",
       "type": "planet condition",
       "convention": "Mars 17; Mercury 14 direct/12 retro; Jupiter 11; Venus 10 direct/8 retro; Saturn 15 degrees from Sun",
-      "source_ids": [],
+      "source_ids": [
+        "SRC-COMBUSTION-CROSSCHECK"
+      ],
       "notes": "Threshold provenance requires primary-edition audit before production certification."
     },
     {
@@ -114,13 +129,14 @@
     },
     {
       "rule_id": "VED-GOCHAR-PHALADEEPIKA-26-BASELINE",
-      "status": "implemented-baseline",
+      "status": "implemented-baseline-plus-partial-vedha",
       "type": "transit rule",
       "convention": "Moon-relative favorable-house sets",
       "source_ids": [
-        "SRC-PD-26-SIVASH"
+        "SRC-PD-26-SIVASH",
+        "SRC-PD-26-WISDOMLIB"
       ],
-      "notes": "Vedha is explicitly not yet applied, so this is not a complete gochar judgment."
+      "notes": "Moon-relative favorable-house baseline. Jupiter and Saturn Vedha mappings are implemented; Rahu/Ketu remain baseline-only; Ashtakavarga pending."
     },
     {
       "rule_id": "VED-SADESATI-LATER-TRADITION-01",
