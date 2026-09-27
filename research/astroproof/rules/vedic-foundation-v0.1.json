@@ -1,0 +1,134 @@
+{
+  "version": "0.1",
+  "purpose": "Source- and convention-versioned rule registry for the AstroProof research engine. Structural detection is separated from effect claims.",
+  "epistemic_policy": [
+    "A structural chart match is not evidence that a promised life outcome will occur.",
+    "Disputed school conventions must be named, not silently merged.",
+    "Rule changes require a new rule/version identifier so frozen predictions remain reproducible."
+  ],
+  "sources": [
+    {
+      "source_id": "SRC-BJ-WELLCOME-1885",
+      "title": "The Brihat Jataka of Varaha Mihira, trans. N. Chidambaram Iyer",
+      "year": 1885,
+      "license": "Public Domain Mark",
+      "url": "https://wellcomecollection.org/works/afmgm695",
+      "tier": "public-domain primary/classical translation"
+    },
+    {
+      "source_id": "SRC-PD-26-SIVASH",
+      "title": "Phaladeepika, Chapter 26 — Transits of Planets",
+      "url": "https://www.siva.sh/phaladeepika/26/6-10",
+      "tier": "classical text presentation / translation; verify against edition for production"
+    },
+    {
+      "source_id": "SRC-MEEUS-NODE-SONIAKEYS",
+      "title": "Meeus implementation — mean and true lunar node",
+      "url": "https://github.com/soniakeys/meeus/blob/master/v3/moonposition/moonposition.go",
+      "tier": "technical algorithm implementation"
+    },
+    {
+      "source_id": "SRC-DRISHTI-BPHS-SECONDARY",
+      "title": "Parashari full graha drishti rule cross-check",
+      "url": "https://paramarsh.app/patrika/planets-navagraha/mars-special-aspects-4-8",
+      "tier": "secondary explanation citing BPHS; primary-text verification pending"
+    },
+    {
+      "source_id": "SRC-MAHAPURUSHA-CROSSCHECK",
+      "title": "Pancha Mahapurusha formation cross-check",
+      "url": "https://www.divinityatlas.com/mahapurusha-yogas/hamsa",
+      "tier": "secondary source with classical-source references"
+    },
+    {
+      "source_id": "SRC-GAJAKESARI-CROSSCHECK",
+      "title": "Gajakesari source-variant cross-check",
+      "url": "https://sarbanirath.com/jyoti%E1%B9%A3a/saka%E1%B9%ADa-muku%E1%B9%ADa-gajakesari-yoga/",
+      "tier": "secondary/source quotation; variants explicitly retained"
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "ASTRO-MEAN-NODE-MEEUS-01",
+      "status": "implemented",
+      "type": "astronomical calculation",
+      "convention": "mean ascending lunar node; Ketu exactly opposite",
+      "source_ids": [
+        "SRC-MEEUS-NODE-SONIAKEYS"
+      ],
+      "notes": "True-node option is not yet exposed."
+    },
+    {
+      "rule_id": "VED-DRISHTI-PARASHARI-FULL",
+      "status": "implemented",
+      "type": "structural Jyotish rule",
+      "convention": "all seven classical grahas 7th; Mars 4/7/8; Jupiter 5/7/9; Saturn 3/7/10; nodes do not cast aspects in default engine",
+      "source_ids": [
+        "SRC-DRISHTI-BPHS-SECONDARY"
+      ],
+      "notes": "Node drishti is disputed and deliberately excluded from the default convention."
+    },
+    {
+      "rule_id": "VED-COMBUSTION-WORKING-01",
+      "status": "implemented-working-convention",
+      "type": "planet condition",
+      "convention": "Mars 17; Mercury 14 direct/12 retro; Jupiter 11; Venus 10 direct/8 retro; Saturn 15 degrees from Sun",
+      "source_ids": [],
+      "notes": "Threshold provenance requires primary-edition audit before production certification."
+    },
+    {
+      "rule_id": "VED-YOGA-MAHAPURUSHA-01",
+      "status": "implemented-structural-only",
+      "type": "yoga detector",
+      "convention": "Mars/Mercury/Jupiter/Venus/Saturn in Lagna kendra and own/exaltation sign",
+      "source_ids": [
+        "SRC-BJ-WELLCOME-1885",
+        "SRC-MAHAPURUSHA-CROSSCHECK"
+      ],
+      "notes": "Detector does not convert formation into guaranteed outcome claims."
+    },
+    {
+      "rule_id": "VED-YOGA-GAJAKESARI-SIMPLE-01",
+      "status": "implemented-as-candidate",
+      "type": "yoga detector",
+      "convention": "Jupiter in 1/4/7/10 from Moon",
+      "source_ids": [
+        "SRC-GAJAKESARI-CROSSCHECK"
+      ],
+      "notes": "Stricter BPHS-style qualifications exist; engine labels this simple variant as candidate only."
+    },
+    {
+      "rule_id": "VED-YOGA-SUN-MERCURY-01",
+      "status": "implemented-structural-only",
+      "type": "conjunction detector",
+      "convention": "Sun and Mercury in same sidereal sign; combustion reported separately",
+      "source_ids": [],
+      "notes": "Name and qualification vary across sources; effect claims withheld."
+    },
+    {
+      "rule_id": "VED-YOGA-MOON-MARS-CONJ-01",
+      "status": "implemented-structural-only",
+      "type": "conjunction detector",
+      "convention": "Moon and Mars in same sidereal sign",
+      "source_ids": [],
+      "notes": "The named Chandra-Mangala definition and wealth attribution vary across sources; only the conjunction is asserted."
+    },
+    {
+      "rule_id": "VED-GOCHAR-PHALADEEPIKA-26-BASELINE",
+      "status": "implemented-baseline",
+      "type": "transit rule",
+      "convention": "Moon-relative favorable-house sets",
+      "source_ids": [
+        "SRC-PD-26-SIVASH"
+      ],
+      "notes": "Vedha is explicitly not yet applied, so this is not a complete gochar judgment."
+    },
+    {
+      "rule_id": "VED-SADESATI-LATER-TRADITION-01",
+      "status": "implemented-structural-only",
+      "type": "transit period",
+      "convention": "transiting sidereal Saturn 12th/1st/2nd from natal sidereal Moon",
+      "source_ids": [],
+      "notes": "Period arithmetic only; fear-based deterministic event claims prohibited."
+    }
+  ]
+}
