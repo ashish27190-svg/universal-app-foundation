@@ -61,6 +61,27 @@ describe('Household Vault local user/cache isolation', () => {
     expect(x.events).toEqual(['clear', 'mark:account-B', 'connect']);
   });
 
+  it('allows the original owner to resume after a refused account switch', async () => {
+    const x = fixture('account-A', 2);
+    await expect(x.guard.attach('account-B')).rejects.toMatchObject({
+      name: 'LocalVaultOwnershipConflictError',
+    });
+    await x.guard.attach('account-A');
+    expect(x.events).toEqual(['connect']);
+    expect(x.owner()).toBe('account-A');
+  });
+
+  it('does not lose a prior failed identity transition when requests are queued', async () => {
+    const x = fixture('account-A', 1);
+    const outcomes = await Promise.allSettled([
+      x.guard.attach('account-B'),
+      x.guard.attach('account-A'),
+    ]);
+    expect(outcomes.map((v) => v.status)).toEqual(['rejected', 'fulfilled']);
+    expect(x.owner()).toBe('account-A');
+    expect(x.events).toEqual(['connect']);
+  });
+
   it('never attaches an unknown owner over orphaned pending writes', async () => {
     const x = fixture(null, 1);
     await expect(x.guard.attach('account-A')).rejects.toThrow('unsynced changes');
