@@ -263,3 +263,37 @@ export async function handleAssetServiceRecord(context: MutationHandlerContext):
     return { status: 'rejected', message: error instanceof Error ? error.message : 'Invalid service-record update.' };
   }
 }
+
+
+/**
+ * Pure, allowlisted field preparation for the transactional sync RPC.
+ * Do not call an individual PostgREST insert/update from the sync gateway:
+ * the SQL RPC must commit business data, ledger, conflict, and audit together.
+ */
+export function prepareAtomicAssetFields(
+  entityType: string,
+  operation: 'create' | 'update' | 'soft_delete' | 'restore',
+  payload: Record<string, unknown>,
+  actorUserId: string,
+): Record<string, unknown> {
+  if (operation === 'soft_delete' || operation === 'restore') return {};
+  let fields: Record<string, unknown>;
+  if (entityType === 'household_assets') {
+    fields = operation === 'create'
+      ? { ...assetCreatePayload(payload), ...baseCreateFields(payload, actorUserId) }
+      : assetUpdatePayload(payload, actorUserId);
+  } else if (entityType === 'asset_service_records') {
+    fields = operation === 'create'
+      ? { ...serviceCreatePayload(payload), ...baseCreateFields(payload, actorUserId) }
+      : serviceUpdatePayload(payload, actorUserId);
+  } else {
+    return {};
+  }
+
+  // These values belong to the SQL transaction, never to a client payload.
+  delete fields.revision;
+  delete fields.lifecycle_state;
+  delete fields.created_by;
+  delete fields.updated_by;
+  return fields;
+}
