@@ -51,6 +51,18 @@ export default {
     if (!visibleConflict) return Response.json({ message: 'Conflict not found.' }, { status: 404 });
 
     const conflict = visibleConflict as ConflictRow;
+
+    // A readable conflict is not necessarily writable by this member.
+    // RLS may permit viewers to read, but resolution mutates server-owned rows.
+    const { data: canWrite, error: writePermissionError } = await ctx.supabase
+      .rpc('can_write_workspace', { target_workspace_id: conflict.workspace_id });
+    if (writePermissionError) {
+      return Response.json({ message: 'Conflict write authorization failed.' }, { status: 503 });
+    }
+    if (canWrite !== true) {
+      return Response.json({ message: 'Workspace write access denied.' }, { status: 403 });
+    }
+
     if (conflict.resolved_at) {
       return Response.json({ status: 'already_resolved', resolution: conflict.resolution });
     }
