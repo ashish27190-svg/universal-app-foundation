@@ -21,6 +21,8 @@ jobs:
       VITE_POWERSYNC_URL: ${{ secrets.STAGING_POWERSYNC_URL }}
       E2E_EMAIL: ${{ secrets.STAGING_E2E_EMAIL }}
       E2E_PASSWORD: ${{ secrets.STAGING_E2E_PASSWORD }}
+      E2E_SECOND_EMAIL: ${{ secrets.STAGING_E2E_SECOND_EMAIL }}
+      E2E_SECOND_PASSWORD: ${{ secrets.STAGING_E2E_SECOND_PASSWORD }}
       E2E_BASE_URL: http://127.0.0.1:4173
     steps:
       - uses: actions/checkout@v7
