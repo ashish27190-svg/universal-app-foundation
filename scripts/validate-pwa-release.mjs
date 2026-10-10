@@ -37,7 +37,7 @@ for (const token of [
 if (/\\npush:\\s*(\\n|$)/.test(staging)) {
   throw new Error('Private staging deployment must never trigger automatically on push.');
 }
-if (staging.split('node scripts/verify-private-staging.mjs').length !== 3) {
+if (staging.split('run: node scripts/verify-private-staging.mjs\\n').length !== 3) {
   throw new Error('Staging deploy requires anonymous Access verification both before and after publishing.');
 }
 if (!wrangler.includes('"preview_urls": false')) {
