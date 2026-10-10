@@ -59,8 +59,19 @@ export default {
 
       if (workspaceError) return Response.json({ message: 'Workspace authorization failed.' }, { status: 503 });
       if (!workspace) {
-        await recordIssue(ctx.supabaseAdmin, mutation, 'authorization', 'Workspace access denied.');
+        // Never use the admin client to write into an unauthorized workspace.
         outcomes.push({ mutationId: mutation.mutationId, status: 'rejected', message: 'Workspace access denied.' });
+        continue;
+      }
+
+      // Membership allows reading; only owners/admins may mutate durable rows.
+      const { data: canWrite, error: writePermissionError } = await ctx.supabase
+        .rpc('can_write_workspace', { target_workspace_id: mutation.workspaceId });
+      if (writePermissionError) {
+        return Response.json({ message: 'Workspace write authorization failed.' }, { status: 503 });
+      }
+      if (canWrite !== true) {
+        outcomes.push({ mutationId: mutation.mutationId, status: 'rejected', message: 'Workspace write access denied.' });
         continue;
       }
 
