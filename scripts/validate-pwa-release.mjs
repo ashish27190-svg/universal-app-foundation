@@ -23,8 +23,36 @@ if (/\npush:\s*(\n|$)/.test(production)) throw new Error('Production deployment 
 if (!production.includes('environment: production')) throw new Error('Production must use a protected GitHub environment.');
 
 const staging = readFileSync('.github/workflows/staging.yml', 'utf8');
-for (const token of ['environment: staging', 'supabase db push', 'resolve-conflict', '--env staging']) {
+for (const token of [
+  'workflow_dispatch:', 'preflight_only', 'environment: staging',
+  'supabase --workdir infrastructure link',
+  'supabase --workdir infrastructure db push --linked --dry-run',
+  'supabase --workdir infrastructure db push --linked',
+  'resolve-conflict', '--env staging',
+  'node scripts/verify-private-staging.mjs',
+]) {
   if (!staging.includes(token)) throw new Error(`Staging workflow missing invariant: ${token}`);
+}
+
+if (/\\npush:\\s*(\\n|$)/.test(staging)) {
+  throw new Error('Private staging deployment must never trigger automatically on push.');
+}
+if (staging.split('node scripts/verify-private-staging.mjs').length !== 3) {
+  throw new Error('Staging deploy requires anonymous Access verification both before and after publishing.');
+}
+if (!wrangler.includes('"preview_urls": false')) {
+  throw new Error('Staging preview URLs must remain disabled until fully guarded.');
+}
+const connectedE2E = readFileSync('.github/workflows/connected-e2e.yml', 'utf8');
+for (const token of [
+  'environment: staging',
+  'STAGING_SUPABASE_PROJECT_REF',
+  'node scripts/validate-staging-readiness.mjs --e2e',
+]) {
+  if (!connectedE2E.includes(token)) throw new Error(`Connected E2E missing guard: ${token}`);
+}
+if (/\\nschedule:\\s*(\\n|$)/.test(connectedE2E)) {
+  throw new Error('Connected E2E should remain manual while staging is paused.');
 }
 
 console.log('PWA/release invariant validation: PASS');
