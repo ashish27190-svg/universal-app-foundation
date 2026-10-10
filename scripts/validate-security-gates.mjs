@@ -125,6 +125,15 @@ if (!fs.existsSync(path.join(root, 'apps/reference-app/src/sync/local-vault-owne
   violations.push('Local offline account isolation must have regression tests.');
 }
 
+for (const token of [
+  'reconnectSameOwner(userId)',
+  'const stillCurrent = await uafServices.auth.getSession()',
+  "throw new Error('Authentication changed during offline sync reconnection.')",
+]) {
+  if (!persistence.includes(token)) {
+    violations.push('Offline reconnection identity recheck missing: ' + token);
+  }
+}
 // Offline startup cannot depend on an online workspace RPC when browser
 // connectivity is unavailable. The fallback must be bound to the confirmed
 // personal workspace, current user and an unexpired auth session, and must
