@@ -71,6 +71,7 @@ export const syncStatusStore = new PowerSyncStatusStore(powerSyncDatabase, {
 });
 
 const localVaultTabLease = new LocalVaultTabLease();
+let streamingConnected = false;
 
 const localVaultOwnership = new LocalVaultOwnership({
   acquireTab: () => localVaultTabLease.acquire(),
@@ -81,10 +82,21 @@ const localVaultOwnership = new LocalVaultOwnership({
   writeOwner: (userId) => window.localStorage.setItem(LOCAL_VAULT_OWNER_KEY, userId),
   removeOwner: () => window.localStorage.removeItem(LOCAL_VAULT_OWNER_KEY),
   pendingCount: () => getPendingMutationCount(powerSyncDatabase),
-  clearDatabase: () => powerSyncDatabase.disconnectAndClear(),
-  disconnect: () => powerSyncDatabase.disconnect(),
+  clearDatabase: async () => {
+    await powerSyncDatabase.disconnectAndClear();
+    streamingConnected = false;
+  },
+  disconnect: async () => {
+    await powerSyncDatabase.disconnect();
+    streamingConnected = false;
+  },
   connect: async () => {
-    await powerSyncDatabase.connect(connector);
+    // Offline boot needs SQLite, not a network connection. The queued local
+    // mutations remain pending until an authenticated reconnect.
+    if (typeof navigator !== 'undefined' && navigator.onLine && !streamingConnected) {
+      await powerSyncDatabase.connect(connector);
+      streamingConnected = true;
+    }
     await syncStatusStore.refresh();
   },
 });
@@ -104,6 +116,14 @@ export async function connectReferenceAppSync(userId: string): Promise<void> {
     await localVaultOwnership.authLost();
     throw new Error('Authentication changed while opening the local vault. Sign in again.');
   }
+}
+
+export async function resumeReferenceAppSyncAfterReconnect(): Promise<void> {
+  if (typeof navigator === 'undefined' || !navigator.onLine) return;
+  const session = await uafServices.auth.getSession();
+  if (!session) throw new Error('Sign in again before syncing local changes.');
+  await localVaultOwnership.reconnectSameOwner(String(session.user.id));
+  await syncStatusStore.refresh();
 }
 
 export async function refreshReferenceAppSyncStatus(): Promise<void> {
