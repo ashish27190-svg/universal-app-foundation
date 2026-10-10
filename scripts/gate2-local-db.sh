@@ -26,5 +26,10 @@ echo "Gate 2: running transactional RLS/access-control assertions."
 "$CLI" test db supabase/tests/database/gate2_rls_test.sql --local
 
 echo "PASS: local migrations and pgTAP RLS checks completed."
-echo "Note: this does NOT establish PowerSync cloud sync, Edge Function runtime, or multi-device proof."
+
+echo "Gate 2: exercising LOCAL Edge Functions over authenticated HTTP."
+node "$ROOT/scripts/gate2-local-functions.mjs"
+
+echo "PASS: local migrations, pgTAP RLS and Edge Function HTTP tests completed."
+echo "Note: this does NOT establish PowerSync cloud sync or multi-device browser proof."
 echo "When finished inspecting locally: cd infrastructure && ../node_modules/.bin/supabase stop"
