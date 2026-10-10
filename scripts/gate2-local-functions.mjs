@@ -135,6 +135,18 @@ assert(replay.outcomes?.[0]?.status==='idempotent','duplicate mutation is idempo
 assert((await rows('household_assets',{id:'eq.'+assetId})).length===1,'replay does not duplicate asset');
 assert((await rows('processed_mutations',{mutation_id:'eq.'+mutation.mutationId})).length===1,'idempotency ledger has one record');
 assert((await rows('audit_events',{entity_id:'eq.'+assetId})).length===1,'successful create emits exactly one audit event');
+// Same mutation ID with a different payload or identity must never be a
+// successful replay, even when the requester has write access.
+const changedPayload=await apply(a,{
+  ...mutation,payload:{...mutation.payload,name:'Changed payload must be rejected'}
+});
+assert(changedPayload.status===409,'same mutation ID with changed payload returns 409');
+const changedEntity=await apply(a,{...mutation,entityId:randomUUID()});
+assert(changedEntity.status===409,'same mutation ID with changed entity returns 409');
+const differentActor=await apply(b,{...mutation,workspaceId:wb,entityId:randomUUID()});
+assert(differentActor.status===409,'same mutation ID from a different owner/workspace returns 409');
+assert((await rows('processed_mutations',{mutation_id:'eq.'+mutation.mutationId})).length===1,'reused mutation ID does not add a ledger row');
+assert((await rows('household_assets',{id:'eq.'+assetId})).length===1,'reused mutation ID does not alter original asset');
 
 const forbidden=envelope(wb,randomUUID());
 const foreign=requireHttp(await apply(a,forbidden),200,'foreign workspace mutation');
