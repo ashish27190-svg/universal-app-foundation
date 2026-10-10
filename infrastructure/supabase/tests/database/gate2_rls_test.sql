@@ -1,7 +1,7 @@
 -- Disposable UAF local Gate-2 RLS test; never run against a linked production project.
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(21);
+select extensions.plan(22);
 
 -- Synthetic users. Transactional fixture data rolls back after pgTAP execution.
 insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
@@ -37,6 +37,7 @@ select extensions.has_table('public','workspace_memberships','Membership table e
 select extensions.has_table('public','household_assets','Assets table exists');
 select extensions.has_table('public','processed_mutations','Private mutation ledger exists');
 select extensions.has_function('public','ensure_personal_workspace',array['text'],'Personal workspace RPC exists');
+select extensions.ok(not pg_catalog.has_function_privilege('authenticated','public.keep_server_conflict_transaction(uuid,uuid)','EXECUTE'),'Authenticated browser cannot call privileged keep-server RPC');
 
 select set_config('request.jwt.claim.sub','a1000000-0000-4000-8000-000000000001',true);
 set local role authenticated;
