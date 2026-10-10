@@ -7,6 +7,23 @@ import {
   type MutationOutcome,
 } from '../_shared/mutation-protocol.ts';
 
+// A mutation ID is an immutable request identity. Compare the full canonical
+// envelope, not just the ID, before treating a retry as idempotent.
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
+  const data = value as Record<string, unknown>;
+  return '{' + Object.keys(data).sort()
+    .map(key => JSON.stringify(key) + ':' + canonicalJson(data[key]))
+    .join(',') + '}';
+}
+
+async function requestFingerprint(mutation: MutationEnvelope): Promise<string> {
+  const input = new TextEncoder().encode(canonicalJson(mutation));
+  const digest = await crypto.subtle.digest('SHA-256', input);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
 async function recordIssue(
   supabaseAdmin: any,
   mutation: MutationEnvelope,
@@ -75,14 +92,25 @@ export default {
         continue;
       }
 
+      const fingerprint = await requestFingerprint(mutation);
       const { data: previousMutation, error: idempotencyReadError } = await ctx.supabaseAdmin
         .from('processed_mutations')
-        .select('result_status,result')
+        .select('workspace_id,user_id,entity_type,entity_id,operation,result')
         .eq('mutation_id', mutation.mutationId)
         .maybeSingle();
 
       if (idempotencyReadError) return Response.json({ message: 'Idempotency check failed.' }, { status: 503 });
       if (previousMutation) {
+        const sameRequest =
+          previousMutation.workspace_id === mutation.workspaceId &&
+          previousMutation.user_id === userId &&
+          previousMutation.entity_type === mutation.entityType &&
+          previousMutation.entity_id === mutation.entityId &&
+          previousMutation.operation === mutation.operation &&
+          previousMutation.result?.requestFingerprint === fingerprint;
+        if (!sameRequest) {
+          return Response.json({ message: 'Mutation ID is already associated with a different or unverifiable request.' }, { status: 409 });
+        }
         outcomes.push({ mutationId: mutation.mutationId, status: 'idempotent' });
         continue;
       }
@@ -98,7 +126,7 @@ export default {
           entity_id: mutation.entityId,
           operation: mutation.operation,
           result_status: 'rejected',
-          result: { message: 'No mutation handler is registered.' },
+          result: { message: 'No mutation handler is registered.', requestFingerprint: fingerprint },
         });
         outcomes.push({ mutationId: mutation.mutationId, status: 'rejected', message: 'Unsupported entity.' });
         continue;
@@ -130,7 +158,7 @@ export default {
           entity_id: mutation.entityId,
           operation: mutation.operation,
           result_status: result.status === 'applied' ? 'processed' : result.status,
-          result: { message: result.message ?? null },
+          result: { message: result.message ?? null, requestFingerprint: fingerprint },
         });
 
         if (result.status === 'applied') {
