@@ -27,6 +27,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Verify isolated staging guard against synthetic configurations
         run: node scripts/validate-staging-readiness.mjs --self-test
+      - name: Verify staging Access checks fail closed (synthetic)
+        run: node scripts/verify-private-staging.mjs --self-test
       - run: pnpm validate:structure
       - run: pnpm validate:core-boundary
       - run: pnpm validate:config-boundary
