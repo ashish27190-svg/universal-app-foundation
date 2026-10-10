@@ -13,6 +13,7 @@ import {
   pauseReferenceAppSyncForAuthChange,
   refreshReferenceAppSyncStatus,
   resumeReferenceAppSyncAfterReconnect,
+  suspendReferenceAppRemoteSyncWhileOffline,
   syncStatusStore,
 } from './sync/persistence';
 
@@ -118,8 +119,31 @@ export function App() {
     const unsubscribeAuth = uafServices.auth.onAuthStateChange((session) => { void applySession(session); });
 
     const refreshNetworkState = () => {
-      void refreshReferenceAppSyncStatus();
-      if (!navigator.onLine || !offlineVerification) return;
+      void refreshReferenceAppSyncStatus().catch(() => undefined);
+      if (!navigator.onLine) {
+        // A normal online session can also lose connectivity without any page
+        // reload. Prevent its existing remote uploader from resuming freely
+        // before the server membership is checked again.
+        const currentUserId = activeUserId.current;
+        if (currentUserId) {
+          const generation = bootstrapGeneration.current;
+          offlineVerification = { userId: currentUserId, generation };
+          void suspendReferenceAppRemoteSyncWhileOffline().catch((cause) => {
+            if (!disposed && generation === bootstrapGeneration.current) {
+              setBoot((previous) => ({
+                ...previous,
+                workspace: null,
+                loading: false,
+                error: cause instanceof Error
+                  ? 'Could not suspend synchronization safely: ' + cause.message
+                  : 'Could not suspend synchronization safely.',
+              }));
+            }
+          });
+        }
+        return;
+      }
+      if (!offlineVerification) return;
       const pending = offlineVerification;
       offlineVerification = null;
       // Stop all local edits before contacting the server. The cached
