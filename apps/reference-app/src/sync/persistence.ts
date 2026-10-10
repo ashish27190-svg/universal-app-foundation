@@ -118,6 +118,11 @@ export async function connectReferenceAppSync(userId: string): Promise<void> {
   }
 }
 
+export async function suspendReferenceAppRemoteSyncWhileOffline(): Promise<void> {
+  await localVaultOwnership.suspendRemoteWhileOffline();
+  await syncStatusStore.refresh();
+}
+
 export async function resumeReferenceAppSyncAfterReconnect(): Promise<void> {
   if (typeof navigator === 'undefined' || !navigator.onLine) return;
   const session = await uafServices.auth.getSession();
