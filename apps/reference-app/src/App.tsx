@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AuthSession, WorkspaceContext } from '@uaf/auth';
-import { ErrorState, Loading, type SyncDisplayState } from '@uaf/ui';
+import { Button, ErrorState, Loading, type SyncDisplayState } from '@uaf/ui';
 import { AuthScreen } from './components/AuthScreen';
 import { VaultApp } from './components/VaultApp';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { uafServices } from './services';
+import { LocalVaultOwnershipConflictError } from './sync/local-vault-ownership';
 import {
   connectReferenceAppSync,
   prepareReferenceAppLogout,
@@ -18,6 +19,7 @@ interface BootState {
   workspace: WorkspaceContext | null;
   loading: boolean;
   error: string | null;
+  accountSwitchAvailable?: boolean;
 }
 
 const initialBootState: BootState = { session: null, workspace: null, loading: true, error: null };
@@ -63,6 +65,7 @@ export function App() {
             workspace: null,
             loading: false,
             error: cause instanceof Error ? cause.message : 'App initialization failed.',
+            accountSwitchAvailable: cause instanceof LocalVaultOwnershipConflictError,
           });
         }
       }
@@ -99,7 +102,26 @@ export function App() {
   if (boot.error) {
     return (
       <main className="vault-centered">
-        <ErrorState title="Household Vault needs attention" description={boot.error} onRetry={() => window.location.reload()} />
+        <div className="vault-auth-card">
+          <ErrorState title="Household Vault needs attention" description={boot.error} onRetry={() => window.location.reload()} />
+          {boot.accountSwitchAvailable ? (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                // This is NOT the ordinary logout path: pending writes belong
+                // to another user and must NOT be deleted by the current one.
+                void uafServices.auth.signOut().catch((cause) => {
+                  setBoot((current) => ({
+                    ...current,
+                    error: cause instanceof Error ? cause.message : 'Could not return to account selection.',
+                  }));
+                });
+              }}
+            >
+              Switch back to previous account
+            </Button>
+          ) : null}
+        </div>
       </main>
     );
   }
