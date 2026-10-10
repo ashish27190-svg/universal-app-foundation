@@ -12,6 +12,7 @@ import { PowerSyncHouseholdAssetRepository } from '../data/household-asset-repos
 import { LocalAuditRepository } from '../data/audit-repository';
 import { runtimeEnvironment, uafServices } from '../services';
 import { LOCAL_VAULT_OWNER_KEY, LocalVaultOwnership } from './local-vault-ownership';
+import { LocalVaultTabLease } from './local-vault-tab-lease';
 
 if (!runtimeEnvironment.VITE_POWERSYNC_URL) {
   throw new Error('PowerSync configuration is required by the Household Vault manifest.');
@@ -69,7 +70,11 @@ export const syncStatusStore = new PowerSyncStatusStore(powerSyncDatabase, {
   isOnline: () => (typeof navigator === 'undefined' ? true : navigator.onLine),
 });
 
+const localVaultTabLease = new LocalVaultTabLease();
+
 const localVaultOwnership = new LocalVaultOwnership({
+  acquireTab: () => localVaultTabLease.acquire(),
+  releaseTab: () => localVaultTabLease.release(),
   // Persistent marker is intentionally limited to opaque user ID. If browser
   // storage is blocked, abort rather than risking a cross-account cache.
   readOwner: () => window.localStorage.getItem(LOCAL_VAULT_OWNER_KEY),
@@ -89,7 +94,16 @@ const localVaultOwnership = new LocalVaultOwnership({
  * Transitions are serialized and cannot drop unsynced changes.
  */
 export async function connectReferenceAppSync(userId: string): Promise<void> {
+  const session = await uafServices.auth.getSession();
+  if (String(session?.user.id ?? '') !== userId) {
+    throw new Error('Authentication changed before the vault could open. Sign in again.');
+  }
   await localVaultOwnership.attach(userId);
+  const stillCurrent = await uafServices.auth.getSession();
+  if (String(stillCurrent?.user.id ?? '') !== userId) {
+    await localVaultOwnership.authLost();
+    throw new Error('Authentication changed while opening the local vault. Sign in again.');
+  }
 }
 
 export async function refreshReferenceAppSyncStatus(): Promise<void> {
