@@ -107,6 +107,25 @@ describe('Household Vault local user/cache isolation', () => {
     expect(x.owner()).toBeNull();
   });
 
+  it('suspends a live uploader when offline but retains the local lease, owner and queued edits', async () => {
+    const x = fixture('account-A', 3);
+    await x.guard.attach('account-A');
+    await x.guard.suspendRemoteWhileOffline();
+    expect(x.events).toEqual(['lease', 'connect', 'disconnect']);
+    expect(x.owner()).toBe('account-A');
+    await x.guard.reconnectSameOwner('account-A');
+    expect(x.events).toEqual(['lease', 'connect', 'disconnect', 'connect']);
+    expect(x.owner()).toBe('account-A');
+    await expect(x.guard.logout()).rejects.toThrow('3 local change');
+  });
+
+  it('offline suspend is a no-op before a vault has been attached', async () => {
+    const x = fixture('account-A', 2);
+    await x.guard.suspendRemoteWhileOffline();
+    expect(x.events).toEqual([]);
+    expect(x.owner()).toBe('account-A');
+  });
+
   it('reconnects a previously mounted offline queue for its same owner without clearing', async () => {
     const x = fixture('account-A', 2);
     await x.guard.attach('account-A');
