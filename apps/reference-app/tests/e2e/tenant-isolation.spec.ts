@@ -78,3 +78,27 @@ test('switching identities in the same browser never exposes the previous local 
   await expect(activeAssetCard(page, first)).toBeVisible({ timeout: 60_000 });
   await expect(activeAssetCard(page, second)).toHaveCount(0);
 });
+
+test('a second tab cannot mount persistent SQLite until the first tab closes', async ({ browser }) => {
+  const context = await browser.newContext();
+  try {
+    const first = await context.newPage();
+    await signIn(first);
+    await waitForSynced(first);
+    const name = 'Exclusive local SQLite ' + randomUUID().slice(0, 8);
+    await createAsset(first, name);
+    await waitForSynced(first);
+
+    const second = await context.newPage();
+    await second.goto('/');
+    await expect(second.getByText('already open in another tab', { exact: false })).toBeVisible({ timeout: 30_000 });
+    await expect(second.getByRole('heading', { name: 'Your assets' })).toHaveCount(0);
+
+    await first.close();
+    await second.reload();
+    await expect(second.getByRole('heading', { name: 'Your assets' })).toBeVisible({ timeout: 30_000 });
+    await expect(activeAssetCard(second, name)).toBeVisible({ timeout: 60_000 });
+  } finally {
+    await context.close();
+  }
+});
