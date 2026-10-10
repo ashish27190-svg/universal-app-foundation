@@ -58,6 +58,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       STAGING_PRIVATE_ACCESS_CONFIRMED: ${{ secrets.STAGING_PRIVATE_ACCESS_CONFIRMED }}
+      STAGING_PROTECTED_URL: ${{ secrets.STAGING_PROTECTED_URL }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -68,6 +69,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Validate only the dedicated UAF staging project is configured
         run: node scripts/validate-staging-readiness.mjs --deploy
+      - name: Fail closed unless anonymous staging URL redirects to Cloudflare Access
+        run: node scripts/verify-private-staging.mjs
       - name: Build with staging public configuration
         run: pnpm --filter @uaf/reference-app build
       - name: Apply staging migrations (requires separate operator approval)
@@ -83,3 +86,5 @@ jobs:
         # this workflow. A confirmation secret is a human release gate, not
         # cryptographic verification of the Access policy.
         run: pnpm wrangler deploy --config apps/reference-app/wrangler.jsonc --env staging
+      - name: Verify Cloudflare Access still blocks anonymous access after deployment
+        run: node scripts/verify-private-staging.mjs
