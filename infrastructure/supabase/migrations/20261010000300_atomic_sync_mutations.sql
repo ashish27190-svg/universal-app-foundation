@@ -246,7 +246,7 @@ begin
       case when status = 'conflict' then 'conflict' else 'rejected' end,
       case when p_expected_revision >= 0 then p_expected_revision else null end,
       p_client_payload, server_revision,
-      pg_catalog.coalesce(before_data,pg_catalog.jsonb_build_object('message',message))
+      coalesce(before_data,pg_catalog.jsonb_build_object('message',message))
     );
   end if;
 
