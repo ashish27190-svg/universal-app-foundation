@@ -75,7 +75,7 @@ export function validateStagingEnvironment(env, mode = 'e2e') {
       errors.push('Staging Workers subdomain must be a single valid DNS label.');
     }
     const teamDomain = env.STAGING_ACCESS_TEAM_DOMAIN?.trim();
-    if (teamDomain && !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.cloudflareaccess\\.com$/.test(teamDomain)) {
+    if (teamDomain && !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.cloudflareaccess\.com$/.test(teamDomain)) {
       errors.push('Staging Access team domain must be a cloudflareaccess.com hostname.');
     }
     if (subdomain && env.STAGING_PROTECTED_URL &&
