@@ -38,10 +38,31 @@ test('an offline asset survives browser reload and converges after reconnect', a
     await expect(pageA.getByText('Offline', { exact: true })).toBeVisible();
     await expect(activeAssetCard(pageA, assetName)).toBeVisible();
 
+    // Delay the membership RPC deliberately: reconnect must hide the editor
+    // BEFORE the backend has confirmed that this user still owns the workspace.
+    let unblockVerification: (() => void) | null = null;
+    let sawVerification!: () => void;
+    const verificationSeen = new Promise<void>((resolve) => { sawVerification = resolve; });
+    const verificationAllowed = new Promise<void>((resolve) => { unblockVerification = resolve; });
+    await pageA.route('**/rest/v1/rpc/ensure_personal_workspace', async (route) => {
+      sawVerification();
+      await verificationAllowed;
+      await route.continue();
+    });
     // Reconnect triggers a fresh workspace membership check, then reconnects
     // the saved SQLite mutations to the authenticated uploader.
     await contextA.setOffline(false);
+    try {
+      await verificationSeen;
+      await expect(pageA.getByRole('heading', { name: 'Your assets' })).toHaveCount(0);
+      await expect(pageA.getByRole('button', { name: 'Add asset' })).toHaveCount(0);
+      await expect(pageA.getByText('Opening your local vault')).toBeVisible();
+    } finally {
+      unblockVerification?.();
+      await pageA.unroute('**/rest/v1/rpc/ensure_personal_workspace');
+    }
     await waitForSynced(pageA);
+    await expect(pageA.getByRole('heading', { name: 'Your assets' })).toBeVisible();
 
     // A fresh browser identity must receive the persisted Postgres record via
     // PowerSync, not merely see context A's local SQLite data.
