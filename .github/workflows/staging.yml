@@ -73,14 +73,18 @@ jobs:
         run: node scripts/verify-private-staging.mjs
       - name: Build with staging public configuration
         run: pnpm --filter @uaf/reference-app build
-      - name: Apply staging migrations (requires separate operator approval)
+      - name: Review pending migrations for the isolated UAF staging project
         run: |
-          pnpm supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          pnpm supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
+          # --workdir is required: the checked-in Supabase config/migrations live in infrastructure/.
+          # SUPABASE_DB_PASSWORD stays in the environment instead of a CLI argument.
+          pnpm supabase --workdir infrastructure link --project-ref "$SUPABASE_PROJECT_REF"
+          pnpm supabase --workdir infrastructure db push --linked --dry-run
+      - name: Apply approved staging migrations (manual protected job only)
+        run: pnpm supabase --workdir infrastructure db push --linked
       - name: Deploy UAF Edge Functions only to dedicated staging
         run: |
-          pnpm supabase functions deploy sync-apply --project-ref "$SUPABASE_PROJECT_REF"
-          pnpm supabase functions deploy resolve-conflict --project-ref "$SUPABASE_PROJECT_REF"
+          pnpm supabase --workdir infrastructure functions deploy sync-apply --project-ref "$SUPABASE_PROJECT_REF"
+          pnpm supabase --workdir infrastructure functions deploy resolve-conflict --project-ref "$SUPABASE_PROJECT_REF"
       - name: Deploy private Cloudflare staging PWA
         # IMPORTANT: Cloudflare Access policy is configured/verified outside
         # this workflow. A confirmation secret is a human release gate, not
