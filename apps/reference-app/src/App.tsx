@@ -5,6 +5,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { VaultApp } from './components/VaultApp';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { uafServices } from './services';
+import { clearConfirmedPersonalWorkspace, readConfirmedPersonalWorkspace, saveConfirmedPersonalWorkspace } from './offline-workspace';
 import { LocalVaultOwnershipConflictError } from './sync/local-vault-ownership';
 import {
   connectReferenceAppSync,
@@ -63,9 +64,26 @@ export function App() {
           await pauseReferenceAppSyncForAuthChange();
         }
         if (disposed || generation !== bootstrapGeneration.current) return;
-        const workspace = await uafServices.workspaces.ensurePersonalWorkspace();
-        if (disposed || generation !== bootstrapGeneration.current) return;
+        // The ownership Web Lock and account marker must be checked BEFORE
+        // any cached workspace context can be read or rendered.
         await connectReferenceAppSync(userId!);
+        if (disposed || generation !== bootstrapGeneration.current) return;
+
+        let workspace: WorkspaceContext;
+        if (!navigator.onLine) {
+          const saved = readConfirmedPersonalWorkspace(window.localStorage, session);
+          if (!saved) {
+            throw new Error(
+              'Cannot open this vault offline: no recent server-confirmed personal workspace ' +
+              'or the session has expired. Reconnect and sign in to verify this account.',
+            );
+          }
+          workspace = saved;
+        } else {
+          workspace = await uafServices.workspaces.ensurePersonalWorkspace();
+          if (disposed || generation !== bootstrapGeneration.current) return;
+          saveConfirmedPersonalWorkspace(window.localStorage, session, workspace);
+        }
         if (!disposed && generation === bootstrapGeneration.current) {
           setBoot({ session, workspace, loading: false, error: null });
         }
@@ -103,6 +121,7 @@ export function App() {
   async function signOut() {
     try {
       await prepareReferenceAppLogout();
+      clearConfirmedPersonalWorkspace(window.localStorage);
       await uafServices.auth.signOut();
     } catch (cause) {
       setBoot((current) => ({ ...current, error: cause instanceof Error ? cause.message : 'Sign out failed.' }));
