@@ -18,12 +18,14 @@ billing change, public website, or production release.
 | G3.2 PowerSync staging | Authenticated Sync Streams scoped to workspace | Staging PowerSync instance, stream config review, propagation to/from Postgres, revocation tests |
 | G3.3 Private hosting | Public traffic cannot see staging app | Worker-level Cloudflare Access policy covering all URLs, no bypass; unauthenticated `workers.dev` request redirects to Access before AND after publish |
 | G3.4 Connected browser reliability | Real browser SQLite, offline edit, reload, reconnect, two-device convergence and stale-conflict review work | Connected Playwright success, no skipped scenarios, fresh identity/data state |
+| G3.4a Same-device account isolation | Account A and B never inherit each other's persisted SQLite, and an offline queue cannot be reassigned to another user | Unit ownership tests and same-browser A→B→A staging Playwright evidence |
 | G3.5 Pilot authorization | Demonstrated security and data reliability | Human review of staging evidence and cost/security posture before merging/promoting |
 
 **Release-blocking failures:** cross-workspace read/write, viewer mutation,
 audit/ledger partial commit, replay duplication, silent stale overwrite,
 offline data loss on reload, accidental public access, missing test account,
-inactive PowerSync, or unknown database target.
+inactive PowerSync, unguarded cross-account local cache reuse, loss of offline
+pending mutations on account change, or unknown database target.
 
 ## What was tightened on the Gate 3 draft branch
 
@@ -54,6 +56,22 @@ inactive PowerSync, or unknown database target.
   `--workdir infrastructure`, where the actual config/migrations/functions live,
   and prints a migration **dry-run** before the approved staging push. No
   migrations were run on a hosted database during this preparation.
+- The reference app's persistent PowerSync SQLite uses one fixed filename.
+  A new per-device owner marker now binds its contents to the last authenticated
+  user. Before changing identity, it checks for queued mutations: if pending
+  writes exist, the new account is **blocked**, not given the previous user's
+  cache or mutation queue. If no pending writes exist, the previous cache is
+  cleared before a new identity attaches. Standard logout also refuses to erase
+  unsynced writes. An external auth-loss event disconnects but preserves queued
+  data, so signing back into the original account can resume upload. Unit tests
+  cover clearing, account transitions, recovery, missing marker and failure cases.
+- A specific blocked-switch error gives the user an explicit route back to
+  sign-in without bypassing the pending-write cleanup rule. This is NOT an
+  encryption-at-rest or malicious-device-user security guarantee. Multi-tab
+  concurrent account switching remains a hosted acceptance/risk check.
+- A new connected browser journey switches A→B→A **in the same browser profile**
+  after each account's changes have synced. It verifies that cached records
+  cannot appear in the other account. Not yet run on hosted PowerSync.
 - The browser suite includes two separate-account isolation checks, in addition
   to offline asset-create, browser-reload, reconnect and
   fresh-browser convergence journey. It **has not been executed** against hosted
