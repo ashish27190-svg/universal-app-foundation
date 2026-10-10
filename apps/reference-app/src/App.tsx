@@ -122,6 +122,12 @@ export function App() {
       if (!navigator.onLine || !offlineVerification) return;
       const pending = offlineVerification;
       offlineVerification = null;
+      // Stop all local edits before contacting the server. The cached
+      // workspace is provisional until its current membership is confirmed.
+      // Local SQLite and queued writes are retained while the UI is hidden.
+      if (!disposed && pending.generation === bootstrapGeneration.current) {
+        setBoot((previous) => ({ ...previous, workspace: null, loading: true, error: null }));
+      }
       void (async () => {
         // Once online again, a locally cached membership MUST be rechecked
         // with Supabase before we continue treating it as current.
@@ -134,7 +140,7 @@ export function App() {
         saveConfirmedPersonalWorkspace(window.localStorage, current, verified);
         await resumeReferenceAppSyncAfterReconnect();
         if (disposed || pending.generation !== bootstrapGeneration.current) return;
-        setBoot((previous) => ({ ...previous, session: current, workspace: verified, error: null }));
+        setBoot((previous) => ({ ...previous, session: current, workspace: verified, loading: false, error: null }));
       })().catch(async (cause) => {
         if (disposed || pending.generation !== bootstrapGeneration.current) return;
         await pauseReferenceAppSyncForAuthChange().catch(() => undefined);
@@ -142,6 +148,7 @@ export function App() {
           setBoot((previous) => ({
             ...previous,
             workspace: null,
+            loading: false,
             error: cause instanceof Error
               ? 'Could not reverify this workspace after reconnecting: ' + cause.message
               : 'Could not reverify this workspace after reconnecting.',
