@@ -4,12 +4,16 @@ import { LOCAL_VAULT_OWNER_KEY, LocalVaultOwnership, type LocalVaultOwnershipIO 
 function fixture(diskOwner: string | null = null, pending = 0) {
   let savedOwner = diskOwner;
   let pendingCount = pending;
+  let failOwnerRead = false;
   const events: string[] = [];
   let held = false;
   const io: LocalVaultOwnershipIO = {
     acquireTab: async () => { if (!held) { held = true; events.push('lease'); } },
     releaseTab: async () => { if (held) { held = false; events.push('unlock'); } },
-    readOwner: () => savedOwner,
+    readOwner: () => {
+      if (failOwnerRead) throw new Error('Browser storage access revoked');
+      return savedOwner;
+    },
     writeOwner: (userId) => { savedOwner = userId; events.push('mark:' + userId); },
     removeOwner: () => { savedOwner = null; events.push('remove'); },
     pendingCount: async () => pendingCount,
@@ -22,6 +26,7 @@ function fixture(diskOwner: string | null = null, pending = 0) {
     events,
     owner: () => savedOwner,
     setPending: (value: number) => { pendingCount = value; },
+    setOwnerReadFailure: (value: boolean) => { failOwnerRead = value; },
     io,
   };
 }
@@ -121,6 +126,17 @@ describe('Household Vault local user/cache isolation', () => {
     const guard = new LocalVaultOwnership(broken);
     await expect(guard.attach('account-B')).rejects.toThrow('Local SQLite clear failed');
     expect(x.owner()).toBe('account-A');
+  });
+
+  it('disconnects and unlocks after browser owner-storage access is revoked', async () => {
+    const x = fixture('account-A');
+    await x.guard.attach('account-A');
+    x.setOwnerReadFailure(true);
+    await expect(x.guard.attach('account-A')).rejects.toThrow('Browser storage access revoked');
+    expect(x.events).toEqual(['lease', 'connect', 'disconnect', 'unlock']);
+    x.setOwnerReadFailure(false);
+    await x.guard.attach('account-A');
+    expect(x.events.slice(-2)).toEqual(['lease', 'connect']);
   });
 
   it('a busy second browser tab cannot even read local SQLite or mutate its owner', async () => {
