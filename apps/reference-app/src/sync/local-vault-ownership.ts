@@ -89,6 +89,17 @@ export class LocalVaultOwnership {
   }
 
   /**
+   * Going offline must halt an existing remote uploader without releasing the
+   * cross-tab SQLite lease or deleting offline writes. Reconnect is gated by a
+   * fresh server membership check performed by the app.
+   */
+  suspendRemoteWhileOffline(): Promise<void> {
+    return this.serialize(async () => {
+      if (this.connectedUser !== null) await this.io.disconnect();
+    });
+  }
+
+  /**
    * On network restoration, attach the remote connector for the same owner
    * without clearing or changing its offline queue. Cross-account reconnect
    * is never allowed.
