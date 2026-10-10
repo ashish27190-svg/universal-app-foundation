@@ -58,10 +58,10 @@ describe('Household Vault local user/cache isolation', () => {
     const x = fixture('account-A', 2);
     await expect(x.guard.attach('account-B')).rejects.toThrow('unsynced changes');
     expect(x.owner()).toBe('account-A');
-    expect(x.events).toEqual(['lease', 'disconnect', 'unlock']);
+    expect(x.events).toEqual(['lease', 'unlock']);
     x.setPending(0);
     await x.guard.attach('account-B');
-    expect(x.events).toEqual(['lease', 'disconnect', 'unlock', 'lease', 'clear', 'mark:account-B', 'connect']);
+    expect(x.events).toEqual(['lease', 'unlock', 'lease', 'clear', 'mark:account-B', 'connect']);
   });
 
   it('allows the original owner to resume after a refused account switch', async () => {
@@ -70,7 +70,7 @@ describe('Household Vault local user/cache isolation', () => {
       name: 'LocalVaultOwnershipConflictError',
     });
     await x.guard.attach('account-A');
-    expect(x.events).toEqual(['lease', 'connect']);
+    expect(x.events).toEqual(['lease', 'unlock', 'lease', 'connect']);
     expect(x.owner()).toBe('account-A');
   });
 
@@ -82,13 +82,13 @@ describe('Household Vault local user/cache isolation', () => {
     ]);
     expect(outcomes.map((v) => v.status)).toEqual(['rejected', 'fulfilled']);
     expect(x.owner()).toBe('account-A');
-    expect(x.events).toEqual(['lease', 'connect']);
+    expect(x.events).toEqual(['lease', 'unlock', 'lease', 'connect']);
   });
 
   it('never attaches an unknown owner over orphaned pending writes', async () => {
     const x = fixture(null, 1);
     await expect(x.guard.attach('account-A')).rejects.toThrow('unsynced changes');
-    expect(x.events).toEqual(['lease', 'disconnect', 'unlock']);
+    expect(x.events).toEqual(['lease', 'unlock']);
   });
 
   it('explicit logout preserves queued changes; clears only after they are sent', async () => {
