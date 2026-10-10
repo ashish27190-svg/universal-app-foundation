@@ -12,6 +12,7 @@ import {
   prepareReferenceAppLogout,
   pauseReferenceAppSyncForAuthChange,
   refreshReferenceAppSyncStatus,
+  resumeReferenceAppSyncAfterReconnect,
   syncStatusStore,
 } from './sync/persistence';
 
@@ -131,6 +132,8 @@ export function App() {
         const verified = await uafServices.workspaces.ensurePersonalWorkspace();
         if (disposed || pending.generation !== bootstrapGeneration.current) return;
         saveConfirmedPersonalWorkspace(window.localStorage, current, verified);
+        await resumeReferenceAppSyncAfterReconnect();
+        if (disposed || pending.generation !== bootstrapGeneration.current) return;
         setBoot((previous) => ({ ...previous, session: current, workspace: verified, error: null }));
       })().catch(async (cause) => {
         if (disposed || pending.generation !== bootstrapGeneration.current) return;
