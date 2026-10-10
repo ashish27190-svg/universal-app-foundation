@@ -20,6 +20,8 @@ export class LocalVaultOwnershipConflictError extends Error {
 }
 
 export interface LocalVaultOwnershipIO {
+  readonly acquireTab: () => Promise<void>;
+  readonly releaseTab: () => Promise<void>;
   readonly readOwner: () => string | null;
   readonly writeOwner: (userId: string) => void;
   readonly removeOwner: () => void;
@@ -44,21 +46,38 @@ export class LocalVaultOwnership {
   attach(userId: string): Promise<void> {
     return this.serialize(async () => {
       if (!userId.trim()) throw new Error('Missing authenticated user identity.');
-      const diskOwner = this.io.readOwner();
-      if (this.connectedUser === userId && diskOwner === userId) return;
-      if (diskOwner !== userId || (this.connectedUser !== null && this.connectedUser !== userId)) {
-        const pending = await this.io.pendingCount();
-        if (pending > 0) {
-          throw new LocalVaultOwnershipConflictError();
+      // Acquire the cross-tab mutex BEFORE reading owner, checking pending
+      // SQLite writes, or starting a sync connector for the new identity.
+      await this.io.acquireTab();
+      try {
+        const diskOwner = this.io.readOwner();
+        if (this.connectedUser === userId && diskOwner === userId) return;
+
+        // An auth switch must halt the OLD uploader before we inspect its
+        // pending queue. Otherwise it could fetch a JWT for the NEW user.
+        if (this.connectedUser !== null && this.connectedUser !== userId) {
+          await this.io.disconnect();
+          this.connectedUser = null;
         }
-        // Clear before writing the new marker. On a failed clear, the old
-        // owner remains recorded and a new user is NOT attached.
-        await this.io.clearDatabase();
+        if (diskOwner !== userId) {
+          const pending = await this.io.pendingCount();
+          if (pending > 0) throw new LocalVaultOwnershipConflictError();
+          // Clear before writing the new marker. A failed clear leaves the
+          // prior marker in place and must never attach a second account.
+          await this.io.clearDatabase();
+          this.connectedUser = null;
+          this.io.writeOwner(userId);
+        }
+        await this.io.connect();
+        this.connectedUser = userId;
+      } catch (error) {
+        // An unsuccessful new attachment must not hold the mutex. Ensure no
+        // partial connector remains active before another tab can acquire.
+        await this.io.disconnect();
         this.connectedUser = null;
-        this.io.writeOwner(userId);
+        await this.io.releaseTab();
+        throw error;
       }
-      await this.io.connect();
-      this.connectedUser = userId;
     });
   }
 
@@ -71,6 +90,7 @@ export class LocalVaultOwnership {
       await this.io.clearDatabase();
       this.connectedUser = null;
       this.io.removeOwner();
+      await this.io.releaseTab();
     });
   }
 
@@ -80,6 +100,7 @@ export class LocalVaultOwnership {
     return this.serialize(async () => {
       await this.io.disconnect();
       this.connectedUser = null;
+      await this.io.releaseTab();
     });
   }
 }
