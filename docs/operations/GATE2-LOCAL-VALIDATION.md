@@ -24,6 +24,12 @@ cd infrastructure
 
 Do not run `db reset --linked` or `db push` as part of this testing workflow.
 
+## Incremental security fix — atomic `keep_server` (10 Oct 2026)
+- The `keep_server_conflict_transaction` RPC is callable by `service_role` only; SQL validates that the Edge Function-provided actor has active owner/admin membership in the affected workspace.
+- Conflict row locking, closure, and audit insertion happen inside one PostgreSQL transaction. A failed audit insertion rolls back the closure; concurrent keep-server requests should produce one `resolved` response, then `already_resolved`.
+- Local HTTP tests verify one audit for initial closure, none for retries, and one audit across simultaneous closure requests. pgTAP verifies authenticated clients cannot execute the privileged RPC.
+- This **does not** make `reapply_client` or `sync-apply` transactional: they still need dedicated atomicity and idempotency work before merging PR #5. Running CI or local tests is necessary but not sufficient to claim staging or production readiness.
+
 ## Claims and limitations
 - A green result would prove reproducible local migrations and the pgTAP assertions for workspace selection, role-based write helper, browser write denial, private mutation ledger, and RPC bootstrap idempotence.
 - Once green, it proves the **local** Edge Function HTTP implementation alongside the database access rules. It **does not** prove hosted Edge deployment, PowerSync stream delivery, offline persistence across browser restarts, two-device convergence, or staging deployment.
