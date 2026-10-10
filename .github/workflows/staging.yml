@@ -1,9 +1,18 @@
-name: Deploy Staging
+name: Deploy Staging (Guarded)
 
+# Deliberately manual-only. A push to main must never automatically publish a
+# potentially unprotected or disconnected staging app.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
+    inputs:
+      action:
+        description: "Run an isolated build check, or request private staging deployment"
+        required: true
+        type: choice
+        default: preflight_only
+        options:
+          - preflight_only
+          - deploy_private_staging
 
 permissions:
   contents: read
@@ -13,7 +22,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  preflight:
+    name: Validate candidate without touching hosted services
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: node scripts/validate-staging-readiness.mjs --self-test
+      - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
+
   deploy:
+    name: Deploy only after dedicated staging and private Access approvals
+    if: ${{ inputs.action == 'deploy_private_staging' }}
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: staging
@@ -23,11 +50,14 @@ jobs:
       VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
       VITE_POWERSYNC_URL: ${{ secrets.STAGING_POWERSYNC_URL }}
       VITE_SENTRY_DSN: ${{ secrets.STAGING_SENTRY_DSN }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+      SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      STAGING_SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
-      SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+      STAGING_PRIVATE_ACCESS_CONFIRMED: ${{ secrets.STAGING_PRIVATE_ACCESS_CONFIRMED }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -36,14 +66,20 @@ jobs:
           package-manager-cache: false
       - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
       - run: pnpm install --frozen-lockfile
-      - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
-      - name: Apply Supabase migrations
+      - name: Validate only the dedicated UAF staging project is configured
+        run: node scripts/validate-staging-readiness.mjs --deploy
+      - name: Build with staging public configuration
+        run: pnpm --filter @uaf/reference-app build
+      - name: Apply staging migrations (requires separate operator approval)
         run: |
           pnpm supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
           pnpm supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
-      - name: Deploy Supabase Edge Functions
+      - name: Deploy UAF Edge Functions only to dedicated staging
         run: |
           pnpm supabase functions deploy sync-apply --project-ref "$SUPABASE_PROJECT_REF"
           pnpm supabase functions deploy resolve-conflict --project-ref "$SUPABASE_PROJECT_REF"
-      - name: Deploy Cloudflare staging PWA
+      - name: Deploy private Cloudflare staging PWA
+        # IMPORTANT: Cloudflare Access policy is configured/verified outside
+        # this workflow. A confirmation secret is a human release gate, not
+        # cryptographic verification of the Access policy.
         run: pnpm wrangler deploy --config apps/reference-app/wrangler.jsonc --env staging
