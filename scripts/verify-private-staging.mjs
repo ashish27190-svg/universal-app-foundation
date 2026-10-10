@@ -23,7 +23,7 @@ export function parseProtectedStagingUrl(raw, workersSubdomain) {
 
 export function isAccessChallenge(url, status, location, approvedTeamDomain) {
   if (![301, 302, 303, 307, 308].includes(status) || !location ||
-      !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.cloudflareaccess\\.com$/.test(approvedTeamDomain ?? '')) {
+      !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.cloudflareaccess\.com$/.test(approvedTeamDomain ?? '')) {
     return false;
   }
   try {
