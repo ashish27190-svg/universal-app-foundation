@@ -48,11 +48,17 @@ for (const token of [
   'environment: staging',
   'STAGING_SUPABASE_PROJECT_REF',
   'node scripts/validate-staging-readiness.mjs --e2e',
+  'E2E_SECOND_EMAIL', 'E2E_SECOND_PASSWORD',
 ]) {
   if (!connectedE2E.includes(token)) throw new Error(`Connected E2E missing guard: ${token}`);
 }
 if (/\\nschedule:\\s*(\\n|$)/.test(connectedE2E)) {
   throw new Error('Connected E2E should remain manual while staging is paused.');
+}
+
+if (!existsSync('apps/reference-app/tests/e2e/tenant-isolation.spec.ts') ||
+    !existsSync('apps/reference-app/tests/e2e/offline-restart.spec.ts')) {
+  throw new Error('Staging E2E must include distinct-user isolation and offline-restart journeys.');
 }
 
 console.log('PWA/release invariant validation: PASS');
