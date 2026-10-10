@@ -78,7 +78,9 @@ export class LocalVaultOwnership {
       } catch (error) {
         // An unsuccessful new attachment must not hold the mutex. Ensure no
         // partial connector remains active before another tab can acquire.
-        if (cleanupDisconnectRequired) await this.io.disconnect();
+        // Also stop an already-active connector if readOwner() throws
+        // (for example, browser storage revoked mid-session).
+        if (cleanupDisconnectRequired || this.connectedUser !== null) await this.io.disconnect();
         this.connectedUser = null;
         await this.io.releaseTab();
         throw error;
