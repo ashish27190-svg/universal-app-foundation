@@ -61,7 +61,7 @@ describe('explicit conflict review gate', () => {
     expect(reviewed).not.toBeNull();
     expect(matchesReviewedSnapshot(reviewed!, conflict)).toBe(true);
     expect(matchesReviewedSnapshot(reviewed!, null)).toBe(false);
-    expect(matchesReviewedSnapshot(reviewed!, { ...conflict, serverRevision: 4 })).toBe(false);
+    expect(matchesReviewedSnapshot(reviewed!, { ...conflict, serverRevision: 4 as WriteConflict['serverRevision'] })).toBe(false);
     expect(matchesReviewedSnapshot(reviewed!, { ...conflict, serverPayload: { ...conflict.serverPayload, notes: 'Changed since review' } })).toBe(false);
     expect(matchesReviewedSnapshot(reviewed!, { ...conflict, clientPayload: { name: 'Changed locally' } })).toBe(false);
   });
