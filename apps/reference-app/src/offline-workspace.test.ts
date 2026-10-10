@@ -54,7 +54,7 @@ describe('last-confirmed personal workspace offline startup', () => {
   it('refuses expired or absent sessions and near-expiry credentials', () => {
     const { storage } = fixture();
     saveConfirmedPersonalWorkspace(storage, session, context, now);
-    const { expiresAt: _expiresAt, ...withoutExpiry } = session;
+    const withoutExpiry: AuthSession = { accessToken: session.accessToken, user: session.user };
     expect(readConfirmedPersonalWorkspace(storage, withoutExpiry, now)).toBeNull();
     expect(readConfirmedPersonalWorkspace(storage, { ...session, expiresAt: Math.floor((now - 1000) / 1000) }, now)).toBeNull();
     expect(readConfirmedPersonalWorkspace(storage, { ...session, expiresAt: Math.floor((now + 10_000) / 1000) }, now)).toBeNull();
