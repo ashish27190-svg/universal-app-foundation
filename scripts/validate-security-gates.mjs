@@ -57,6 +57,24 @@ for (const functionName of ['sync-apply', 'resolve-conflict']) {
   if (!pattern.test(functionsConfig)) violations.push(`${functionName} must keep Supabase platform JWT verification enabled`);
 }
 
+// Static regression checks complement (but do not replace) connected role tests.
+const syncGateway = fs.readFileSync(
+  path.join(root, 'infrastructure/supabase/functions/sync-apply/index.ts'),
+  'utf8',
+);
+const conflictResolver = fs.readFileSync(
+  path.join(root, 'infrastructure/supabase/functions/resolve-conflict/index.ts'),
+  'utf8',
+);
+for (const [name, source] of [['sync-apply', syncGateway], ['resolve-conflict', conflictResolver]]) {
+  if (!/\.rpc\(['"]can_write_workspace['"]/.test(source)) {
+    violations.push(`${name} must verify writer permission before admin-backed mutations`);
+  }
+}
+if (/if\s*\(!workspace\)\s*\{\s*await\s+recordIssue/.test(syncGateway)) {
+  violations.push('sync-apply must not log unauthorized mutations into another workspace');
+}
+
 if (violations.length) {
   console.error('Security invariant validation failed:\n' + violations.map((item) => `- ${item}`).join('\n'));
   process.exit(1);
