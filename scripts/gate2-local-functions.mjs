@@ -195,5 +195,66 @@ assert(attempts.every(r=>r.status===200),'concurrent keep-server requests comple
 assert(attempts.map(r=>r.data.status).sort().join(',')==='already_resolved,resolved','concurrent keep-server returns one winner and one retry');
 assert((await rows('audit_events',{correlation_id:'eq.'+concurrentConflictId})).length===1,'concurrent conflict closure emits exactly one audit');
 
+
+// Atomic sync: concurrent identical creates must serialize to one business row,
+// one ledger row, and one audit row, with the second attempt idempotent.
+const sameId=randomUUID(), raceMutation=envelope(wa,sameId);
+const raceResults=await Promise.all([apply(a,raceMutation),apply(a,raceMutation)]);
+assert(raceResults.every(r=>r.status===200),'concurrent identical sync requests succeed');
+assert(raceResults.map(r=>r.data.outcomes?.[0]?.status).sort().join(',')==='applied,idempotent','concurrent identical sync creates exactly once');
+assert((await rows('household_assets',{id:'eq.'+sameId})).length===1,'concurrent create has one entity');
+assert((await rows('processed_mutations',{mutation_id:'eq.'+raceMutation.mutationId})).length===1,'concurrent create has one ledger entry');
+assert((await rows('audit_events',{correlation_id:'eq.'+raceMutation.mutationId})).length===1,'concurrent create has one correlated audit');
+
+// Different mutation IDs against the same revision must produce exactly one
+// revision winner and one durable conflict; neither may overwrite silently.
+const contender1=envelope(wa,sameId,randomUUID(),'update',{name:'Contender One'},1);
+const contender2=envelope(wa,sameId,randomUUID(),'update',{name:'Contender Two'},1);
+const revisionResults=await Promise.all([apply(a,contender1),apply(a,contender2)]);
+assert(revisionResults.every(r=>r.status===200),'concurrent different revision updates return outcomes');
+assert(revisionResults.map(r=>r.data.outcomes?.[0]?.status).sort().join(',')==='applied,conflict','same-revision competing changes yield winner and conflict');
+assert((await rows('household_assets',{id:'eq.'+sameId}))[0]?.revision===2,'competing updates advance revision only once');
+const conflictMutation=revisionResults[0].data.outcomes[0].status==='conflict'?contender1:contender2;
+const winnerMutation=conflictMutation===contender1?contender2:contender1;
+assert((await rows('write_conflicts',{mutation_id:'eq.'+conflictMutation.mutationId})).length===1,'losing update records one conflict');
+assert((await rows('processed_mutations',{mutation_id:'eq.'+conflictMutation.mutationId}))[0]?.result_status==='conflict','losing update is durably idempotent');
+assert((await rows('audit_events',{correlation_id:'eq.'+winnerMutation.mutationId})).length===1,'winning update records one audit');
+assert((await rows('audit_events',{correlation_id:'eq.'+conflictMutation.mutationId})).length===0,'losing update never emits success audit');
+
+// Both entity types and lifecycle transitions go through the atomic RPC.
+const serviceId=randomUUID();
+const serviceMutation=envelope(wa,serviceId,randomUUID(),'create',{
+  asset_id:sameId,service_date:'2026-10-10',cost_minor:1200,cost_currency:'INR',provider:'Synthetic provider'
+},null);
+serviceMutation.entityType='asset_service_records';
+const serviceCreate=requireHttp(await apply(a,serviceMutation),200,'atomic service record create');
+assert(serviceCreate.outcomes[0].status==='applied','service record create applied');
+assert((await rows('asset_service_records',{id:'eq.'+serviceId}))[0]?.cost_minor===1200,'service record saved with validated fields');
+assert((await rows('audit_events',{correlation_id:'eq.'+serviceMutation.mutationId})).length===1,'service create audited atomically');
+
+const foreignService=envelope(wb,randomUUID(),randomUUID(),'create',{
+  asset_id:sameId,service_date:'2026-10-10'
+},null);
+foreignService.entityType='asset_service_records';
+const invalidRelation=requireHttp(await apply(b,foreignService),200,'foreign asset reference');
+assert(invalidRelation.outcomes[0].status==='rejected','cross-workspace service relationship rejected');
+assert((await rows('asset_service_records',{id:'eq.'+foreignService.entityId})).length===0,'rejected relation saves no service record');
+assert((await rows('processed_mutations',{mutation_id:'eq.'+foreignService.mutationId})).length===1,'rejected relation outcome is recorded');
+
+const soft=envelope(wa,sameId,randomUUID(),'soft_delete',{},2);
+const softResult=requireHttp(await apply(a,soft),200,'soft delete');
+assert(softResult.outcomes[0].status==='applied','atomic soft delete applied');
+assert((await rows('household_assets',{id:'eq.'+sameId}))[0]?.lifecycle_state==='deleted','asset soft deleted');
+const restored=envelope(wa,sameId,randomUUID(),'restore',{},3);
+const restoreResult=requireHttp(await apply(a,restored),200,'restore');
+assert(restoreResult.outcomes[0].status==='applied','atomic restore applied');
+assert((await rows('household_assets',{id:'eq.'+sameId}))[0]?.revision===4,'delete and restore increment revision');
+
+const invalidAsset=envelope(wa,randomUUID(),randomUUID(),'create',{name:'',category:'appliance'});
+const invalidResult=requireHttp(await apply(a,invalidAsset),200,'invalid field rejection');
+assert(invalidResult.outcomes[0].status==='rejected','invalid create records rejection');
+assert((await rows('processed_mutations',{mutation_id:'eq.'+invalidAsset.mutationId}))[0]?.result_status==='rejected','invalid create has rejection ledger');
+assert((await rows('household_assets',{id:'eq.'+invalidAsset.entityId})).length===0,'invalid create never writes entity');
+
 console.log('PASS: '+checks+' local HTTP/authorization assertions.');
 console.log('Scope: local Edge gateway; no PowerSync cloud streaming or real multi-device browser proof.');
