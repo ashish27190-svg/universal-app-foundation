@@ -88,6 +88,22 @@ export class LocalVaultOwnership {
     });
   }
 
+  /**
+   * On network restoration, attach the remote connector for the same owner
+   * without clearing or changing its offline queue. Cross-account reconnect
+   * is never allowed.
+   */
+  reconnectSameOwner(userId: string): Promise<void> {
+    return this.serialize(async () => {
+      if (!userId.trim() || this.connectedUser !== userId ||
+          this.io.readOwner() !== userId) {
+        throw new Error('Cannot reconnect a local vault belonging to another account.');
+      }
+      await this.io.acquireTab();
+      await this.io.connect();
+    });
+  }
+
   logout(): Promise<void> {
     return this.serialize(async () => {
       const pending = await this.io.pendingCount();
