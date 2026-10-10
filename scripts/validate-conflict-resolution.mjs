@@ -49,8 +49,20 @@ for (const token of ['LocalWriteConflictRepository', 'HttpConflictResolver', 'ke
 
 const ui = readFileSync(requiredFiles[3], 'utf8');
 if (!ui.includes('Needs attention')) throw new Error('Conflict review must be visible to the user.');
-if (!ui.includes('Keep server version') || !ui.includes('Reapply my version') || !ui.includes('conflict.serverRevision')) {
-  throw new Error('Conflict UI must expose both safe Phase-1 choices when applicable.');
+if (!ui.includes('Keep server version') ||
+    !ui.includes('Review reapplication') ||
+    !ui.includes('Confirm reapply my version') ||
+    !ui.includes('matchesReviewedSnapshot') ||
+    !ui.includes('fieldsToReview')) {
+  throw new Error('Conflict UI must require a current, field-by-field review before reapplication.');
+}
+const review = readFileSync('apps/reference-app/src/components/conflict-review.ts', 'utf8');
+for (const token of ['canReviewAndReapply', 'snapshotForReview', 'matchesReviewedSnapshot',
+                     'serverPayloadJson', 'clientPayloadJson', 'fieldsToReview']) {
+  if (!review.includes(token)) throw new Error(`Conflict review requires ${token}.`);
+}
+if (!existsSync('apps/reference-app/src/components/conflict-review.test.ts')) {
+  throw new Error('Conflict review regression tests are required.');
 }
 
 console.log('Conflict-resolution invariant validation: PASS');
