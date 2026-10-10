@@ -1,62 +1,96 @@
-// Before and after staging deployment, confirm the existing staging URL
-// redirects AN UNAUTHENTICATED browser to Cloudflare Access.
-// This is a fail-closed network check, not proof that all alternate Cloudflare
-// routes or future policy changes are protected. Operator must separately
-// confirm Worker-level Access covers every domain and preview.
+// Guard against publishing a UAF staging PWA to an unprotected workers.dev
+// origin. This checks an anonymous HTTP redirect only; human review must still
+// verify the Cloudflare Worker-level Access policy on EVERY route/domain.
+import { fileURLToPath } from 'node:url';
 import { validateStagingEnvironment } from './validate-staging-readiness.mjs';
 
-const errors = validateStagingEnvironment(process.env, 'deploy');
-if (errors.length) {
-  for (const error of errors) console.error('STAGING PRIVACY GATE: ' + error);
-  process.exit(1);
-}
+const WORKER_HOST = /^uaf-household-vault-staging\.[a-z0-9-]+\.workers\.dev$/;
 
-const raw = process.env.STAGING_PROTECTED_URL;
-if (!raw) {
-  console.error('STAGING PRIVACY GATE: STAGING_PROTECTED_URL is required.');
-  process.exit(1);
-}
-
-let url;
-try {
-  url = new URL(raw);
-  if (url.protocol !== 'https:' || url.port || url.username || url.password ||
-      url.pathname !== '/' || url.search || url.hash ||
-      !/^uaf-household-vault-staging\\.[a-z0-9-]+\\.workers\\.dev$/.test(url.hostname)) {
-    throw new Error('Invalid');
+export function parseProtectedStagingUrl(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.port || url.username || url.password ||
+        url.pathname !== '/' || url.search || url.hash || !WORKER_HOST.test(url.hostname)) return null;
+    return url;
+  } catch {
+    return null;
   }
-} catch {
-  console.error('STAGING PRIVACY GATE: URL must be the staging Worker workers.dev origin.');
-  process.exit(1);
 }
 
-let response;
-try {
-  response = await fetch(url, {
-    redirect: 'manual',
-    headers: { Accept: 'text/html', 'Cache-Control': 'no-cache' },
-    signal: AbortSignal.timeout(10000),
-  });
-} catch {
-  console.error('STAGING PRIVACY GATE: Cannot verify private Access; refusing deployment.');
-  process.exit(1);
-}
-
-const location = response.headers.get('location');
-let accessLogin = false;
-try {
-  if (location) {
-    const to = new URL(location, url);
-    accessLogin = to.protocol === 'https:' && (
-      to.hostname.endsWith('.cloudflareaccess.com') ||
-      (to.hostname === url.hostname && to.pathname.startsWith('/cdn-cgi/access/login'))
-    );
+export function isAccessChallenge(url, status, location) {
+  if (![301, 302, 303, 307, 308].includes(status) || !location) return false;
+  try {
+    const next = new URL(location, url);
+    if (next.protocol !== 'https:' || next.username || next.password) return false;
+    // A Cloudflare Access login challenge may redirect to the team's
+    // cloudflareaccess.com login domain or its same-origin access endpoint.
+    return (next.hostname.endsWith('.cloudflareaccess.com') && next.hostname !== 'cloudflareaccess.com') ||
+      (next.hostname === url.hostname && next.pathname.startsWith('/cdn-cgi/access/login'));
+  } catch {
+    return false;
   }
-} catch { /* fail closed */ }
-
-if (![301,302,303,307,308].includes(response.status) || !accessLogin) {
-  console.error('STAGING PRIVACY GATE: The public request was not challenged by Cloudflare Access. Refusing deployment.');
-  process.exit(1);
 }
 
-console.log('PASS: anonymous staging URL redirected to Cloudflare Access. Verify Worker-level policy coverage separately.');
+function selfTest() {
+  const valid = 'https://uaf-household-vault-staging.example-account.workers.dev/';
+  const u = parseProtectedStagingUrl(valid);
+  const assert = (ok, message) => {
+    if (!ok) throw new Error('Private staging gate self-test: ' + message);
+  };
+  assert(Boolean(u), 'expected staging URL accepted');
+  assert(!parseProtectedStagingUrl('https://uaf-household-vault-staging.example-account.workers.dev.evil.test/'), 'lookalike origin rejected');
+  assert(!parseProtectedStagingUrl('https://uaf-household-vault-staging.example-account.workers.dev/preview'), 'alternate route rejected');
+  assert(!parseProtectedStagingUrl('https://uaf-household-vault-staging.example-account.workers.dev/?skip=1'), 'query bypass rejected');
+  assert(!parseProtectedStagingUrl('https://my-project.example.workers.dev/'), 'foreign Worker rejected');
+  assert(isAccessChallenge(u, 302, 'https://example-account.cloudflareaccess.com/cdn-cgi/access/login?token=synthetic'), 'expected login redirect accepted');
+  assert(isAccessChallenge(u, 302, '/cdn-cgi/access/login?redirect_url=synthetic'), 'same-origin Access redirect accepted');
+  assert(!isAccessChallenge(u, 200, '/cdn-cgi/access/login'), 'anonymous HTML/200 rejected');
+  assert(!isAccessChallenge(u, 302, 'https://cloudflareaccess.com.attacker.invalid/'), 'spoofed Access domain rejected');
+  assert(!isAccessChallenge(u, 302, 'https://attacker.invalid/'), 'external open redirect rejected');
+  assert(!isAccessChallenge(u, 302, '/'), 'unprotected redirect rejected');
+  console.log('PASS: 11 private staging URL and anonymous Access challenge assertions.');
+}
+
+async function main() {
+  if (process.argv.includes('--self-test')) {
+    selfTest();
+    return;
+  }
+  const errors = validateStagingEnvironment(process.env, 'deploy');
+  if (errors.length) {
+    for (const error of errors) console.error('STAGING PRIVACY GATE: ' + error);
+    process.exitCode = 1;
+    return;
+  }
+  const url = parseProtectedStagingUrl(process.env.STAGING_PROTECTED_URL);
+  if (!url) {
+    console.error('STAGING PRIVACY GATE: STAGING_PROTECTED_URL must be the dedicated HTTPS staging workers.dev root.');
+    process.exitCode = 1;
+    return;
+  }
+
+  let response;
+  try {
+    response = await fetch(url, {
+      redirect: 'manual',
+      headers: { Accept: 'text/html', 'Cache-Control': 'no-cache' },
+      signal: AbortSignal.timeout(10000),
+    });
+  } catch {
+    console.error('STAGING PRIVACY GATE: Cannot verify anonymous Access challenge; refusing deployment.');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!isAccessChallenge(url, response.status, response.headers.get('location'))) {
+    console.error('STAGING PRIVACY GATE: Anonymous request not challenged by Cloudflare Access; refusing deployment.');
+    process.exitCode = 1;
+    return;
+  }
+  console.log('PASS: anonymous staging URL challenged by Cloudflare Access (additional route/policy review required).');
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  await main();
+}
