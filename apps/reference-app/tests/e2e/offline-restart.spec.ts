@@ -79,3 +79,38 @@ test('an offline asset survives browser reload and converges after reconnect', a
     await contextA.close();
   }
 });
+
+test('offline edits without a reload cannot resume upload before membership is reverified', async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await signIn(page);
+    await waitForSynced(page);
+    const assetName = 'Reconnect no reload ' + Date.now();
+    await context.setOffline(true);
+    await expect(page.getByText('Offline', { exact: true })).toBeVisible();
+    await createAsset(page, assetName);
+
+    let allowCheck = () => {};
+    const checkCanComplete = new Promise<void>((resolve) => { allowCheck = resolve; });
+    await page.route('**/rest/v1/rpc/ensure_personal_workspace', async (route) => {
+      await checkCanComplete;
+      await route.continue();
+    });
+    const request = page.waitForRequest('**/rest/v1/rpc/ensure_personal_workspace', { timeout: 20_000 });
+    await context.setOffline(false);
+    try {
+      await request;
+      await expect(page.getByRole('heading', { name: 'Your assets' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Add asset' })).toHaveCount(0);
+      await expect(page.getByText('Opening your local vault')).toBeVisible();
+    } finally {
+      allowCheck();
+      await page.unroute('**/rest/v1/rpc/ensure_personal_workspace');
+    }
+    await waitForSynced(page);
+    await expect(activeAssetCard(page, assetName)).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
