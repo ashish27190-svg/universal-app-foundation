@@ -330,5 +330,43 @@ assert(differentChoices.map(r=>r.data.status).sort().join(',')==='already_resolv
 assert((await rows('audit_events',{correlation_id:'eq.'+choiceConflictId})).length===1,'competing choices leave exactly one resolution audit');
 assert((await rows('write_conflicts',{id:'eq.'+choiceConflictId}))[0]?.resolved_at!==null,'choice race conflict ends resolved');
 
+// Lifecycle conflict reapplication must be atomic too, even though it has no
+// editable fields. Confirm soft-delete and restore never become an empty update.
+const deletionBefore=(await rows('household_assets',{id:'eq.'+sameId}))[0];
+assert(deletionBefore.lifecycle_state==='active','lifecycle reapply fixture starts active');
+const deletionConflictId=randomUUID();
+await adminInsert('write_conflicts',[{
+  id:deletionConflictId,workspace_id:wa,entity_type:'household_assets',
+  entity_id:sameId,conflict_type:'conflict',operation:'soft_delete',
+  client_revision:deletionBefore.revision-1,server_revision:deletionBefore.revision,
+  client_payload:{},server_payload:deletionBefore
+}]);
+const deletionResult=requireHttp(
+  await resolveConflict(a,deletionConflictId,'reapply_client',deletionBefore.revision),
+  200,'reviewed soft-delete reapply');
+assert(deletionResult.status==='resolved','reviewed soft-delete conflict resolves');
+const afterDeletion=(await rows('household_assets',{id:'eq.'+sameId}))[0];
+assert(afterDeletion.lifecycle_state==='deleted'&&afterDeletion.revision===deletionBefore.revision+1,'reapplied delete increments revision once');
+assert((await rows('audit_events',{correlation_id:'eq.'+deletionConflictId})).length===1,'reapplied delete records exactly one resolution audit');
+const deletionRepeat=requireHttp(
+  await resolveConflict(a,deletionConflictId,'reapply_client',deletionBefore.revision),
+  200,'retry deleted conflict');
+assert(deletionRepeat.status==='already_resolved','reapplied delete retry does not apply again');
+
+const restorationConflictId=randomUUID();
+await adminInsert('write_conflicts',[{
+  id:restorationConflictId,workspace_id:wa,entity_type:'household_assets',
+  entity_id:sameId,conflict_type:'conflict',operation:'restore',
+  client_revision:afterDeletion.revision-1,server_revision:afterDeletion.revision,
+  client_payload:{},server_payload:afterDeletion
+}]);
+const restorationResult=requireHttp(
+  await resolveConflict(a,restorationConflictId,'reapply_client',afterDeletion.revision),
+  200,'reviewed restore reapply');
+assert(restorationResult.status==='resolved','reviewed restore conflict resolves');
+const afterRestoration=(await rows('household_assets',{id:'eq.'+sameId}))[0];
+assert(afterRestoration.lifecycle_state==='active'&&afterRestoration.revision===afterDeletion.revision+1,'reapplied restore increments revision once');
+assert((await rows('audit_events',{correlation_id:'eq.'+restorationConflictId})).length===1,'reapplied restore writes one resolution audit');
+
 console.log('PASS: '+checks+' local HTTP/authorization assertions.');
 console.log('Scope: local Edge gateway; no PowerSync cloud streaming or real multi-device browser proof.');
