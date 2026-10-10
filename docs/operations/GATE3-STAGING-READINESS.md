@@ -1,6 +1,8 @@
 # Gate 3 — private Household Vault staging: release checklist
 
 **Status on 10 Oct 2026: blocked on hosted services, not deployed.**
+The prior final branch at `e444597e` passed both standard CI and disposable local
+Supabase; subsequent changes are validated independently on their latest commit.
 
 Scope: only the existing dedicated `uaf-household-vault-staging` Supabase
 project, ref `vdhfayratdsoexltyrku`. It was **INACTIVE** at the latest
@@ -36,15 +38,21 @@ inactive PowerSync, or unknown database target.
   An attestation alone is **not** sufficient proof of privacy.
 - `scripts/verify-private-staging.mjs` refuses deployment unless an
   unauthenticated request to the **pre-existing** staging Worker URL redirects
-  to the Cloudflare Access login. It repeats this check after deployment.
+  to the Cloudflare Access login. Its URL and challenge checks are covered by
+  11 synthetic positive/negative assertions in CI. It repeats this check after deployment.
   This check cannot prove protection of alternative domains or policies that
   change later. A Worker-level Access policy still requires human verification.
 - Staging Wrangler disables preview URLs; this does not replace Access on the
   regular `workers.dev` and any custom domain.
 - `.github/workflows/connected-e2e.yml` now requires actual staging credentials
   and exact project identity. It is manual-only while staging is inactive.
-  Without credentials, it **fails**, rather than silently passing zero tests.
-- The browser suite adds an offline asset-create, browser-reload, reconnect and
+  Without credentials for **two distinct synthetic accounts**, it **fails**, rather than silently passing zero tests.
+- The Supabase CLI in the protected deployment job now explicitly uses
+  `--workdir infrastructure`, where the actual config/migrations/functions live,
+  and prints a migration **dry-run** before the approved staging push. No
+  migrations were run on a hosted database during this preparation.
+- The browser suite includes two separate-account isolation checks, in addition
+  to offline asset-create, browser-reload, reconnect and
   fresh-browser convergence journey. It **has not been executed** against hosted
   PowerSync or a real private staging deployment.
 
@@ -69,9 +77,12 @@ inactive PowerSync, or unknown database target.
    and `STAGING_PRIVATE_ACCESS_CONFIRMED` with the exact release-approval value
    required by the staging validator. The optional `STAGING_SENTRY_DSN`
    must not enable PII collection.
-5. For connected E2E, provide `STAGING_E2E_EMAIL` and
-   `STAGING_E2E_PASSWORD` for a dedicated synthetic test account in staging.
-   Do not reuse any real personal/business credentials.
+5. For connected E2E, provide `STAGING_E2E_EMAIL`,
+   `STAGING_E2E_PASSWORD`, `STAGING_E2E_SECOND_EMAIL` and
+   `STAGING_E2E_SECOND_PASSWORD` for **two distinct synthetic accounts**,
+   each with its own personal workspace. Do not reuse real personal/business
+   credentials. Fresh browser contexts must receive only their own records.
+   Direct hosted RLS/role-revocation testing remains a separate gate.
 6. Run **Deploy Staging (Guarded) → preflight_only** first. Once the
    environment, migration review and private Access policy are verified,
    explicitly run `deploy_private_staging` from the reviewed branch.
