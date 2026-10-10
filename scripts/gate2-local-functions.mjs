@@ -160,8 +160,28 @@ assert((await rows('write_conflicts',{id:'eq.'+conflictId}))[0]?.resolved_at===n
 const ownerResolution=requireHttp(await resolveConflict(b,conflictId),200,'owner conflict resolution');
 assert(ownerResolution.status==='resolved','owner can keep server version');
 assert((await rows('write_conflicts',{id:'eq.'+conflictId}))[0]?.resolution==='keep_server','owner resolution persisted');
+assert((await rows('audit_events',{correlation_id:'eq.'+conflictId})).length===1,'keep-server resolution writes exactly one audit');
+const retryResolution=requireHttp(await resolveConflict(b,conflictId),200,'retry owner resolution');
+assert(retryResolution.status==='already_resolved','repeated keep-server resolution is idempotent');
+assert((await rows('audit_events',{correlation_id:'eq.'+conflictId})).length===1,'retry emits no duplicate audit');
 const foreignResolution=await resolveConflict(a,conflictId);
 assert(foreignResolution.status===403,'viewer still forbidden after resolution');
+
+// Exercise two concurrent closure attempts against the same row. Exactly one
+// may resolve it; the other must report already_resolved without an extra audit.
+const concurrentConflictId=randomUUID();
+await adminInsert('write_conflicts',[{
+  id:concurrentConflictId,workspace_id:shared,entity_type:'household_assets',
+  entity_id:randomUUID(),conflict_type:'revision',operation:'update',
+  client_revision:1,server_revision:2
+}]);
+const attempts=await Promise.all([
+  resolveConflict(b,concurrentConflictId),
+  resolveConflict(b,concurrentConflictId)
+]);
+assert(attempts.every(r=>r.status===200),'concurrent keep-server requests complete successfully');
+assert(attempts.map(r=>r.data.status).sort().join(',')==='already_resolved,resolved','concurrent keep-server returns one winner and one retry');
+assert((await rows('audit_events',{correlation_id:'eq.'+concurrentConflictId})).length===1,'concurrent conflict closure emits exactly one audit');
 
 console.log('PASS: '+checks+' local HTTP/authorization assertions.');
 console.log('Scope: local Edge gateway; no PowerSync cloud streaming or real multi-device browser proof.');
