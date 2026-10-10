@@ -28,7 +28,8 @@ Do not run `db reset --linked` or `db push` as part of this testing workflow.
 - The `keep_server_conflict_transaction` RPC is callable by `service_role` only; SQL validates that the Edge Function-provided actor has active owner/admin membership in the affected workspace.
 - Conflict row locking, closure, and audit insertion happen inside one PostgreSQL transaction. A failed audit insertion rolls back the closure; concurrent keep-server requests should produce one `resolved` response, then `already_resolved`.
 - Local HTTP tests verify one audit for initial closure, none for retries, and one audit across simultaneous closure requests. pgTAP verifies authenticated clients cannot execute the privileged RPC.
-- This **does not** make `reapply_client` or `sync-apply` transactional: they still need dedicated atomicity and idempotency work before merging PR #5. Running CI or local tests is necessary but not sufficient to claim staging or production readiness.
+- `sync-apply` now stores a SHA-256 fingerprint of the canonical request envelope in the existing mutation ledger and refuses retries that reuse an ID with a different payload, entity, user, or workspace (HTTP 409). Older ledger rows without a fingerprint are treated as unverifiable rather than trusted. Local HTTP tests exercise both valid retries and divergent-ID reuse.
+- This **does not** make `reapply_client` or `sync-apply` transactional. Two concurrent sync requests can still race before a ledger row exists, and an entity write can still commit separately from its audit/ledger entries. These remain release blockers. Running CI or local tests is necessary but not sufficient to claim staging or production readiness.
 
 ## Claims and limitations
 - A green result would prove reproducible local migrations and the pgTAP assertions for workspace selection, role-based write helper, browser write denial, private mutation ledger, and RPC bootstrap idempotence.
