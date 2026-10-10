@@ -1,7 +1,7 @@
 -- Disposable UAF local Gate-2 RLS test; never run against a linked production project.
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(27);
+select extensions.plan(34);
 
 -- Synthetic users. Transactional fixture data rolls back after pgTAP execution.
 insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
@@ -105,6 +105,68 @@ select extensions.is(
   'Audit failure leaves no partial audit');
 drop trigger gate2_test_reject_audit on public.audit_events;
 drop function public.gate2_test_reject_audit();
+
+-- The privileged reapply RPC must not be callable by browser users.
+select extensions.ok(
+  not pg_catalog.has_function_privilege(
+    'authenticated',
+    'public.reapply_conflict_transaction(uuid,uuid,bigint,jsonb,text)','EXECUTE'
+  ),'Reapply transaction is service-role only');
+
+-- Inject failure specifically into the FINAL resolution audit (after the
+-- nested business mutation, its ledger/audit, and the conflict closure).
+-- All earlier work must roll back, leaving the conflict open for retry.
+insert into public.write_conflicts (
+  id,workspace_id,entity_type,entity_id,conflict_type,operation,
+  client_revision,server_revision,client_payload
+) values (
+  'a1000000-0000-4000-8000-000000000661',
+  'a1000000-0000-4000-8000-000000000011',
+  'household_assets','a1000000-0000-4000-8000-000000000101',
+  'revision','update',1,1,'{"name":"Never committed reapply"}'::jsonb
+);
+create or replace function public.gate2_test_reject_reapply_audit()
+returns trigger language plpgsql as $reapply_trigger$
+begin
+  if new.action = 'write_conflict.reapply_client'
+     and new.correlation_id = 'a1000000-0000-4000-8000-000000000661'::uuid then
+    raise exception 'Injected resolution audit failure';
+  end if;
+  return new;
+end;
+$reapply_trigger$;
+create trigger gate2_test_reject_reapply_audit
+before insert on public.audit_events
+for each row execute function public.gate2_test_reject_reapply_audit();
+
+select extensions.throws_ok($check$
+  select public.reapply_conflict_transaction(
+    'a1000000-0000-4000-8000-000000000661',
+    'a1000000-0000-4000-8000-000000000001',
+    1,
+    '{"name":"Never committed reapply"}'::jsonb
+  )
+$check$,'P0001','Injected resolution audit failure','Final resolution audit failure aborts whole reapply transaction');
+
+select extensions.is((select revision::int from public.household_assets
+  where id='a1000000-0000-4000-8000-000000000101'),1,
+  'Reapply failure restores previous entity revision');
+select extensions.is((select name from public.household_assets
+  where id='a1000000-0000-4000-8000-000000000101'),'Asset A',
+  'Reapply failure restores previous entity data');
+select extensions.is((select count(*)::int from public.processed_mutations
+  where entity_id='a1000000-0000-4000-8000-000000000101'),0,
+  'Reapply failure rolls back nested processing ledger');
+select extensions.is((select count(*)::int from public.audit_events
+  where entity_id='a1000000-0000-4000-8000-000000000101'),0,
+  'Reapply failure rolls back nested and final audit events');
+select extensions.is((select count(*)::int from public.write_conflicts
+  where id='a1000000-0000-4000-8000-000000000661'
+    and resolved_at is null),1,
+  'Reapply failure leaves the original conflict unresolved');
+
+drop trigger gate2_test_reject_reapply_audit on public.audit_events;
+drop function public.gate2_test_reject_reapply_audit();
 
 select set_config('request.jwt.claim.sub','',true);
 set local role anon;
