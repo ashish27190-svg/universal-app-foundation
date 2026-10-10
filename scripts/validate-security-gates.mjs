@@ -134,6 +134,25 @@ for (const token of [
     violations.push('Offline reconnection identity recheck missing: ' + token);
   }
 }
+// Offline-to-online is itself a permission boundary. The editor must be
+// unmounted before any server revalidation begins, including a normal session
+// that lost connectivity without reloading the PWA.
+for (const token of [
+  'suspendReferenceAppRemoteSyncWhileOffline',
+  'offlineVerification = { userId: currentUserId, generation }',
+  'workspace: null, loading: true, error: null',
+  'await resumeReferenceAppSyncAfterReconnect()',
+  'workspace: verified, loading: false, error: null',
+]) {
+  if (!app.includes(token)) {
+    violations.push('Offline-to-online editing freeze or sync suspension missing: ' + token);
+  }
+}
+for (const token of ['suspendRemoteWhileOffline', 'reconnectSameOwner(userId)']) {
+  if (!localOwnerGate.includes(token) && !persistence.includes(token)) {
+    violations.push('Offline stream permission gate missing: ' + token);
+  }
+}
 // Offline startup cannot depend on an online workspace RPC when browser
 // connectivity is unavailable. The fallback must be bound to the confirmed
 // personal workspace, current user and an unexpired auth session, and must
