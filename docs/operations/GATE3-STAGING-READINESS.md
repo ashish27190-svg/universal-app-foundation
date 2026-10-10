@@ -69,6 +69,31 @@ pending mutations on account change, or unknown database target.
   sign-in without bypassing the pending-write cleanup rule. This is NOT an
   encryption-at-rest or malicious-device-user security guarantee. Multi-tab
   concurrent account switching remains a hosted acceptance/risk check.
+- Previously the app called Supabase `ensure_personal_workspace` on **every**
+  mount, including after an offline browser restart; that made the cached
+  SQLite asset records unusable until a network connection returned. The app
+  now acquires account-bound SQLite ownership first, then uses its last
+  **server-confirmed personal workspace** while the browser is explicitly
+  offline, if its cached record matches the current user, owner marker, active
+  owner membership and a non-expired local Supabase access token. The local
+  cache has a seven-day maximum age; the access token typically expires much
+  sooner, so this does **not** promise indefinite offline unlock.
+- The offline boot deliberately does NOT open the remote PowerSync stream.
+  On an `online` event it rechecks the authenticated user and actual
+  workspace membership against Supabase, then attaches the original account's
+  mutation queue to PowerSync. If verification fails, the stream is
+  disconnected and the app shows an error without clearing pending SQLite
+  edits. Unknown, expired and different-account caches fail closed.
+- The workspace fallback is a local UX cache, **not a permission grant**.
+  A device's localStorage is not a trusted authorization source; all server
+  writes and sync stream access must still enforce Supabase RLS and workspace
+  membership. A cached workspace from a since-revoked account must never
+  be accepted by the server after reconnect.
+- Six unit tests cover owner/account mismatch, cache expiry, stale/forged
+  membership, unexpired session, malformed data and logout clearing.
+  The offline/reconnect browser acceptance journey now explicitly checks
+  offline reload and later cross-browser convergence; it remains **not run**
+  against hosted private staging.
 - The reference app now holds a **single exclusive Web Lock per browser origin**
   for the lifetime of its local SQLite session. It acquires the lock before
   reading or clearing local ownership and refuses a second tab immediately
