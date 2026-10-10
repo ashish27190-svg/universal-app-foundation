@@ -22,6 +22,7 @@ export function canReviewAndReapply(conflict: WriteConflict): boolean {
     conflict.conflictType === 'conflict' &&
     MUTABLE_ENTITY_TYPES.has(conflict.entityType) &&
     MUTABLE_OPERATIONS.has(conflict.operation ?? '') &&
+    (conflict.operation !== 'update' || Object.keys(conflict.clientPayload).length > 0) &&
     Number.isSafeInteger(conflict.serverRevision) &&
     Number(conflict.serverRevision) > 0
   );
