@@ -49,13 +49,14 @@ export class LocalVaultOwnership {
       // Acquire the cross-tab mutex BEFORE reading owner, checking pending
       // SQLite writes, or starting a sync connector for the new identity.
       await this.io.acquireTab();
+      let cleanupDisconnectRequired = false;
       try {
         const diskOwner = this.io.readOwner();
         if (this.connectedUser === userId && diskOwner === userId) return;
 
         // An auth switch must halt the OLD uploader before we inspect its
         // pending queue. Otherwise it could fetch a JWT for the NEW user.
-        if (this.connectedUser !== null && this.connectedUser !== userId) {
+        if (this.connectedUser !== null && (this.connectedUser !== userId || diskOwner !== userId)) {
           await this.io.disconnect();
           this.connectedUser = null;
         }
@@ -64,16 +65,20 @@ export class LocalVaultOwnership {
           if (pending > 0) throw new LocalVaultOwnershipConflictError();
           // Clear before writing the new marker. A failed clear leaves the
           // prior marker in place and must never attach a second account.
+          cleanupDisconnectRequired = true;
           await this.io.clearDatabase();
+          cleanupDisconnectRequired = false;
           this.connectedUser = null;
           this.io.writeOwner(userId);
         }
+        cleanupDisconnectRequired = true;
         await this.io.connect();
+        cleanupDisconnectRequired = false;
         this.connectedUser = userId;
       } catch (error) {
         // An unsuccessful new attachment must not hold the mutex. Ensure no
         // partial connector remains active before another tab can acquire.
-        await this.io.disconnect();
+        if (cleanupDisconnectRequired) await this.io.disconnect();
         this.connectedUser = null;
         await this.io.releaseTab();
         throw error;
