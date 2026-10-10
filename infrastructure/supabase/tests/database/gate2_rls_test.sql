@@ -1,7 +1,7 @@
 -- Disposable UAF local Gate-2 RLS test; never run against a linked production project.
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(22);
+select extensions.plan(27);
 
 -- Synthetic users. Transactional fixture data rolls back after pgTAP execution.
 insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
@@ -60,6 +60,52 @@ select extensions.is((select count(*)::int from public.household_assets where wo
 select extensions.is((select count(*)::int from public.workspaces where id='a1000000-0000-4000-8000-000000000011'),0,'B cannot read A workspace');
 
 reset role;
+
+-- A normal authenticated browser must never invoke the server transaction RPC.
+select extensions.ok(
+  not pg_catalog.has_function_privilege('authenticated',
+    'public.apply_atomic_mutation(uuid,uuid,uuid,text,uuid,text,bigint,text,jsonb,jsonb,text)','EXECUTE'),
+  'Atomic sync RPC is service-role only');
+
+-- Fault injection: fail exactly when an audit row is inserted. The business
+-- write and ledger must be rolled back in the same PostgreSQL transaction.
+create or replace function public.gate2_test_reject_audit()
+returns trigger language plpgsql as $trigger$
+begin
+  if new.entity_id = 'a1000000-0000-4000-8000-000000000555'::uuid then
+    raise exception 'Injected audit failure';
+  end if;
+  return new;
+end;
+$trigger$;
+create trigger gate2_test_reject_audit
+before insert on public.audit_events
+for each row execute function public.gate2_test_reject_audit();
+
+select extensions.throws_ok($assert$
+  select public.apply_atomic_mutation(
+    'a1000000-0000-4000-8000-000000000556',
+    'a1000000-0000-4000-8000-000000000011',
+    'a1000000-0000-4000-8000-000000000001',
+    'household_assets',
+    'a1000000-0000-4000-8000-000000000555',
+    'create',null,repeat('a',64),
+    '{"name":"Audit fail asset","category":"appliance"}'::jsonb,
+    '{"name":"Audit fail asset","category":"appliance","source":"manual","source_reference":null,"data_quality":"complete","confidence":"high","metadata":{}}'::jsonb
+  )
+$assert$,'P0001','Injected audit failure','Auditing failure aborts atomic mutation');
+select extensions.is(
+  (select count(*)::int from public.household_assets where id='a1000000-0000-4000-8000-000000000555'),0,
+  'Audit failure rolls back the business row');
+select extensions.is(
+  (select count(*)::int from public.processed_mutations where mutation_id='a1000000-0000-4000-8000-000000000556'),0,
+  'Audit failure rolls back the mutation ledger');
+select extensions.is(
+  (select count(*)::int from public.audit_events where correlation_id='a1000000-0000-4000-8000-000000000556'),0,
+  'Audit failure leaves no partial audit');
+drop trigger gate2_test_reject_audit on public.audit_events;
+drop function public.gate2_test_reject_audit();
+
 select set_config('request.jwt.claim.sub','',true);
 set local role anon;
 select extensions.throws_ok($$select id from public.household_assets$$,'42501');
