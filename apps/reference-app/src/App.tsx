@@ -8,6 +8,7 @@ import { uafServices } from './services';
 import {
   connectReferenceAppSync,
   prepareReferenceAppLogout,
+  pauseReferenceAppSyncForAuthChange,
   refreshReferenceAppSyncStatus,
   syncStatusStore,
 } from './sync/persistence';
@@ -36,12 +37,22 @@ export function App() {
       const generation = ++bootstrapGeneration.current;
       if (!session) {
         if (!disposed) setBoot({ session: null, workspace: null, loading: false, error: null });
+        void pauseReferenceAppSyncForAuthChange().catch((cause) => {
+          if (!disposed && generation === bootstrapGeneration.current) {
+            setBoot({
+              session: null,
+              workspace: null,
+              loading: false,
+              error: cause instanceof Error ? cause.message : 'Failed to isolate the local database after sign-out.',
+            });
+          }
+        });
         return;
       }
       if (!disposed) setBoot({ session, workspace: null, loading: true, error: null });
       try {
         const workspace = await uafServices.workspaces.ensurePersonalWorkspace();
-        await connectReferenceAppSync();
+        await connectReferenceAppSync(String(session.user.id));
         if (!disposed && generation === bootstrapGeneration.current) {
           setBoot({ session, workspace, loading: false, error: null });
         }
