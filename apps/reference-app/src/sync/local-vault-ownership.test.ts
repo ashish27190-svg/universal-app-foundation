@@ -90,8 +90,12 @@ describe('Household Vault local user/cache isolation', () => {
 
   it('refuses a new identity when wiping fails and retains the old marker', async () => {
     const x = fixture('account-A');
-    x.io.clearDatabase = vi.fn(async () => { throw new Error('Local SQLite clear failed'); });
-    await expect(x.guard.attach('account-B')).rejects.toThrow('Local SQLite clear failed');
+    const broken: LocalVaultOwnershipIO = {
+      ...x.io,
+      clearDatabase: vi.fn(async () => { throw new Error('Local SQLite clear failed'); }),
+    };
+    const guard = new LocalVaultOwnership(broken);
+    await expect(guard.attach('account-B')).rejects.toThrow('Local SQLite clear failed');
     expect(x.owner()).toBe('account-A');
   });
 
