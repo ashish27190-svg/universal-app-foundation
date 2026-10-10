@@ -68,25 +68,24 @@ export default {
     }
 
     if (request.choice === 'keep_server') {
-      const { error } = await ctx.supabaseAdmin
-        .from('write_conflicts')
-        .update({ resolved_at: new Date().toISOString(), resolution: 'keep_server' })
-        .eq('id', conflict.id)
-        .is('resolved_at', null);
-      if (error) return Response.json({ message: 'Could not resolve conflict.' }, { status: 503 });
-
-      await ctx.supabaseAdmin.from('audit_events').insert({
-        workspace_id: conflict.workspace_id,
-        actor_user_id: userId,
-        actor_type: 'user',
-        action: 'write_conflict.keep_server',
-        entity_type: conflict.entity_type,
-        entity_id: conflict.entity_id,
-        before_data: { client: conflict.client_payload, server: conflict.server_payload },
-        after_data: conflict.server_payload,
-        source: 'conflict_resolver',
-        correlation_id: conflict.id,
-      });
+      // Single server-side transaction: row lock, writer check, conflict close, audit.
+      // A retry cannot silently close twice or emit a duplicate audit event.
+      const { data, error } = await ctx.supabaseAdmin
+        .rpc('keep_server_conflict_transaction', {
+          p_conflict_id: conflict.id,
+          p_actor_user_id: userId,
+        });
+      if (error) return Response.json({ message: 'Could not resolve conflict; retry later.' }, { status: 503 });
+      if (data?.status === 'denied') {
+        return Response.json({ message: 'Workspace write access denied.' }, { status: 403 });
+      }
+      if (data?.status === 'not_found') return Response.json({ message: 'Conflict not found.' }, { status: 404 });
+      if (data?.status === 'already_resolved') {
+        return Response.json({ status: 'already_resolved', resolution: data.resolution });
+      }
+      if (data?.status !== 'resolved' || data.resolution !== 'keep_server') {
+        return Response.json({ message: 'Unexpected conflict resolution result.' }, { status: 503 });
+      }
       return Response.json({ status: 'resolved', resolution: 'keep_server' });
     }
 
