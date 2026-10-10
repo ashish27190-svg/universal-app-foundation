@@ -35,6 +35,7 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
       - run: pnpm install --frozen-lockfile
       - run: node scripts/validate-staging-readiness.mjs --self-test
+      - run: node scripts/verify-private-staging.mjs --self-test
       - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
 
   deploy:
@@ -59,6 +60,9 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       STAGING_PRIVATE_ACCESS_CONFIRMED: ${{ secrets.STAGING_PRIVATE_ACCESS_CONFIRMED }}
       STAGING_PROTECTED_URL: ${{ secrets.STAGING_PROTECTED_URL }}
+      STAGING_WORKERS_SUBDOMAIN: ${{ secrets.STAGING_WORKERS_SUBDOMAIN }}
+      STAGING_ACCESS_TEAM_DOMAIN: ${{ secrets.STAGING_ACCESS_TEAM_DOMAIN }}
+      STAGING_POWERSYNC_APPROVED_ORIGIN: ${{ secrets.STAGING_POWERSYNC_APPROVED_ORIGIN }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -69,7 +73,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Validate only the dedicated UAF staging project is configured
         run: node scripts/validate-staging-readiness.mjs --deploy
-      - name: Fail closed unless anonymous staging URL redirects to Cloudflare Access
+      - name: Require approved Cloudflare Access across all four anonymous paths
         run: node scripts/verify-private-staging.mjs
       - name: Build with staging public configuration
         run: pnpm --filter @uaf/reference-app build
@@ -90,5 +94,5 @@ jobs:
         # this workflow. A confirmation secret is a human release gate, not
         # cryptographic verification of the Access policy.
         run: pnpm wrangler deploy --config apps/reference-app/wrangler.jsonc --env staging
-      - name: Verify Cloudflare Access still blocks anonymous access after deployment
+      - name: Verify approved Access blocks every anonymous probe after deployment
         run: node scripts/verify-private-staging.mjs
