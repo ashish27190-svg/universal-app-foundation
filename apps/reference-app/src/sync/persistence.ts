@@ -122,7 +122,13 @@ export async function resumeReferenceAppSyncAfterReconnect(): Promise<void> {
   if (typeof navigator === 'undefined' || !navigator.onLine) return;
   const session = await uafServices.auth.getSession();
   if (!session) throw new Error('Sign in again before syncing local changes.');
-  await localVaultOwnership.reconnectSameOwner(String(session.user.id));
+  const userId = String(session.user.id);
+  await localVaultOwnership.reconnectSameOwner(userId);
+  const stillCurrent = await uafServices.auth.getSession();
+  if (String(stillCurrent?.user.id ?? '') !== userId) {
+    await localVaultOwnership.authLost();
+    throw new Error('Authentication changed during offline sync reconnection.');
+  }
   await syncStatusStore.refresh();
 }
 
