@@ -8,6 +8,17 @@
  */
 export const LOCAL_VAULT_OWNER_KEY = 'uaf.household-vault.local-owner.v1';
 
+export class LocalVaultOwnershipConflictError extends Error {
+  constructor() {
+    super(
+      'This device has unsynced changes from a different or unknown account. ' +
+      'Switch back to the account that made them and sync before continuing. ' +
+      'The unsynced changes remain safely stored on this device.',
+    );
+    this.name = 'LocalVaultOwnershipConflictError';
+  }
+}
+
 export interface LocalVaultOwnershipIO {
   readonly readOwner: () => string | null;
   readonly writeOwner: (userId: string) => void;
@@ -38,11 +49,7 @@ export class LocalVaultOwnership {
       if (diskOwner !== userId || (this.connectedUser !== null && this.connectedUser !== userId)) {
         const pending = await this.io.pendingCount();
         if (pending > 0) {
-          throw new Error(
-            'This device still contains unsynced changes from another or an unknown account. ' +
-            'Sign back into the account that made them and sync before switching. ' +
-            'The local changes have not been deleted.',
-          );
+          throw new LocalVaultOwnershipConflictError();
         }
         // Clear before writing the new marker. On a failed clear, the old
         // owner remains recorded and a new user is NOT attached.
