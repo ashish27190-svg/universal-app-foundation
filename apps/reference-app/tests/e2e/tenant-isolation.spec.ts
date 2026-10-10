@@ -55,3 +55,26 @@ test('two users see their own synchronized assets, never the other user assets',
     await Promise.all([contextA.close(), contextB.close()]);
   }
 });
+
+test('switching identities in the same browser never exposes the previous local vault', async ({ page }) => {
+  const first = 'Same-browser A ' + randomUUID().slice(0, 8);
+  const second = 'Same-browser B ' + randomUUID().slice(0, 8);
+
+  await signIn(page);
+  await createAsset(page, first);
+  await waitForSynced(page);
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page.getByLabel('Email')).toBeVisible({ timeout: 30_000 });
+
+  await signIn(page, { email: secondEmail!, password: secondPassword! });
+  await waitForSynced(page);
+  await expect(activeAssetCard(page, first)).toHaveCount(0);
+  await createAsset(page, second);
+  await waitForSynced(page);
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page.getByLabel('Email')).toBeVisible({ timeout: 30_000 });
+
+  await signIn(page);
+  await expect(activeAssetCard(page, first)).toBeVisible({ timeout: 60_000 });
+  await expect(activeAssetCard(page, second)).toHaveCount(0);
+});
