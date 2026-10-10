@@ -65,3 +65,10 @@ h1, h2, h3, p { margin-top: 0; }
 .vault-diagnostics-grid dt { color: var(--uaf-color-text-muted); font-size: .75rem; }
 .vault-diagnostics-grid dd { margin: .2rem 0 0; overflow-wrap: anywhere; }
 @media (max-width: 680px) { .vault-diagnostics-grid { grid-template-columns: 1fr; } }
+
+/* Full, accessible conflict review stays inside the dialog on narrow devices. */
+.vault-conflict-review { display: grid; gap: 1rem; min-width: 0; }
+.vault-conflict-review-fields { display: grid; gap: 1rem; min-width: 0; max-height: 50vh; overflow: auto; }
+.vault-conflict-review-field { display: grid; gap: .5rem; min-width: 0; }
+.vault-conflict-review-field strong { overflow-wrap: anywhere; text-transform: capitalize; }
+.vault-conflict-review-field pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 12rem; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .82rem; }
