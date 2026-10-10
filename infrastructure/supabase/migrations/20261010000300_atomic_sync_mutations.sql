@@ -33,7 +33,7 @@ declare
   permitted_fields text[];
 begin
   if p_mutation_id is null or p_workspace_id is null or p_actor_user_id is null
-     or p_entity_id is null or p_fingerprint is null or p_fingerprint !~ '^[a-f0-9]{64}
+     or p_entity_id is null or p_fingerprint is null or p_fingerprint !~ '^[a-f0-9]{64}$'
      or p_client_payload is null or pg_catalog.jsonb_typeof(p_client_payload) <> 'object'
      or p_fields is null or pg_catalog.jsonb_typeof(p_fields) <> 'object'
      or p_operation not in ('create','update','soft_delete','restore') then
