@@ -37,8 +37,11 @@ export function App() {
       if (!disposed) setSyncState(status.state);
     });
 
+    let offlineVerification: { userId: string; generation: number } | null = null;
+
     async function applySession(session: AuthSession | null) {
       const generation = ++bootstrapGeneration.current;
+      offlineVerification = null;
       const userId = session ? String(session.user.id) : null;
       const previousUserId = activeUserId.current;
       activeUserId.current = userId;
@@ -57,6 +60,7 @@ export function App() {
         return;
       }
       if (!disposed) setBoot({ session, workspace: null, loading: true, error: null });
+      let syncAttached = false;
       try {
         if (previousUserId !== null && previousUserId !== userId) {
           // A different auth identity must immediately stop the previous
@@ -67,6 +71,7 @@ export function App() {
         // The ownership Web Lock and account marker must be checked BEFORE
         // any cached workspace context can be read or rendered.
         await connectReferenceAppSync(userId!);
+        syncAttached = true;
         if (disposed || generation !== bootstrapGeneration.current) return;
 
         let workspace: WorkspaceContext;
@@ -79,6 +84,7 @@ export function App() {
             );
           }
           workspace = saved;
+          offlineVerification = { userId: userId!, generation };
         } else {
           workspace = await uafServices.workspaces.ensurePersonalWorkspace();
           if (disposed || generation !== bootstrapGeneration.current) return;
@@ -88,6 +94,11 @@ export function App() {
           setBoot({ session, workspace, loading: false, error: null });
         }
       } catch (cause) {
+        if (syncAttached && !disposed && generation === bootstrapGeneration.current) {
+          // Failed bootstrap must not retain the SQLite lock or a live uploader.
+          // disconnect() preserves pending mutations and the owner marker.
+          await pauseReferenceAppSyncForAuthChange().catch(() => undefined);
+        }
         if (!disposed && generation === bootstrapGeneration.current) {
           setBoot({
             session,
@@ -105,7 +116,36 @@ export function App() {
     });
     const unsubscribeAuth = uafServices.auth.onAuthStateChange((session) => { void applySession(session); });
 
-    const refreshNetworkState = () => { void refreshReferenceAppSyncStatus(); };
+    const refreshNetworkState = () => {
+      void refreshReferenceAppSyncStatus();
+      if (!navigator.onLine || !offlineVerification) return;
+      const pending = offlineVerification;
+      offlineVerification = null;
+      void (async () => {
+        // Once online again, a locally cached membership MUST be rechecked
+        // with Supabase before we continue treating it as current.
+        const current = await uafServices.auth.getSession();
+        if (!current || String(current.user.id) !== pending.userId) {
+          throw new Error('Authentication changed while offline.');
+        }
+        const verified = await uafServices.workspaces.ensurePersonalWorkspace();
+        if (disposed || pending.generation !== bootstrapGeneration.current) return;
+        saveConfirmedPersonalWorkspace(window.localStorage, current, verified);
+        setBoot((previous) => ({ ...previous, session: current, workspace: verified, error: null }));
+      })().catch(async (cause) => {
+        if (disposed || pending.generation !== bootstrapGeneration.current) return;
+        await pauseReferenceAppSyncForAuthChange().catch(() => undefined);
+        if (!disposed && pending.generation === bootstrapGeneration.current) {
+          setBoot((previous) => ({
+            ...previous,
+            workspace: null,
+            error: cause instanceof Error
+              ? 'Could not reverify this workspace after reconnecting: ' + cause.message
+              : 'Could not reverify this workspace after reconnecting.',
+          }));
+        }
+      });
+    };
     window.addEventListener('online', refreshNetworkState);
     window.addEventListener('offline', refreshNetworkState);
 
