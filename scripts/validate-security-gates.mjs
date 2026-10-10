@@ -75,6 +75,37 @@ if (/if\s*\(!workspace\)\s*\{\s*await\s+recordIssue/.test(syncGateway)) {
   violations.push('sync-apply must not log unauthorized mutations into another workspace');
 }
 
+// A persistent browser SQLite file is shared across sessions unless its
+// account identity is checked before mounting. Require the fail-closed owner
+// gate to stay wired to both login and logout paths.
+const localOwnerGate = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/sync/local-vault-ownership.ts'),
+  'utf8',
+);
+const persistence = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/sync/persistence.ts'),
+  'utf8',
+);
+const app = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/App.tsx'),
+  'utf8',
+);
+for (const token of ['readOwner', 'writeOwner', 'pendingCount', 'clearDatabase',
+                     'authLost', 'LocalVaultOwnershipConflictError']) {
+  if (!localOwnerGate.includes(token)) violations.push('Missing local account isolation guard: ' + token);
+}
+for (const token of ['LOCAL_VAULT_OWNER_KEY', 'localVaultOwnership.attach(userId)',
+                     'localVaultOwnership.logout()', 'localVaultOwnership.authLost()']) {
+  if (!persistence.includes(token)) violations.push('PowerSync account handoff is not enforced: ' + token);
+}
+if (!app.includes('connectReferenceAppSync(String(session.user.id))') ||
+    !app.includes('pauseReferenceAppSyncForAuthChange')) {
+  violations.push('The reference app must bind the PowerSync cache to its authenticated user.');
+}
+if (!fs.existsSync(path.join(root, 'apps/reference-app/src/sync/local-vault-ownership.test.ts'))) {
+  violations.push('Local offline account isolation must have regression tests.');
+}
+
 if (violations.length) {
   console.error('Security invariant validation failed:\n' + violations.map((item) => `- ${item}`).join('\n'));
   process.exit(1);
