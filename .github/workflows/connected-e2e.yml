@@ -11,6 +11,7 @@ permissions:
 jobs:
   household-vault:
     runs-on: ubuntu-latest
+    environment: staging
     timeout-minutes: 30
     env:
       VITE_UAF_ENVIRONMENT: staging
