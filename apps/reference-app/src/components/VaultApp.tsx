@@ -200,7 +200,7 @@ export function VaultApp({ session, workspace, syncState, onSignOut }: VaultAppP
     setMutationBusy(`conflict:${conflict.id}`);
     setConflictMessage(null);
     try {
-      await conflictResolver.resolve(conflict.id, choice);
+      await conflictResolver.resolve(conflict.id, choice, choice === 'reapply_client' ? conflict.serverRevision : undefined);
       setConflicts((current) => current.filter((item) => item.id !== conflict.id));
       setConflictMessage(choice === 'keep_server'
         ? 'Server version kept. Sync will confirm the resolution.'
