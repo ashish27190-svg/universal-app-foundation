@@ -29,7 +29,15 @@ Do not run `db reset --linked` or `db push` as part of this testing workflow.
 - Conflict row locking, closure, and audit insertion happen inside one PostgreSQL transaction. A failed audit insertion rolls back the closure; concurrent keep-server requests should produce one `resolved` response, then `already_resolved`.
 - Local HTTP tests verify one audit for initial closure, none for retries, and one audit across simultaneous closure requests. pgTAP verifies authenticated clients cannot execute the privileged RPC.
 - `sync-apply` now stores a SHA-256 fingerprint of the canonical request envelope in the existing mutation ledger and refuses retries that reuse an ID with a different payload, entity, user, or workspace (HTTP 409). Older ledger rows without a fingerprint are treated as unverifiable rather than trusted. Local HTTP tests exercise both valid retries and divergent-ID reuse.
-- This **does not** make `reapply_client` or `sync-apply` transactional. Two concurrent sync requests can still race before a ledger row exists, and an entity write can still commit separately from its audit/ledger entries. These remain release blockers. Running CI or local tests is necessary but not sufficient to claim staging or production readiness.
+- The legacy retry/atomicity warning for `sync-apply` is superseded by the candidate SQL RPC above, contingent on passing all new local tests; `reapply_client` and hosted multi-device validation remain blockers. Running CI or local tests is necessary but not sufficient to claim production readiness.
+
+## Atomic per-mutation sync candidate (10 Oct 2026)
+- `sync-apply` now passes each mutation through one `service_role`-only SQL RPC (`apply_atomic_mutation`), rather than independently committing domain rows, a conflict, a processed-mutation ledger entry, and an audit row. Failed SQL statements roll back that mutation's entire transaction.
+- SQL rechecks active owner/admin membership; its allowlist prevents changing immutable fields. The Edge gateway continues using the pure domain validators to produce sanitized fields. Each mutation ID is serialized under a transaction-scoped advisory lock and bound to a canonical request fingerprint, actor, workspace, entity, and operation.
+- Local HTTP assertions cover concurrent identical retries, stale revision contenders, asset service cross-workspace references, and lifecycle transitions. Database pgTAP additionally injects an audit failure and asserts business + ledger rollback.
+- **Atomicity is per mutation, not per batch.** A response error on later mutations does not undo earlier successfully committed mutations. Clients must replay batches using stable mutation IDs.
+- The existing `reapply_client` resolution path still performs separate writes and remains a release blocker. Hosted Supabase, PowerSync delivery, real offline/browser devices, and deployment are **not** validated by the local suite.
+- This is a draft migration, not an instruction to run against any live Supabase database.
 
 ## Claims and limitations
 - A green result would prove reproducible local migrations and the pgTAP assertions for workspace selection, role-based write helper, browser write denial, private mutation ledger, and RPC bootstrap idempotence.
