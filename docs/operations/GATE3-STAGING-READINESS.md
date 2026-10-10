@@ -78,6 +78,21 @@ pending mutations on account change, or unknown database target.
   owner membership and a non-expired local Supabase access token. The local
   cache has a seven-day maximum age; the access token typically expires much
   sooner, so this does **not** promise indefinite offline unlock.
+- Reconnect permission gate now **unmounts all editing surfaces immediately**
+  when a previously offline session returns online, before requesting any
+  workspace context. The app shows a loading state while the authenticated
+  membership is rechecked. A revoked/failed membership causes a blocking
+  error, not a return to cached editing. Local pending mutations stay in
+  SQLite.
+- Also applies to a normal browser session that goes offline and reconnects
+  **without a page reload**: the previous PowerSync uploader is disconnected
+  while offline (retaining the SQLite cache and exclusive browser lock),
+  and can only resume after successful server membership revalidation.
+- Added local owner tests covering upload-stream suspension with unsynced
+  writes and a non-bootstrapped vault. Connected Playwright acceptance cases
+  now deliberately delay the workspace RPC to verify editing is hidden during
+  verification, both with and without an offline reload. These hosted
+  acceptance cases are written, **not yet executed**.
 - The offline boot deliberately does NOT open the remote PowerSync stream.
   On an `online` event it rechecks the authenticated user and actual
   workspace membership against Supabase, then attaches the original account's
