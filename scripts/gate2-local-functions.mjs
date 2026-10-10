@@ -102,9 +102,12 @@ async function apply(user,mutation) {
     method:'POST',token:user.jwt,body:{protocolVersion:1,mutations:[mutation]}
   });
 }
-async function resolveConflict(user,id) {
+async function resolveConflict(user,id,choice='keep_server',reviewedRevision) {
   return request('/functions/v1/resolve-conflict',{
-    method:'POST',token:user.jwt,body:{conflictId:id,choice:'keep_server'}
+    method:'POST',token:user.jwt,body:{
+      conflictId:id,choice,
+      ...(reviewedRevision === undefined ? {} : {reviewedRevision})
+    }
   });
 }
 
@@ -255,6 +258,77 @@ const invalidResult=requireHttp(await apply(a,invalidAsset),200,'invalid field r
 assert(invalidResult.outcomes[0].status==='rejected','invalid create records rejection');
 assert((await rows('processed_mutations',{mutation_id:'eq.'+invalidAsset.mutationId}))[0]?.result_status==='rejected','invalid create has rejection ledger');
 assert((await rows('household_assets',{id:'eq.'+invalidAsset.entityId})).length===0,'invalid create never writes entity');
+
+
+// Reviewed-revision reapplication: transaction contains entity update, ledger,
+// mutation audit, conflict closure, and resolver audit. Retried requests do not
+// apply the client patch twice.
+const reapplyConflictId=randomUUID();
+const reapplyBefore=(await rows('household_assets',{id:'eq.'+sameId}))[0];
+await adminInsert('write_conflicts',[{
+  id:reapplyConflictId,workspace_id:wa,entity_type:'household_assets',
+  entity_id:sameId,conflict_type:'revision',operation:'update',
+  client_revision:2,server_revision:reapplyBefore.revision,
+  client_payload:{name:'Reviewed client version'},
+  server_payload:reapplyBefore
+}]);
+const missingReview=await resolveConflict(a,reapplyConflictId,'reapply_client');
+assert(missingReview.status===400,'reapply requires explicit reviewed server revision');
+const viewerReapply=await resolveConflict(a,conflictId,'reapply_client',2);
+assert(viewerReapply.status===403,'viewer cannot reapply a shared conflict');
+const reapplyOutcome=requireHttp(await resolveConflict(a,reapplyConflictId,'reapply_client',reapplyBefore.revision),200,'reviewed reapply');
+assert(reapplyOutcome.status==='resolved'&&reapplyOutcome.resolution==='reapply_client','reviewed client patch reapplied once');
+const afterReapply=(await rows('household_assets',{id:'eq.'+sameId}))[0];
+assert(afterReapply.name==='Reviewed client version'&&afterReapply.revision===reapplyBefore.revision+1,'reapply increments revision and updates asset');
+assert((await rows('write_conflicts',{id:'eq.'+reapplyConflictId}))[0]?.resolution==='reapply_client','reapply closes original conflict');
+assert((await rows('audit_events',{correlation_id:'eq.'+reapplyConflictId})).length===1,'reapply writes exactly one resolver audit');
+const reapplyRetry=requireHttp(await resolveConflict(a,reapplyConflictId,'reapply_client',reapplyBefore.revision),200,'reapply retry');
+assert(reapplyRetry.status==='already_resolved','reapply retry does not mutate');
+assert((await rows('household_assets',{id:'eq.'+sameId}))[0]?.revision===afterReapply.revision,'reapply retry cannot increment revision twice');
+assert((await rows('audit_events',{correlation_id:'eq.'+reapplyConflictId})).length===1,'reapply retry cannot duplicate resolution audit');
+
+// A conflict reviewed at revision N must not apply at revision N+1 without
+// the user reviewing the refreshed server record.
+const staleConflictId=randomUUID(),staleSnapshot=(await rows('household_assets',{id:'eq.'+sameId}))[0];
+await adminInsert('write_conflicts',[{
+  id:staleConflictId,workspace_id:wa,entity_type:'household_assets',
+  entity_id:sameId,conflict_type:'revision',operation:'update',
+  client_revision:2,server_revision:staleSnapshot.revision,
+  client_payload:{name:'Stale client version'},
+  server_payload:staleSnapshot
+}]);
+const serverAdvance=envelope(wa,sameId,randomUUID(),'update',{name:'Newer server version'},staleSnapshot.revision);
+const advanceOutcome=requireHttp(await apply(a,serverAdvance),200,'server advance');
+assert(advanceOutcome.outcomes[0]?.status==='applied','server can advance revision');
+const staleResponse=await resolveConflict(a,staleConflictId,'reapply_client',staleSnapshot.revision);
+assert(staleResponse.status===409,'out-of-date reviewed reapply rejected');
+const refreshed=(await rows('write_conflicts',{id:'eq.'+staleConflictId}))[0];
+assert(refreshed.server_revision===staleSnapshot.revision+1 && refreshed.resolved_at===null,'conflict snapshot refreshed but remains open');
+const staleRetry=await resolveConflict(a,staleConflictId,'reapply_client',staleSnapshot.revision);
+assert(staleRetry.status===409,'unreviewed retry cannot override newer server change');
+assert((await rows('household_assets',{id:'eq.'+sameId}))[0]?.name==='Newer server version','stale request never changes server record');
+const newlyReviewed=requireHttp(await resolveConflict(a,staleConflictId,'reapply_client',refreshed.server_revision),200,'re-reviewed reapply');
+assert(newlyReviewed.status==='resolved','newly reviewed version can safely reapply');
+assert((await rows('household_assets',{id:'eq.'+sameId}))[0]?.name==='Stale client version','approved reapply updates data');
+
+// Competing resolution choices are mutually exclusive under the conflict row
+// lock: one resolution wins, the loser sees already_resolved.
+const choiceConflictId=randomUUID();
+const choiceRevision=(await rows('household_assets',{id:'eq.'+sameId}))[0].revision;
+await adminInsert('write_conflicts',[{
+  id:choiceConflictId,workspace_id:wa,entity_type:'household_assets',
+  entity_id:sameId,conflict_type:'revision',operation:'update',
+  client_revision:2,server_revision:choiceRevision,
+  client_payload:{name:'Choice race client'},server_payload:(await rows('household_assets',{id:'eq.'+sameId}))[0]
+}]);
+const differentChoices=await Promise.all([
+  resolveConflict(a,choiceConflictId,'keep_server'),
+  resolveConflict(a,choiceConflictId,'reapply_client',choiceRevision)
+]);
+assert(differentChoices.every(r=>r.status===200),'competing keep-server and reapply requests return');
+assert(differentChoices.map(r=>r.data.status).sort().join(',')==='already_resolved,resolved','only one resolution choice wins');
+assert((await rows('audit_events',{correlation_id:'eq.'+choiceConflictId})).length===1,'competing choices leave exactly one resolution audit');
+assert((await rows('write_conflicts',{id:'eq.'+choiceConflictId}))[0]?.resolved_at!==null,'choice race conflict ends resolved');
 
 console.log('PASS: '+checks+' local HTTP/authorization assertions.');
 console.log('Scope: local Edge gateway; no PowerSync cloud streaming or real multi-device browser proof.');
