@@ -18,7 +18,7 @@ billing change, public website, or production release.
 | G3.2 PowerSync staging | Authenticated Sync Streams scoped to workspace | Staging PowerSync instance, stream config review, propagation to/from Postgres, revocation tests |
 | G3.3 Private hosting | Public traffic cannot see staging app | Worker-level Cloudflare Access policy covering all URLs, no bypass; unauthenticated `workers.dev` request redirects to Access before AND after publish |
 | G3.4 Connected browser reliability | Real browser SQLite, offline edit, reload, reconnect, two-device convergence and stale-conflict review work | Connected Playwright success, no skipped scenarios, fresh identity/data state |
-| G3.4a Same-device account isolation | Account A and B never inherit each other's persisted SQLite, and an offline queue cannot be reassigned to another user | Unit ownership tests and same-browser A→B→A staging Playwright evidence |
+| G3.4a Same-device account isolation | Account A and B never inherit each other's persisted SQLite; a second tab never opens the active SQLite cache | Unit ownership/Web Lock tests, two-tab denial and same-browser A→B→A staging Playwright evidence |
 | G3.5 Pilot authorization | Demonstrated security and data reliability | Human review of staging evidence and cost/security posture before merging/promoting |
 
 **Release-blocking failures:** cross-workspace read/write, viewer mutation,
@@ -69,6 +69,27 @@ pending mutations on account change, or unknown database target.
   sign-in without bypassing the pending-write cleanup rule. This is NOT an
   encryption-at-rest or malicious-device-user security guarantee. Multi-tab
   concurrent account switching remains a hosted acceptance/risk check.
+- The reference app now holds a **single exclusive Web Lock per browser origin**
+  for the lifetime of its local SQLite session. It acquires the lock before
+  reading or clearing local ownership and refuses a second tab immediately
+  (never stealing the lock). Auth loss and successful logout disconnect PowerSync
+  before releasing this lease. Browser crashes release Web Locks automatically;
+  the persisted account marker remains, so pending writes survive restart.
+  Browsers missing Web Locks fail closed rather than using racy localStorage
+  lease timestamps. Web Locks require HTTPS or a secure local origin.
+- Authentication changes are checked immediately before and after sync
+  attachment, and stale asynchronous bootstrap attempts must not reactivate
+  a previous identity. The old uploader stops before a different account can
+  connect, including when the browser's auth state changes externally.
+- Unit tests simulate simultaneous tabs, exclusive-lock refusal, lock release,
+  unsupported browser, pending mutations, recovered account transitions and
+  auth-session handoff. Connected Playwright now also checks that a second
+  tab gets a clear unavailable message while the first owns local SQLite and
+  can attach only after that first tab closes.
+- This does **not** prove cross-tab storage safety on the full production
+  browser/device matrix, browser extensions, separate origins, or
+  browser-vendor edge cases. Hosted connected and offline reload tests
+  remain release-blocking.
 - A new connected browser journey switches A→B→A **in the same browser profile**
   after each account's changes have synced. It verifies that cached records
   cannot appear in the other account. Not yet run on hosted PowerSync.
