@@ -102,6 +102,25 @@ if (!app.includes('connectReferenceAppSync(userId!)') ||
     !app.includes('pauseReferenceAppSyncForAuthChange')) {
   violations.push('The reference app must bind the PowerSync cache to its authenticated user.');
 }
+const tabLease = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/sync/local-vault-tab-lease.ts'),
+  'utf8',
+);
+for (const token of ['navigator.locks.request', "ifAvailable: true", "mode: 'exclusive'",
+                     'LocalVaultBusyError']) {
+  if (!tabLease.includes(token)) violations.push('Cross-tab SQLite lock missing: ' + token);
+}
+for (const token of ['localVaultTabLease.acquire()', 'localVaultTabLease.release()',
+                     'getSession()', 'localVaultOwnership.attach(userId)']) {
+  if (!persistence.includes(token)) violations.push('Browser identity/lock wiring missing: ' + token);
+}
+if (!app.includes('previousUserId !== userId') ||
+    !app.includes('generation !== bootstrapGeneration.current')) {
+  violations.push('Authenticated user change must cancel old sync before bootstrapping new workspace.');
+}
+if (!fs.existsSync(path.join(root, 'apps/reference-app/src/sync/local-vault-tab-lease.test.ts'))) {
+  violations.push('Cross-tab Web Locks must have explicit regression tests.');
+}
 if (!fs.existsSync(path.join(root, 'apps/reference-app/src/sync/local-vault-ownership.test.ts'))) {
   violations.push('Local offline account isolation must have regression tests.');
 }
