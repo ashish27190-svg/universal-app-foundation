@@ -15,7 +15,7 @@ export function validateStagingEnvironment(env, mode = 'e2e') {
       'CLOUDFLARE_API_TOKEN',
       'CLOUDFLARE_ACCOUNT_ID',
       'STAGING_PRIVATE_ACCESS_CONFIRMED',
-    ] : ['E2E_EMAIL', 'E2E_PASSWORD']),
+    ] : ['E2E_EMAIL', 'E2E_PASSWORD', 'E2E_SECOND_EMAIL', 'E2E_SECOND_PASSWORD']),
   ];
   for (const key of required) if (!env[key] || !String(env[key]).trim()) errors.push('Missing ' + key);
 
@@ -48,6 +48,10 @@ export function validateStagingEnvironment(env, mode = 'e2e') {
   if (mode === 'deploy' && env.STAGING_PRIVATE_ACCESS_CONFIRMED !== 'PRIVATE_UAF_STAGING_ACCESS_VERIFIED') {
     errors.push('Cloudflare Access must be independently verified before deployment.');
   }
+  if (mode === 'e2e' && env.E2E_EMAIL && env.E2E_SECOND_EMAIL &&
+      env.E2E_EMAIL.trim().toLowerCase() === env.E2E_SECOND_EMAIL.trim().toLowerCase()) {
+    errors.push('Two separate synthetic test accounts are required to prove workspace isolation.');
+  }
   if (!['e2e', 'deploy'].includes(mode)) errors.push('Invalid staging validation mode.');
   return errors;
 }
@@ -60,6 +64,8 @@ function selfTest() {
     STAGING_SUPABASE_PROJECT_REF: STAGING_REF,
     E2E_EMAIL: 'synthetic@example.invalid',
     E2E_PASSWORD: 'synthetic-test-only',
+    E2E_SECOND_EMAIL: 'synthetic-second@example.invalid',
+    E2E_SECOND_PASSWORD: 'synthetic-second-test-only',
     SUPABASE_ACCESS_TOKEN: 'synthetic-test-only',
     STAGING_SUPABASE_DB_PASSWORD: 'synthetic-test-only',
     CLOUDFLARE_API_TOKEN: 'synthetic-test-only',
@@ -76,7 +82,9 @@ function selfTest() {
   assert(validateStagingEnvironment({...valid,VITE_POWERSYNC_URL:'http://localhost:8080'}, 'e2e').length > 0, 'insecure/loopback PowerSync rejected');
   assert(validateStagingEnvironment({...valid,STAGING_PRIVATE_ACCESS_CONFIRMED:''}, 'deploy').length > 0, 'unconfirmed private Access rejected');
   assert(validateStagingEnvironment({...valid,E2E_EMAIL:''}, 'e2e').length > 0, 'missing E2E user rejected');
-  console.log('PASS: isolated UAF staging configuration validator (7 synthetic assertions).');
+  assert(validateStagingEnvironment({...valid,E2E_SECOND_EMAIL:''}, 'e2e').length > 0, 'missing second E2E user rejected');
+  assert(validateStagingEnvironment({...valid,E2E_SECOND_EMAIL:valid.E2E_EMAIL}, 'e2e').length > 0, 'identical staging accounts rejected');
+  console.log('PASS: isolated UAF staging configuration validator (9 synthetic assertions).');
 }
 
 const isEntry = process.argv[1] && import.meta.url === new URL('file://' + process.argv[1]).href;
