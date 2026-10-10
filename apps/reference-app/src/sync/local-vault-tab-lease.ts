@@ -44,7 +44,7 @@ export class LocalVaultTabLease {
     );
     // Hold the request promise until explicit release. If the callback is
     // rejected during acquisition, propagate the error, not an endless wait.
-    this.requestFinished = running;
+    this.requestFinished = running.then(() => undefined);
     const granted = await Promise.race([
       availability,
       running.then(() => false),
