@@ -33,9 +33,13 @@ test('an offline asset survives browser reload and converges after reconnect', a
     await expect(pageA.getByText('Offline', { exact: true })).toBeVisible();
     await createAsset(pageA, assetName);
     await pageA.reload({ waitUntil: 'domcontentloaded' });
+    await expect(pageA.evaluate(() => navigator.onLine)).resolves.toBe(false);
     await expect(pageA.getByRole('heading', { name: 'Your assets' })).toBeVisible();
+    await expect(pageA.getByText('Offline', { exact: true })).toBeVisible();
     await expect(activeAssetCard(pageA, assetName)).toBeVisible();
 
+    // Reconnect triggers a fresh workspace membership check, then reconnects
+    // the saved SQLite mutations to the authenticated uploader.
     await contextA.setOffline(false);
     await waitForSynced(pageA);
 
