@@ -28,6 +28,7 @@ export function App() {
   const [boot, setBoot] = useState<BootState>(initialBootState);
   const [syncState, setSyncState] = useState<SyncDisplayState>(syncStatusStore.snapshot.state);
   const bootstrapGeneration = useRef(0);
+  const activeUserId = useRef<string | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -37,6 +38,9 @@ export function App() {
 
     async function applySession(session: AuthSession | null) {
       const generation = ++bootstrapGeneration.current;
+      const userId = session ? String(session.user.id) : null;
+      const previousUserId = activeUserId.current;
+      activeUserId.current = userId;
       if (!session) {
         if (!disposed) setBoot({ session: null, workspace: null, loading: false, error: null });
         void pauseReferenceAppSyncForAuthChange().catch((cause) => {
@@ -53,8 +57,15 @@ export function App() {
       }
       if (!disposed) setBoot({ session, workspace: null, loading: true, error: null });
       try {
+        if (previousUserId !== null && previousUserId !== userId) {
+          // A different auth identity must immediately stop the previous
+          // PowerSync uploader before we bootstrap the new workspace.
+          await pauseReferenceAppSyncForAuthChange();
+        }
+        if (disposed || generation !== bootstrapGeneration.current) return;
         const workspace = await uafServices.workspaces.ensurePersonalWorkspace();
-        await connectReferenceAppSync(String(session.user.id));
+        if (disposed || generation !== bootstrapGeneration.current) return;
+        await connectReferenceAppSync(userId!);
         if (!disposed && generation === bootstrapGeneration.current) {
           setBoot({ session, workspace, loading: false, error: null });
         }
