@@ -107,6 +107,21 @@ describe('Household Vault local user/cache isolation', () => {
     expect(x.owner()).toBeNull();
   });
 
+  it('reconnects a previously mounted offline queue for its same owner without clearing', async () => {
+    const x = fixture('account-A', 2);
+    await x.guard.attach('account-A');
+    await x.guard.reconnectSameOwner('account-A');
+    expect(x.events).toEqual(['lease', 'connect', 'connect']);
+    expect(x.owner()).toBe('account-A');
+  });
+
+  it('never reconnects a foreign account to an existing offline SQLite queue', async () => {
+    const x = fixture('account-A', 2);
+    await x.guard.attach('account-A');
+    await expect(x.guard.reconnectSameOwner('account-B')).rejects.toThrow('another account');
+    expect(x.events).toEqual(['lease', 'connect']);
+  });
+
   it('auth loss disconnects but preserves cache and queued writes', async () => {
     const x = fixture('account-A', 2);
     await x.guard.attach('account-A');
