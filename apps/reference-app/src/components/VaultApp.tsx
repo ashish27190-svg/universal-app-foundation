@@ -27,6 +27,7 @@ import {
 import { AddAssetForm } from './AddAssetForm';
 import { EditAssetForm } from './EditAssetForm';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
+import { canReviewAndReapply, fieldsToReview, matchesReviewedSnapshot, snapshotForReview, type ConflictReviewSnapshot } from './conflict-review';
 
 function todayLocalDate(): string {
   const now = new Date();
@@ -58,6 +59,7 @@ export function VaultApp({ session, workspace, syncState, onSignOut }: VaultAppP
   const [mutationBusy, setMutationBusy] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<readonly WriteConflict[]>([]);
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
+  const [reviewCandidate, setReviewCandidate] = useState<ConflictReviewSnapshot | null>(null);
   const [activity, setActivity] = useState<readonly AuditEventView[]>([]);
 
   const loadAssets = useCallback(async () => {
@@ -196,6 +198,28 @@ export function VaultApp({ session, workspace, syncState, onSignOut }: VaultAppP
     }
   }
 
+  const reviewingConflict = reviewCandidate
+    ? conflicts.find((item) => item.id === reviewCandidate.conflictId) ?? null
+    : null;
+  const reviewedSnapshotIsCurrent = Boolean(
+    reviewCandidate && matchesReviewedSnapshot(reviewCandidate, reviewingConflict),
+  );
+
+  function openReapplyReview(conflict: WriteConflict) {
+    setError(null);
+    setReviewCandidate(snapshotForReview(conflict));
+  }
+
+  function confirmReviewedReapply() {
+    if (!reviewCandidate || !reviewingConflict || !matchesReviewedSnapshot(reviewCandidate, reviewingConflict)) {
+      setReviewCandidate(null);
+      setError('This conflict changed while you reviewed it. Open the latest version and review again.');
+      return;
+    }
+    setReviewCandidate(null);
+    void resolveConflict(reviewingConflict, 'reapply_client');
+  }
+
   async function resolveConflict(conflict: WriteConflict, choice: 'keep_server' | 'reapply_client') {
     setMutationBusy(`conflict:${conflict.id}`);
     setConflictMessage(null);
@@ -299,7 +323,7 @@ export function VaultApp({ session, workspace, syncState, onSignOut }: VaultAppP
               {conflicts.map((conflict) => {
                 const clientName = typeof conflict.clientPayload.name === 'string' ? conflict.clientPayload.name : null;
                 const serverName = typeof conflict.serverPayload.name === 'string' ? conflict.serverPayload.name : null;
-                const canReapply = conflict.conflictType === 'conflict' && conflict.operation !== 'create' && conflict.serverRevision !== null;
+                const canReapply = canReviewAndReapply(conflict);
                 return (
                   <Card key={conflict.id}>
                     <div className="vault-conflict">
@@ -326,9 +350,9 @@ export function VaultApp({ session, workspace, syncState, onSignOut }: VaultAppP
                           <Button
                             size="sm"
                             loading={mutationBusy === `conflict:${conflict.id}`}
-                            onClick={() => void resolveConflict(conflict, 'reapply_client')}
+                            onClick={() => openReapplyReview(conflict)}
                           >
-                            Reapply my version
+                            Review reapplication
                           </Button>
                         ) : null}
                       </div>
@@ -417,6 +441,50 @@ export function VaultApp({ session, workspace, syncState, onSignOut }: VaultAppP
             onCancel={() => setEditingAsset(null)}
           />
         ) : null}
+      </Dialog>
+
+      <Dialog
+        open={reviewCandidate !== null}
+        onOpenChange={(open) => { if (!open) setReviewCandidate(null); }}
+        title="Review conflicting changes"
+        description="Compare every attempted field against the current server record before applying. The server revision must still match when you confirm."
+        footer={
+          <div className="vault-actions">
+            <Button variant="ghost" onClick={() => setReviewCandidate(null)}>Cancel</Button>
+            <Button
+              disabled={!reviewedSnapshotIsCurrent}
+              loading={Boolean(reviewCandidate && mutationBusy === `conflict:${reviewCandidate.conflictId}`)}
+              onClick={confirmReviewedReapply}
+            >
+              Confirm reapply my version
+            </Button>
+          </div>
+        }
+      >
+        {reviewingConflict && reviewCandidate && reviewedSnapshotIsCurrent ? (
+          <div className="vault-conflict-review">
+            <p className="vault-muted">
+              Operation: {reviewingConflict.operation} · reviewed server revision {reviewCandidate.serverRevision}
+            </p>
+            <p className="vault-muted">All attempted fields are shown below. Applying your version will replace these server fields.</p>
+            <div className="vault-conflict-review-fields">
+              {fieldsToReview(reviewingConflict).map((field) => (
+                <div className="vault-conflict-review-field" key={field.field}>
+                  <strong>{field.field}</strong>
+                  <div className="vault-conflict-versions">
+                    <div><span>My attempted value</span><pre>{field.attempted}</pre></div>
+                    <div><span>Current server value</span><pre>{field.server}</pre></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {fieldsToReview(reviewingConflict).length === 0 ? (
+              <p role="alert">No reviewable fields. Keep the server version or contact support.</p>
+            ) : null}
+          </div>
+        ) : (
+          <p role="alert">The conflict changed or is no longer available. Close this review and inspect the latest version.</p>
+        )}
       </Dialog>
 
       <Dialog
