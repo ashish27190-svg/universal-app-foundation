@@ -466,7 +466,7 @@ export function VaultApp({ session, workspace, syncState, onSignOut }: VaultAppP
             <p className="vault-muted">
               Operation: {reviewingConflict.operation} · reviewed server revision {reviewCandidate.serverRevision}
             </p>
-            <p className="vault-muted">All attempted fields are shown below. Applying your version will replace these server fields.</p>
+            <p className="vault-muted">Every field eligible for reapplication is shown below. Applying your version will replace these server fields; server-owned metadata is never replayed.</p>
             <div className="vault-conflict-review-fields">
               {fieldsToReview(reviewingConflict).map((field) => (
                 <div className="vault-conflict-review-field" key={field.field}>
