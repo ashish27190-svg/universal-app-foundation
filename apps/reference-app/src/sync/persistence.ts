@@ -11,6 +11,8 @@ import {
 import { PowerSyncHouseholdAssetRepository } from '../data/household-asset-repository';
 import { LocalAuditRepository } from '../data/audit-repository';
 import { runtimeEnvironment, uafServices } from '../services';
+import { LOCAL_VAULT_OWNER_KEY, LocalVaultOwnership } from './local-vault-ownership';
+import { LocalVaultTabLease } from './local-vault-tab-lease';
 
 if (!runtimeEnvironment.VITE_POWERSYNC_URL) {
   throw new Error('PowerSync configuration is required by the Household Vault manifest.');
@@ -68,21 +70,71 @@ export const syncStatusStore = new PowerSyncStatusStore(powerSyncDatabase, {
   isOnline: () => (typeof navigator === 'undefined' ? true : navigator.onLine),
 });
 
-let connectionPromise: Promise<void> | null = null;
+const localVaultTabLease = new LocalVaultTabLease();
+let streamingConnected = false;
 
-/** Connect once per authenticated app session. Safe to call repeatedly. */
-export async function connectReferenceAppSync(): Promise<void> {
-  if (!connectionPromise) {
-    connectionPromise = powerSyncDatabase
-      .connect(connector)
-      .then(() => syncStatusStore.refresh())
-      .then(() => undefined)
-      .catch((error: unknown) => {
-        connectionPromise = null;
-        throw error;
-      });
+const localVaultOwnership = new LocalVaultOwnership({
+  acquireTab: () => localVaultTabLease.acquire(),
+  releaseTab: () => localVaultTabLease.release(),
+  // Persistent marker is intentionally limited to opaque user ID. If browser
+  // storage is blocked, abort rather than risking a cross-account cache.
+  readOwner: () => window.localStorage.getItem(LOCAL_VAULT_OWNER_KEY),
+  writeOwner: (userId) => window.localStorage.setItem(LOCAL_VAULT_OWNER_KEY, userId),
+  removeOwner: () => window.localStorage.removeItem(LOCAL_VAULT_OWNER_KEY),
+  pendingCount: () => getPendingMutationCount(powerSyncDatabase),
+  clearDatabase: async () => {
+    await powerSyncDatabase.disconnectAndClear();
+    streamingConnected = false;
+  },
+  disconnect: async () => {
+    await powerSyncDatabase.disconnect();
+    streamingConnected = false;
+  },
+  connect: async () => {
+    // Offline boot needs SQLite, not a network connection. The queued local
+    // mutations remain pending until an authenticated reconnect.
+    if (typeof navigator !== 'undefined' && navigator.onLine && !streamingConnected) {
+      await powerSyncDatabase.connect(connector);
+      streamingConnected = true;
+    }
+    await syncStatusStore.refresh();
+  },
+});
+
+/**
+ * Never reuse another signed-in person's persistent local SQLite cache.
+ * Transitions are serialized and cannot drop unsynced changes.
+ */
+export async function connectReferenceAppSync(userId: string): Promise<void> {
+  const session = await uafServices.auth.getSession();
+  if (String(session?.user.id ?? '') !== userId) {
+    throw new Error('Authentication changed before the vault could open. Sign in again.');
   }
-  await connectionPromise;
+  await localVaultOwnership.attach(userId);
+  const stillCurrent = await uafServices.auth.getSession();
+  if (String(stillCurrent?.user.id ?? '') !== userId) {
+    await localVaultOwnership.authLost();
+    throw new Error('Authentication changed while opening the local vault. Sign in again.');
+  }
+}
+
+export async function suspendReferenceAppRemoteSyncWhileOffline(): Promise<void> {
+  await localVaultOwnership.suspendRemoteWhileOffline();
+  await syncStatusStore.refresh();
+}
+
+export async function resumeReferenceAppSyncAfterReconnect(): Promise<void> {
+  if (typeof navigator === 'undefined' || !navigator.onLine) return;
+  const session = await uafServices.auth.getSession();
+  if (!session) throw new Error('Sign in again before syncing local changes.');
+  const userId = String(session.user.id);
+  await localVaultOwnership.reconnectSameOwner(userId);
+  const stillCurrent = await uafServices.auth.getSession();
+  if (String(stillCurrent?.user.id ?? '') !== userId) {
+    await localVaultOwnership.authLost();
+    throw new Error('Authentication changed during offline sync reconnection.');
+  }
+  await syncStatusStore.refresh();
 }
 
 export async function refreshReferenceAppSyncStatus(): Promise<void> {
@@ -90,15 +142,15 @@ export async function refreshReferenceAppSyncStatus(): Promise<void> {
 }
 
 /**
- * Logout safety: never clear the local PowerSync database while mutations are
- * still waiting to upload. The UI must surface the pending state instead.
+ * An external auth change (another tab, session expiry) preserves queued data.
+ * The next account has to pass the ownership gate before any local UI loads.
  */
+export async function pauseReferenceAppSyncForAuthChange(): Promise<void> {
+  await localVaultOwnership.authLost();
+  await syncStatusStore.refresh();
+}
+
 export async function prepareReferenceAppLogout(): Promise<void> {
-  const pending = await getPendingMutationCount(powerSyncDatabase);
-  if (pending > 0) {
-    throw new Error(`Cannot sign out while ${pending} local change(s) are waiting to sync.`);
-  }
-  connectionPromise = null;
-  await powerSyncDatabase.disconnectAndClear();
+  await localVaultOwnership.logout();
   await syncStatusStore.refresh();
 }

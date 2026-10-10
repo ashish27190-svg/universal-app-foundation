@@ -25,6 +25,10 @@ jobs:
       - name: Require dependency lock
         run: test -f pnpm-lock.yaml || (echo 'pnpm-lock.yaml is required before CI can be green.' && exit 1)
       - run: pnpm install --frozen-lockfile
+      - name: Verify isolated staging guard against synthetic configurations
+        run: node scripts/validate-staging-readiness.mjs --self-test
+      - name: Verify staging Access checks fail closed (synthetic)
+        run: node scripts/verify-private-staging.mjs --self-test
       - run: pnpm validate:structure
       - run: pnpm validate:core-boundary
       - run: pnpm validate:config-boundary

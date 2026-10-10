@@ -57,6 +57,135 @@ for (const functionName of ['sync-apply', 'resolve-conflict']) {
   if (!pattern.test(functionsConfig)) violations.push(`${functionName} must keep Supabase platform JWT verification enabled`);
 }
 
+// Static regression checks complement (but do not replace) connected role tests.
+const syncGateway = fs.readFileSync(
+  path.join(root, 'infrastructure/supabase/functions/sync-apply/index.ts'),
+  'utf8',
+);
+const conflictResolver = fs.readFileSync(
+  path.join(root, 'infrastructure/supabase/functions/resolve-conflict/index.ts'),
+  'utf8',
+);
+for (const [name, source] of [['sync-apply', syncGateway], ['resolve-conflict', conflictResolver]]) {
+  if (!/\.rpc\(['"]can_write_workspace['"]/.test(source)) {
+    violations.push(`${name} must verify writer permission before admin-backed mutations`);
+  }
+}
+if (/if\s*\(!workspace\)\s*\{\s*await\s+recordIssue/.test(syncGateway)) {
+  violations.push('sync-apply must not log unauthorized mutations into another workspace');
+}
+
+// A persistent browser SQLite file is shared across sessions unless its
+// account identity is checked before mounting. Require the fail-closed owner
+// gate to stay wired to both login and logout paths.
+const localOwnerGate = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/sync/local-vault-ownership.ts'),
+  'utf8',
+);
+const persistence = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/sync/persistence.ts'),
+  'utf8',
+);
+const app = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/App.tsx'),
+  'utf8',
+);
+for (const token of ['readOwner', 'writeOwner', 'pendingCount', 'clearDatabase',
+                     'authLost', 'LocalVaultOwnershipConflictError']) {
+  if (!localOwnerGate.includes(token)) violations.push('Missing local account isolation guard: ' + token);
+}
+for (const token of ['LOCAL_VAULT_OWNER_KEY', 'localVaultOwnership.attach(userId)',
+                     'localVaultOwnership.logout()', 'localVaultOwnership.authLost()']) {
+  if (!persistence.includes(token)) violations.push('PowerSync account handoff is not enforced: ' + token);
+}
+if (!app.includes('connectReferenceAppSync(userId!)') ||
+    !app.includes('pauseReferenceAppSyncForAuthChange')) {
+  violations.push('The reference app must bind the PowerSync cache to its authenticated user.');
+}
+const tabLease = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/sync/local-vault-tab-lease.ts'),
+  'utf8',
+);
+for (const token of ['navigator.locks.request', "ifAvailable: true", "mode: 'exclusive'",
+                     'LocalVaultBusyError']) {
+  if (!tabLease.includes(token)) violations.push('Cross-tab SQLite lock missing: ' + token);
+}
+for (const token of ['localVaultTabLease.acquire()', 'localVaultTabLease.release()',
+                     'getSession()', 'localVaultOwnership.attach(userId)']) {
+  if (!persistence.includes(token)) violations.push('Browser identity/lock wiring missing: ' + token);
+}
+if (!app.includes('previousUserId !== userId') ||
+    !app.includes('generation !== bootstrapGeneration.current')) {
+  violations.push('Authenticated user change must cancel old sync before bootstrapping new workspace.');
+}
+if (!fs.existsSync(path.join(root, 'apps/reference-app/src/sync/local-vault-tab-lease.test.ts'))) {
+  violations.push('Cross-tab Web Locks must have explicit regression tests.');
+}
+if (!fs.existsSync(path.join(root, 'apps/reference-app/src/sync/local-vault-ownership.test.ts'))) {
+  violations.push('Local offline account isolation must have regression tests.');
+}
+
+for (const token of [
+  'reconnectSameOwner(userId)',
+  'const stillCurrent = await uafServices.auth.getSession()',
+  "throw new Error('Authentication changed during offline sync reconnection.')",
+]) {
+  if (!persistence.includes(token)) {
+    violations.push('Offline reconnection identity recheck missing: ' + token);
+  }
+}
+// Offline-to-online is itself a permission boundary. The editor must be
+// unmounted before any server revalidation begins, including a normal session
+// that lost connectivity without reloading the PWA.
+for (const token of [
+  'suspendReferenceAppRemoteSyncWhileOffline',
+  'offlineVerification = { userId: currentUserId, generation }',
+  'workspace: null, loading: true, error: null',
+  'await resumeReferenceAppSyncAfterReconnect()',
+  'workspace: verified, loading: false, error: null',
+]) {
+  if (!app.includes(token)) {
+    violations.push('Offline-to-online editing freeze or sync suspension missing: ' + token);
+  }
+}
+for (const token of ['suspendRemoteWhileOffline', 'reconnectSameOwner(userId)']) {
+  if (!localOwnerGate.includes(token) && !persistence.includes(token)) {
+    violations.push('Offline stream permission gate missing: ' + token);
+  }
+}
+// Offline startup cannot depend on an online workspace RPC when browser
+// connectivity is unavailable. The fallback must be bound to the confirmed
+// personal workspace, current user and an unexpired auth session, and must
+// undergo server revalidation on reconnect.
+const offlineWorkspace = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/offline-workspace.ts'),
+  'utf8',
+);
+for (const token of [
+  'LOCAL_VAULT_OWNER_KEY',
+  "value.membership.role === 'owner'",
+  "value.workspace.type === 'personal'",
+  'session.expiresAt * 1000 <= now + 30_000',
+  'MAX_OFFLINE_AGE_MS',
+  'session.accessToken',
+]) {
+  if (!offlineWorkspace.includes(token)) {
+    violations.push('Offline workspace fallback missing fail-closed condition: ' + token);
+  }
+}
+for (const token of [
+  'await connectReferenceAppSync(userId!)',
+  'readConfirmedPersonalWorkspace(window.localStorage, session)',
+  'saveConfirmedPersonalWorkspace(window.localStorage, session, workspace)',
+  'clearConfirmedPersonalWorkspace(window.localStorage)',
+  'Could not reverify this workspace after reconnecting',
+]) {
+  if (!app.includes(token)) violations.push('Reference app offline/reconnect gate missing: ' + token);
+}
+if (!fs.existsSync(path.join(root, 'apps/reference-app/src/offline-workspace.test.ts'))) {
+  violations.push('Offline workspace fallback must retain session/owner regression tests.');
+}
+
 if (violations.length) {
   console.error('Security invariant validation failed:\n' + violations.map((item) => `- ${item}`).join('\n'));
   process.exit(1);

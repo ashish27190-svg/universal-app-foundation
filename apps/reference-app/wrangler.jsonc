@@ -8,7 +8,8 @@
   },
   "env": {
     "staging": {
-      "name": "uaf-household-vault-staging"
+      "name": "uaf-household-vault-staging",
+      "preview_urls": false
     }
   }
 }
