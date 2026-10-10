@@ -125,6 +125,39 @@ if (!fs.existsSync(path.join(root, 'apps/reference-app/src/sync/local-vault-owne
   violations.push('Local offline account isolation must have regression tests.');
 }
 
+// Offline startup cannot depend on an online workspace RPC when browser
+// connectivity is unavailable. The fallback must be bound to the confirmed
+// personal workspace, current user and an unexpired auth session, and must
+// undergo server revalidation on reconnect.
+const offlineWorkspace = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/offline-workspace.ts'),
+  'utf8',
+);
+for (const token of [
+  'LOCAL_VAULT_OWNER_KEY',
+  "value.membership.role === 'owner'",
+  "value.workspace.type === 'personal'",
+  'session.expiresAt * 1000 <= now + 30_000',
+  'MAX_OFFLINE_AGE_MS',
+  'session.accessToken',
+]) {
+  if (!offlineWorkspace.includes(token)) {
+    violations.push('Offline workspace fallback missing fail-closed condition: ' + token);
+  }
+}
+for (const token of [
+  'await connectReferenceAppSync(userId!)',
+  'readConfirmedPersonalWorkspace(window.localStorage, session)',
+  'saveConfirmedPersonalWorkspace(window.localStorage, session, workspace)',
+  'clearConfirmedPersonalWorkspace(window.localStorage)',
+  'Could not reverify this workspace after reconnecting',
+]) {
+  if (!app.includes(token)) violations.push('Reference app offline/reconnect gate missing: ' + token);
+}
+if (!fs.existsSync(path.join(root, 'apps/reference-app/src/offline-workspace.test.ts'))) {
+  violations.push('Offline workspace fallback must retain session/owner regression tests.');
+}
+
 if (violations.length) {
   console.error('Security invariant validation failed:\n' + violations.map((item) => `- ${item}`).join('\n'));
   process.exit(1);
