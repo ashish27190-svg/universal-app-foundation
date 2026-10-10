@@ -50,6 +50,8 @@ describe('explicit conflict review gate', () => {
       { serverRevision: null },
       { serverRevision: 0 },
       { entityType: 'unsupported' },
+      { clientPayload: {} },
+      { clientPayload: { revision: 100, source: 'manual' } },
     ]) {
       expect(canReviewAndReapply({ ...conflict, ...invalid } as WriteConflict)).toBe(false);
       expect(snapshotForReview({ ...conflict, ...invalid } as WriteConflict)).toBeNull();
@@ -64,6 +66,15 @@ describe('explicit conflict review gate', () => {
     expect(matchesReviewedSnapshot(reviewed!, { ...conflict, serverRevision: 4 as WriteConflict['serverRevision'] })).toBe(false);
     expect(matchesReviewedSnapshot(reviewed!, { ...conflict, serverPayload: { ...conflict.serverPayload, notes: 'Changed since review' } })).toBe(false);
     expect(matchesReviewedSnapshot(reviewed!, { ...conflict, clientPayload: { name: 'Changed locally' } })).toBe(false);
+  });
+
+  it('excludes revision, source and other server-owned attributes from reviewed patch', () => {
+    const reviewed = fieldsToReview({
+      ...conflict,
+      clientPayload: { name: 'New value', revision: 999, source: 'manual', updated_by: 'fake-id' },
+      serverPayload: { name: 'Current value', revision: 3 },
+    });
+    expect(reviewed).toEqual([{ field: 'name', attempted: 'New value', server: 'Current value' }]);
   });
 
   it('represents missing server fields and multi-field metadata without omitting them', () => {
