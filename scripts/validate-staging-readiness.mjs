@@ -15,6 +15,10 @@ export function validateStagingEnvironment(env, mode = 'e2e') {
       'CLOUDFLARE_API_TOKEN',
       'CLOUDFLARE_ACCOUNT_ID',
       'STAGING_PRIVATE_ACCESS_CONFIRMED',
+      'STAGING_ACCESS_TEAM_DOMAIN',
+      'STAGING_WORKERS_SUBDOMAIN',
+      'STAGING_PROTECTED_URL',
+      'STAGING_POWERSYNC_APPROVED_ORIGIN',
     ] : ['E2E_EMAIL', 'E2E_PASSWORD', 'E2E_SECOND_EMAIL', 'E2E_SECOND_PASSWORD']),
   ];
   for (const key of required) if (!env[key] || !String(env[key]).trim()) errors.push('Missing ' + key);
@@ -33,6 +37,26 @@ export function validateStagingEnvironment(env, mode = 'e2e') {
       errors.push('Invalid Supabase URL.');
     }
   }
+  // Avoid silently bundling a server-side Supabase secret into the public
+  // browser app. The older JWT-style anon keys are allowed, but NEVER a JWT
+  // carrying the service_role claim.
+  const browserKey = env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
+  if (browserKey) {
+    if (/^sb_secret_/i.test(browserKey) || /^service_role$/i.test(browserKey)) {
+      errors.push('Supabase browser key must never be a secret/service-role key.');
+    } else if (browserKey.split('.').length === 3) {
+      try {
+        const raw = browserKey.split('.')[1] ?? '';
+        const claims = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+        if (claims.role === 'service_role') {
+          errors.push('Supabase browser key must never carry the service_role claim.');
+        }
+      } catch {
+        errors.push('Supabase JWT browser key is malformed.');
+      }
+    }
+  }
+
   if (env.VITE_POWERSYNC_URL) {
     try {
       const url = new URL(env.VITE_POWERSYNC_URL);
@@ -43,6 +67,31 @@ export function validateStagingEnvironment(env, mode = 'e2e') {
       }
     } catch {
       errors.push('Invalid PowerSync URL.');
+    }
+  }
+  if (mode === 'deploy') {
+    const subdomain = env.STAGING_WORKERS_SUBDOMAIN?.trim();
+    if (subdomain && !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(subdomain)) {
+      errors.push('Staging Workers subdomain must be a single valid DNS label.');
+    }
+    const teamDomain = env.STAGING_ACCESS_TEAM_DOMAIN?.trim();
+    if (teamDomain && !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.cloudflareaccess\\.com$/.test(teamDomain)) {
+      errors.push('Staging Access team domain must be a cloudflareaccess.com hostname.');
+    }
+    if (subdomain && env.STAGING_PROTECTED_URL &&
+      env.STAGING_PROTECTED_URL !== `https://uaf-household-vault-staging.${subdomain}.workers.dev/`) {
+      errors.push('Protected URL does not match the approved staging Workers subdomain.');
+    }
+    try {
+      const approved = new URL(env.STAGING_POWERSYNC_APPROVED_ORIGIN ?? '');
+      const actual = new URL(env.VITE_POWERSYNC_URL ?? '');
+      if (approved.protocol !== 'https:' ||
+          approved.href !== approved.origin + '/' ||
+          actual.origin !== approved.origin) {
+        errors.push('PowerSync URL does not match its separately approved staging origin.');
+      }
+    } catch {
+      errors.push('Staging PowerSync approved origin is invalid.');
     }
   }
   if (mode === 'deploy' && env.STAGING_PRIVATE_ACCESS_CONFIRMED !== 'PRIVATE_UAF_STAGING_ACCESS_VERIFIED') {
@@ -71,6 +120,10 @@ function selfTest() {
     CLOUDFLARE_API_TOKEN: 'synthetic-test-only',
     CLOUDFLARE_ACCOUNT_ID: 'synthetic-test-only',
     STAGING_PRIVATE_ACCESS_CONFIRMED: 'PRIVATE_UAF_STAGING_ACCESS_VERIFIED',
+    STAGING_WORKERS_SUBDOMAIN: 'uaf-test-account',
+    STAGING_PROTECTED_URL: 'https://uaf-household-vault-staging.uaf-test-account.workers.dev/',
+    STAGING_ACCESS_TEAM_DOMAIN: 'uaf-test.cloudflareaccess.com',
+    STAGING_POWERSYNC_APPROVED_ORIGIN: 'https://staging-sync.example.invalid/',
   };
   const assert = (condition, message) => {
     if (!condition) throw new Error('Staging validator self-test failed: ' + message);
@@ -84,7 +137,15 @@ function selfTest() {
   assert(validateStagingEnvironment({...valid,E2E_EMAIL:''}, 'e2e').length > 0, 'missing E2E user rejected');
   assert(validateStagingEnvironment({...valid,E2E_SECOND_EMAIL:''}, 'e2e').length > 0, 'missing second E2E user rejected');
   assert(validateStagingEnvironment({...valid,E2E_SECOND_EMAIL:valid.E2E_EMAIL}, 'e2e').length > 0, 'identical staging accounts rejected');
-  console.log('PASS: isolated UAF staging configuration validator (9 synthetic assertions).');
+  assert(validateStagingEnvironment({...valid,VITE_SUPABASE_PUBLISHABLE_KEY:'sb_secret_fake'}, 'deploy').length > 0, 'secret browser key rejected');
+  const serviceRoleJwt = 'eyJhbGciOiJIUzI1NiJ9.' + Buffer.from(JSON.stringify({role:'service_role'})).toString('base64url') + '.synthetic';
+  assert(validateStagingEnvironment({...valid,VITE_SUPABASE_PUBLISHABLE_KEY:serviceRoleJwt}, 'deploy').length > 0, 'service-role JWT browser key rejected');
+  assert(validateStagingEnvironment({...valid,STAGING_ACCESS_TEAM_DOMAIN:'other.example.com'}, 'deploy').length > 0, 'invalid Access team hostname rejected');
+  assert(validateStagingEnvironment({...valid,STAGING_PROTECTED_URL:'https://some-other-worker.example.workers.dev/'}, 'deploy').length > 0, 'mismatched Workers hostname rejected');
+  assert(validateStagingEnvironment({...valid,STAGING_POWERSYNC_APPROVED_ORIGIN:'https://other-sync.example.invalid/'}, 'deploy').length > 0, 'unapproved PowerSync origin rejected');
+  assert(validateStagingEnvironment({...valid,STAGING_WORKERS_SUBDOMAIN:'wrong.subdomain'}, 'deploy').length > 0, 'malformed workers subdomain rejected');
+
+  console.log('PASS: isolated UAF staging configuration validator (15 synthetic assertions).');
 }
 
 const isEntry = process.argv[1] && import.meta.url === new URL('file://' + process.argv[1]).href;
