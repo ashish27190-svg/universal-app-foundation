@@ -30,7 +30,8 @@ inactive PowerSync, or unknown database target.
 - `.github/workflows/staging.yml` is **manual-only**, with `preflight_only`
   as the default. It no longer deploys on every `main` push.
 - `scripts/validate-staging-readiness.mjs` rejects other Supabase project IDs,
-  mismatched Supabase URLs, non-HTTPS/loopback PowerSync URLs, absent E2E account
+  mismatched Supabase URLs, leaked service-role browser keys, unapproved PowerSync origins,
+  non-HTTPS/loopback PowerSync URLs, absent E2E account
   credentials and missing staging deploy prerequisites. It prints missing
   **secret names only**, never credential values. Synthetic self-tests run in PR CI.
 - The deploy action requires GitHub's `staging` environment, the expected
@@ -39,7 +40,9 @@ inactive PowerSync, or unknown database target.
 - `scripts/verify-private-staging.mjs` refuses deployment unless an
   unauthenticated request to the **pre-existing** staging Worker URL redirects
   to the Cloudflare Access login. Its URL and challenge checks are covered by
-  11 synthetic positive/negative assertions in CI. It repeats this check after deployment.
+  18 synthetic positive/negative assertions in CI. It checks the Worker root,
+  manifest, icon and an unknown path against the exact approved Access team,
+  before and after deployment.
   This check cannot prove protection of alternative domains or policies that
   change later. A Worker-level Access policy still requires human verification.
 - Staging Wrangler disables preview URLs; this does not replace Access on the
@@ -73,7 +76,10 @@ inactive PowerSync, or unknown database target.
    `STAGING_SUPABASE_PUBLISHABLE_KEY`, `STAGING_SUPABASE_DB_PASSWORD`,
    `STAGING_POWERSYNC_URL`, `SUPABASE_ACCESS_TOKEN`,
    `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
-   `STAGING_PROTECTED_URL` (the protected `https://uaf-household-vault-staging.<account>.workers.dev/`)
+   `STAGING_PROTECTED_URL` (the protected `https://uaf-household-vault-staging.<account>.workers.dev/`),
+   `STAGING_WORKERS_SUBDOMAIN` (the exact `<account>` DNS label),
+   `STAGING_ACCESS_TEAM_DOMAIN` (the approved `<team>.cloudflareaccess.com`),
+   `STAGING_POWERSYNC_APPROVED_ORIGIN` (the separately verified HTTPS PowerSync origin),
    and `STAGING_PRIVATE_ACCESS_CONFIRMED` with the exact release-approval value
    required by the staging validator. The optional `STAGING_SENTRY_DSN`
    must not enable PII collection.
@@ -90,6 +96,14 @@ inactive PowerSync, or unknown database target.
    traces, data provenance, anonymous-access denial and project audit evidence.
    No green-only shortcut; manual validation for Android PWA install and
    browser sleep/reconnect also remains mandatory.
+
+The Access redirect checks only confirm that the checked paths challenge
+an anonymous visitor at the expected Access tenant. They do **not** prove that
+the Access policy's allow-list is narrow, that no bypass policy exists, or that
+unlisted alternate domains are protected. Use Cloudflare's **Worker-level
+Access** policy (All traffic) rather than only a hostname/path Access rule;
+independently verify the destination, allow-list, bypass policies and preview
+configuration before enabling deployment.
 
 A workflow passing the static/preflight gate does **not** imply hosted
 readiness. No Supabase restore, migration, Cloudflare release or PowerSync
