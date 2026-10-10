@@ -98,7 +98,7 @@ for (const token of ['LOCAL_VAULT_OWNER_KEY', 'localVaultOwnership.attach(userId
                      'localVaultOwnership.logout()', 'localVaultOwnership.authLost()']) {
   if (!persistence.includes(token)) violations.push('PowerSync account handoff is not enforced: ' + token);
 }
-if (!app.includes('connectReferenceAppSync(String(session.user.id))') ||
+if (!app.includes('connectReferenceAppSync(userId!)') ||
     !app.includes('pauseReferenceAppSyncForAuthChange')) {
   violations.push('The reference app must bind the PowerSync cache to its authenticated user.');
 }
