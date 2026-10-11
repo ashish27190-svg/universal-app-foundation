@@ -61,11 +61,13 @@ for (const migration of [
   for (const required of [
     'workspace.status = \'active\'',
     'membership.status = \'active\'',
-    'membership.role in (\'owner\',\'admin\')',
     'for share of membership, workspace',
     'if authorized is distinct from true then',
   ]) {
     if (!sql.includes(required)) violations.push(migration + ' lacks transaction-held writer authorization: ' + required);
+  }
+  if (!/membership\.role\s+in\s*\(\s*'owner'\s*,\s*'admin'\s*\)/i.test(sql)) {
+    violations.push(migration + ' lacks owner/admin writer authorization.');
   }
 }
 const pgtap = fs.readFileSync(
