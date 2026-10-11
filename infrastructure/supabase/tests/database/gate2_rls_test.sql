@@ -75,16 +75,16 @@ select extensions.ok(
 select extensions.ok(
   not pg_catalog.has_column_privilege('authenticated','public.workspaces','updated_at','UPDATE'),
   'Workspace audit timestamp is not client-writable');
-select extensions.throws_ok($update public.workspaces
+select extensions.throws_ok($check$update public.workspaces
   set created_by='b2000000-0000-4000-8000-000000000002'
-  where id='a1000000-0000-4000-8000-000000000011'$,
+  where id='a1000000-0000-4000-8000-000000000011'$check$,
   '42501',null,'Authenticated client cannot transfer workspace creator');
-select extensions.throws_ok($update public.workspaces
+select extensions.throws_ok($check$update public.workspaces
   set workspace_type='team'
-  where id='a1000000-0000-4000-8000-000000000011'$,
+  where id='a1000000-0000-4000-8000-000000000011'$check$,
   '42501',null,'Authenticated client cannot change workspace type');
-select extensions.lives_ok($update public.workspaces set name='A Personal edited'
-  where id='a1000000-0000-4000-8000-000000000011'$,
+select extensions.lives_ok($check$update public.workspaces set name='A Personal edited'
+  where id='a1000000-0000-4000-8000-000000000011'$check$,
   'Active owner can still rename own workspace');
 reset role;
 update public.workspaces set status='archived'
