@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from 'node:fs';
+import { assertManualOnlyWorkflow } from './validate-manual-workflow-triggers.mjs';
 
 const vite = readFileSync('apps/reference-app/vite.config.ts', 'utf8');
 for (const token of ["registerType: 'prompt'", 'runtimeCaching: []', 'skipWaiting: false', 'clientsClaim: false']) {
@@ -19,7 +20,7 @@ for (const token of ['node-version: 24', 'pnpm-lock.yaml is required', 'pnpm ins
 
 const production = readFileSync('.github/workflows/production.yml', 'utf8');
 if (!production.includes('workflow_dispatch:')) throw new Error('Production deployment must be explicitly dispatched.');
-if (/\npush:\s*(\n|$)/.test(production)) throw new Error('Production deployment must not trigger directly from push.');
+assertManualOnlyWorkflow(production, 'Production');
 if (!production.includes('environment: production')) throw new Error('Production must use a protected GitHub environment.');
 
 const staging = readFileSync('.github/workflows/staging.yml', 'utf8');
@@ -66,13 +67,15 @@ for (const [name, source] of [['CI', ci], ['staging', staging]]) {
     throw new Error(name + ' must test migration review digest rejection.');
   }
 }
+if (!ci.includes('node scripts/validate-manual-workflow-triggers.mjs --self-test') ||
+    !ci.includes('node scripts/validate-manual-workflow-triggers.mjs')) {
+  throw new Error('CI must fail closed on automatic staging/E2E/production workflow triggers.');
+}
 if (!existsSync('scripts/validate-staging-migration-approval.mjs')) {
   throw new Error('Staging migration file-set approval verifier is missing.');
 }
 
-if (/\\npush:\\s*(\\n|$)/.test(staging)) {
-  throw new Error('Private staging deployment must never trigger automatically on push.');
-}
+assertManualOnlyWorkflow(staging, 'Staging');
 if (staging.split(String.fromCharCode(10)).filter(line => line.trim() === 'run: node scripts/verify-private-staging.mjs').length !== 2) {
   throw new Error('Staging deploy requires anonymous Access verification both before and after publishing.');
 }
@@ -88,9 +91,7 @@ for (const token of [
 ]) {
   if (!connectedE2E.includes(token)) throw new Error(`Connected E2E missing guard: ${token}`);
 }
-if (/\\nschedule:\\s*(\\n|$)/.test(connectedE2E)) {
-  throw new Error('Connected E2E should remain manual while staging is paused.');
-}
+assertManualOnlyWorkflow(connectedE2E, 'Connected E2E');
 
 for (const token of [
   'PLAYWRIGHT_JSON_OUTPUT_FILE',
