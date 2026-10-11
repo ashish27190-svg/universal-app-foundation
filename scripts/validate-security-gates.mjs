@@ -50,6 +50,21 @@ if (!/revoke\s+all\s+on\s+table\s+public\.processed_mutations\s+from\s+anon,\s*a
 }
 
 
+// Workspace owners may rename/archive, never rewrite creator/type/audit
+// metadata. Deny writer RPC on an archived workspace even with active member.
+const workspaceLockdown = fs.readFileSync(
+  path.join(root, 'infrastructure/supabase/migrations/20261011000100_workspace_writer_least_privilege.sql'),
+  'utf8');
+for (const token of [
+  "workspace.status = 'active'",
+  'revoke update on table public.workspaces from authenticated;',
+  'grant update (name, status) on table public.workspaces to authenticated;',
+]) {
+  if (!workspaceLockdown.includes(token)) {
+    violations.push('Missing workspace least-privilege migration invariant: ' + token);
+  }
+}
+
 const functionsConfig = fs.readFileSync(path.join(root, 'infrastructure/supabase/config.toml'), 'utf8');
 // Server-side conflict resolutions must keep the authoritative workspace
 // state and actor role stable until the atomic SQL transaction completes.
