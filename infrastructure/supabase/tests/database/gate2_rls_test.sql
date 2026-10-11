@@ -1,7 +1,7 @@
 -- Disposable UAF local Gate-2 RLS test; never run against a linked production project.
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(34);
+select extensions.plan(41);
 
 -- Synthetic users. Transactional fixture data rolls back after pgTAP execution.
 insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
@@ -60,6 +60,55 @@ select extensions.is((select count(*)::int from public.household_assets where wo
 select extensions.is((select count(*)::int from public.workspaces where id='a1000000-0000-4000-8000-000000000011'),0,'B cannot read A workspace');
 
 reset role;
+
+-- A writer's active membership must never allow conflict closure in an
+-- archived workspace. Restore it and prove one closure/audit only on retry.
+insert into public.write_conflicts (
+  id, workspace_id, entity_type, entity_id, conflict_type, client_payload, server_payload
+) values (
+  'a1000000-0000-4000-8000-000000000778',
+  'a1000000-0000-4000-8000-000000000011',
+  'household_assets', 'a1000000-0000-4000-8000-000000000101', 'revision',
+  '{"name":"Offline edit"}'::jsonb, '{"name":"Asset A"}'::jsonb
+);
+update public.workspaces set status = 'archived'
+ where id = 'a1000000-0000-4000-8000-000000000011';
+select extensions.is(
+  public.keep_server_conflict_transaction(
+    'a1000000-0000-4000-8000-000000000778',
+    'a1000000-0000-4000-8000-000000000001'
+  )->>'status', 'denied',
+  'Archived workspace blocks keep-server resolution despite active owner membership');
+select extensions.is(
+  (select count(*)::int from public.write_conflicts
+   where id = 'a1000000-0000-4000-8000-000000000778' and resolved_at is null), 1,
+  'Denied archived-workspace resolution leaves conflict open');
+select extensions.is(
+  (select count(*)::int from public.audit_events
+   where correlation_id = 'a1000000-0000-4000-8000-000000000778'), 0,
+  'Denied archived-workspace resolution writes no audit');
+update public.workspaces set status = 'active'
+ where id = 'a1000000-0000-4000-8000-000000000011';
+select extensions.is(
+  public.keep_server_conflict_transaction(
+    'a1000000-0000-4000-8000-000000000778',
+    'a1000000-0000-4000-8000-000000000001'
+  )->>'status', 'resolved',
+  'Restored active workspace permits authorized keep-server resolution');
+select extensions.is(
+  (select count(*)::int from public.audit_events
+   where correlation_id = 'a1000000-0000-4000-8000-000000000778'), 1,
+  'Authorized keep-server resolution produces exactly one audit');
+select extensions.is(
+  public.keep_server_conflict_transaction(
+    'a1000000-0000-4000-8000-000000000778',
+    'a1000000-0000-4000-8000-000000000001'
+  )->>'status', 'already_resolved',
+  'Retried keep-server resolution is idempotent');
+select extensions.is(
+  (select count(*)::int from public.audit_events
+   where correlation_id = 'a1000000-0000-4000-8000-000000000778'), 1,
+  'Idempotent keep-server retry never duplicates audit');
 
 -- A normal authenticated browser must never invoke the server transaction RPC.
 select extensions.ok(
