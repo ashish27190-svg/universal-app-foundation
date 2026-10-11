@@ -19,6 +19,11 @@ on:
         required: false
         type: string
         default: ''
+      reviewed_candidate_sha:
+        description: "Exact Git commit SHA from the same reviewed plan_migrations run; required for deploy only"
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -44,6 +49,7 @@ jobs:
       - run: node scripts/verify-private-staging.mjs --self-test
       - run: node scripts/validate-connected-e2e-results.mjs --self-test
       - run: node scripts/validate-staging-migration-approval.mjs --self-test
+      - run: node scripts/validate-staging-candidate-approval.mjs --self-test
       - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
       - name: Discover browser journeys without starting staging services
         run: pnpm --filter @uaf/reference-app exec playwright test --list
@@ -71,6 +77,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Require only the exact isolated UAF database for the read-only plan
         run: node scripts/validate-staging-readiness.mjs --plan
+      - name: Print reviewed candidate source commit before remote planning
+        run: node scripts/validate-staging-candidate-approval.mjs --print
       - name: Print migration file-set digest for human review
         run: node scripts/validate-staging-migration-approval.mjs --print
       - name: Link only the approved staging database
@@ -111,6 +119,10 @@ jobs:
           package-manager-cache: false
       - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
       - run: pnpm install --frozen-lockfile
+      - name: Refuse deployment of an unreviewed candidate commit
+        env:
+          REVIEWED_CANDIDATE_SHA: ${{ inputs.reviewed_candidate_sha }}
+        run: node scripts/validate-staging-candidate-approval.mjs --verify
       - name: Require independently reviewed exact migration file-set
         env:
           REVIEWED_MIGRATIONS_SHA256: ${{ inputs.reviewed_migrations_sha256 }}
