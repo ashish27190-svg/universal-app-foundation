@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AuthSession, WorkspaceContext } from '@uaf/auth';
 import {
+  assertConfirmedWorkspaceContinuity,
   clearConfirmedPersonalWorkspace,
   readConfirmedPersonalWorkspace,
   saveConfirmedPersonalWorkspace,
@@ -85,6 +86,38 @@ describe('last-confirmed personal workspace offline startup', () => {
       ...context.membership, userId: accountB,
     } } }));
     expect(readConfirmedPersonalWorkspace(storage, session, now)).toBeNull();
+  });
+
+  it('allows reconnect only to the exact previously confirmed personal workspace', () => {
+    const { storage } = fixture();
+    saveConfirmedPersonalWorkspace(storage, session, context, now);
+    expect(() => assertConfirmedWorkspaceContinuity(storage, session, context, now)).not.toThrow();
+    const anotherWorkspace = '44444444-4444-4444-8444-444444444444';
+    const replaced: WorkspaceContext = {
+      ...context,
+      workspace: { ...context.workspace, id: anotherWorkspace as WorkspaceContext['workspace']['id'] },
+      membership: { ...context.membership, workspaceId: anotherWorkspace as WorkspaceContext['membership']['workspaceId'] },
+    };
+    expect(() => assertConfirmedWorkspaceContinuity(storage, session, replaced, now)).toThrow(
+      'offline changes remain',
+    );
+    // The old owner and its cache remain available for recovery.
+    expect(readConfirmedPersonalWorkspace(storage, session, now)).toEqual(context);
+  });
+
+  it('blocks changed membership, expired confirmation, and missing owner before reconnect', () => {
+    const { storage } = fixture();
+    saveConfirmedPersonalWorkspace(storage, session, context, now);
+    expect(() => assertConfirmedWorkspaceContinuity(
+      storage, session, { ...context, membership: { ...context.membership, status: 'removed' } }, now,
+    )).toThrow('could not be reverified');
+    expect(() => assertConfirmedWorkspaceContinuity(
+      storage, session, context, now + 8 * 24 * 60 * 60_000,
+    )).toThrow('could not be reverified');
+    storage.removeItem(LOCAL_VAULT_OWNER_KEY);
+    expect(() => assertConfirmedWorkspaceContinuity(storage, session, context, now)).toThrow(
+      'could not be reverified',
+    );
   });
 
   it('clears stale context on logout or user handoff', () => {
