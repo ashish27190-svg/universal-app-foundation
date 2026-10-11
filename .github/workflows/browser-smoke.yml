@@ -1,0 +1,42 @@
+name: Browser Smoke (No Staging)
+
+# Real Chromium against a production-built local preview with deliberately
+# invalid/synthetic backend URLs. NO hosted staging, user credentials, or
+# Cloudflare deploy is involved. This is NOT connected acceptance evidence.
+on:
+  pull_request:
+    paths:
+      - 'apps/reference-app/**'
+      - 'packages/**'
+      - 'domains/**'
+      - '.github/workflows/browser-smoke.yml'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  no-staging-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_UAF_ENVIRONMENT: development
+      VITE_SUPABASE_URL: https://uaf-smoke.invalid
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_synthetic_browser_smoke_only
+      VITE_POWERSYNC_URL: https://powersync-smoke.invalid
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Build from synthetic public configuration (no staging secrets)
+        run: pnpm build
+      - name: Install chromium for actual Web Locks browser smoke
+        run: pnpm --filter @uaf/reference-app exec playwright install --with-deps chromium
+      - name: Prove pre-auth Web Locks and cross-tab denial in browser
+        run: pnpm --filter @uaf/reference-app exec playwright test --config playwright.smoke.config.ts
