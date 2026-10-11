@@ -78,11 +78,11 @@ select extensions.ok(
 select extensions.throws_ok($update public.workspaces
   set created_by='b2000000-0000-4000-8000-000000000002'
   where id='a1000000-0000-4000-8000-000000000011'$,
-  '42501','Authenticated client cannot transfer workspace creator');
+  '42501',null,'Authenticated client cannot transfer workspace creator');
 select extensions.throws_ok($update public.workspaces
   set workspace_type='team'
   where id='a1000000-0000-4000-8000-000000000011'$,
-  '42501','Authenticated client cannot change workspace type');
+  '42501',null,'Authenticated client cannot change workspace type');
 select extensions.lives_ok($update public.workspaces set name='A Personal edited'
   where id='a1000000-0000-4000-8000-000000000011'$,
   'Active owner can still rename own workspace');
