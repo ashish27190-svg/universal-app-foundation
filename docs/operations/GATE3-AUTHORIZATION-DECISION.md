@@ -1,8 +1,10 @@
 # Gate 3 — authorization and evidence decision
 
 **Release target:** UAF Household Vault only. **As of 11 October 2026**:
-code changes are on draft PR #5; the dedicated staging Supabase project
-`vdhfayratdsoexltyrku` was observed **INACTIVE**. Production is unchanged.
+Gate 2/3 application changes remain on draft PR #5. The dedicated staging
+Supabase project `vdhfayratdsoexltyrku` was observed **INACTIVE**.
+Only the approved production **workflow kill switch** (PR #7) changed on
+`main`; no production service or database was deployed or mutated.
 
 ## Consolidated release blockers — 11 October 2026
 
@@ -17,15 +19,16 @@ code changes are on draft PR #5; the dedicated staging Supabase project
   authenticated table-wide `workspaces` UPDATE with column grants for
   `name` and `status` only. Immutable creator, type, and timestamps
   remain server-controlled. Eleven new pgTAP checks bring the disposable
-  suite to **59 planned assertions**, subject to exact-head passing CI
-  before they count as validated. This does NOT grant users authorization
+  suite to **59 assertions**. All 59 passed at reviewed candidate
+  `b7791d0a`; any subsequent draft change requires its own CI verification. This does NOT grant users authorization
   to delete or transfer a workspace.
-- **Safety pull request:** [PR #7](https://github.com/ashish27190-svg/universal-app-foundation/pull/7)
-  is a separately scoped, CI-passed **DRAFT** production kill switch.
-  It modifies only the production workflow and is NOT merged. The existing
-  manual production database/Worker deploy path remains present on `main`.
-  Do not dispatch that workflow. This is independent of the larger draft
-  [PR #5](https://github.com/ashish27190-svg/universal-app-foundation/pull/5).
+- **Production freeze now active:** independently approved
+  [PR #7](https://github.com/ashish27190-svg/universal-app-foundation/pull/7)
+  was squash-merged to `main` as `4e673500`. A read-only check confirmed
+  the production workflow contains `PRODUCTION_RELEASE_BLOCKED`, has no
+  secret references or deploy commands, and is intentionally non-operational.
+  Draft [PR #5](https://github.com/ashish27190-svg/universal-app-foundation/pull/5)
+  remains unmerged; `main` staging automation is also inert.
 - **Reviewer controls unverified:** GitHub reports no repository rulesets,
   while a read-only attempt to inspect `main` branch protection returned
   HTTP 403 and the environment protection endpoint was unavailable through
@@ -71,11 +74,34 @@ Draft PR #5 now defines three manual choices. They are **not** active on
   It does not deploy Edge Functions or publish a Worker. GitHub reviewers must
   examine the actual remote pending-migration output and all migration SQL.
 - `deploy_private_staging`: requires a separately authorized deployment,
-  external Cloudflare Access verification, protected environment review and
-  a nonempty `reviewed_migrations_sha256` dispatch input copied from the
-  previously reviewed plan for the exact source tree. The job verifies this
+  external Cloudflare Access verification, protected environment review,
+  BOTH `reviewed_migrations_sha256` AND `reviewed_candidate_sha` inputs
+  copied from the SAME approved plan run. The latter binds all application,
+  Edge Function, workflow and static asset source to the reviewed Git commit,
+  closing the gap in which unchanged SQL but unreviewed code might deploy. The job verifies this
   digest before any remote link and immediately before applying migrations.
   Missing or changed files fail closed.
+
+**Manual workflow limitation:** GitHub documents that the
+`workflow_dispatch` event requires the workflow to be present on the
+default branch. The current default-branch workflow is deliberately an
+inert kill switch; the guarded `preflight_only`, `plan_migrations` and
+`deploy_private_staging` options exist only in draft PR #5. Do not assume
+a user can run its guarded choices directly from a PR branch. Activating
+a guarded workflow on `main` requires a SEPARATE reviewed merge/release
+decision; running local PR tests is not a workaround for hosted approval.
+Official reference:
+https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow
+
+**GitHub approval-settings checklist:** inspect repository
+Settings → Environments → staging and production. Check named required
+reviewers (prefer disallowing self-approval), deployment branch rules and
+bypass settings; then verify Settings → Rules → Rulesets or Branches for
+`main` PR+status-check protection. GitHub docs warn that choosing
+"protected branches only" when NO branch protection exists may still
+permit all branches. Our connector cannot verify those settings.
+References: https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments
+and https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches
 
 **Important limits:** the SHA-256 binds approved *local migration file bytes*
 to the dispatched commit; it does NOT authenticate the reviewer, prove that
@@ -122,13 +148,12 @@ This is distinct from a private website. Treat all tracked code and documents
 as public, never commit credentials or proprietary customer data; choose
 private repository visibility only through a separate explicit decision.
 
-**Production freeze on draft PR #5:** a fail-closed production workflow
-replaces the earlier unguarded migration/app deployment *on the draft branch
-only*. It deliberately exits with `PRODUCTION_RELEASE_BLOCKED` and references
-no production secrets. Until the change is separately reviewed and merged,
-the `main` production workflow is unchanged and its manual deployment MUST
-NOT be dispatched. Production approval requires its own design, access
-review, rollback and release evidence, separate from staging approval.
+**Production freeze already on `main`:** PR #7 was separately authorized
+and merged. The draft PR #5 carries the identical fail-closed production
+workflow file; the file content is equal across `main` and the draft.
+No actual production deployment is authorized. A future production-release
+workflow requires its own separate architecture/security review, rollback,
+hosted evidence and explicit approval.
 
 ### Hosted pilot authorizations are not yet granted
 
