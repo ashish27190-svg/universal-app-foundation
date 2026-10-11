@@ -35,6 +35,8 @@ jobs:
         run: node scripts/validate-staging-migration-approval.mjs --self-test
       - name: Verify staging commit fingerprint rejects unreviewed candidates (synthetic)
         run: node scripts/validate-staging-candidate-approval.mjs --self-test
+      - name: Reject unprotected branch, fork and nonmanual hosted staging contexts (synthetic)
+        run: node scripts/validate-staging-github-context.mjs --self-test
       - name: Reject automatic staging/connected E2E/production workflow triggers
         run: |
           node scripts/validate-manual-workflow-triggers.mjs --self-test
