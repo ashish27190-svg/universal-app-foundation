@@ -36,7 +36,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: node scripts/validate-staging-readiness.mjs --self-test
       - run: node scripts/verify-private-staging.mjs --self-test
+      - run: node scripts/validate-connected-e2e-results.mjs --self-test
       - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
+      - name: Discover browser journeys without starting staging services
+        run: pnpm --filter @uaf/reference-app exec playwright test --list
 
   deploy:
     name: Deploy only after dedicated staging and private Access approvals
