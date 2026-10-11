@@ -21,6 +21,14 @@ for (const token of ['node-version: 24', 'pnpm-lock.yaml is required', 'pnpm ins
 const production = readFileSync('.github/workflows/production.yml', 'utf8');
 if (!production.includes('workflow_dispatch:')) throw new Error('Production deployment must be explicitly dispatched.');
 assertManualOnlyWorkflow(production, 'Production');
+if (!production.includes('PRODUCTION_RELEASE_BLOCKED') ||
+    !production.includes('no_production_deployment:') ||
+    !/^\s*exit 1\s*$/m.test(production) ||
+    /\bsecrets\./.test(production) ||
+    /\b(?:pnpm|npx)\s+(?:supabase|wrangler)\b/.test(production) ||
+    /\b(?:curl|wget)\s/.test(production)) {
+  throw new Error('Production release must stay fail-closed: no secrets, linked DB writes or Worker deploy.');
+}
 if (!production.includes('environment: production')) throw new Error('Production must use a protected GitHub environment.');
 
 const staging = readFileSync('.github/workflows/staging.yml', 'utf8');
