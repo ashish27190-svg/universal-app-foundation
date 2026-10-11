@@ -85,6 +85,29 @@ export function readConfirmedPersonalWorkspace(
   }
 }
 
+/**
+ * The same personal workspace must still be confirmed when reconnection
+ * occurs. A newly created/reassigned workspace must never inherit the prior
+ * workspace's queued local edits, even if the user identity is unchanged.
+ */
+export function assertConfirmedWorkspaceContinuity(
+  storage: OfflineWorkspaceStorage,
+  session: AuthSession,
+  verified: WorkspaceContext,
+  now = Date.now(),
+): void {
+  const userId = String(session.user.id);
+  const saved = readConfirmedPersonalWorkspace(storage, session, now);
+  if (!saved || !isValidPersonalContext(verified, userId) ||
+      saved.workspace.id !== verified.workspace.id) {
+    throw new Error(
+      'Your previously confirmed workspace could not be reverified. ' +
+      'Your offline changes remain on this device and will not be sent ' +
+      'to a different workspace.',
+    );
+  }
+}
+
 export function clearConfirmedPersonalWorkspace(storage: OfflineWorkspaceStorage): void {
   storage.removeItem(CACHE_KEY);
 }
