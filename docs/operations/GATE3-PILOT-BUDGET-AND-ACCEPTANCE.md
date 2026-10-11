@@ -54,8 +54,14 @@ for separate human approval before any change.
 1. Verify UAF project ref and current billing, and obtain a specific
    monthly spending limit/approval. Check that the other two project
    IDs are NOT targeted.
-2. Restore ONLY the dedicated UAF staging project. Verify it is healthy,
-   then review the migration dry-run (never blind-apply).
+2. Restore ONLY the dedicated UAF staging project after separate cost
+   approval. Verify it is healthy. On the guarded draft candidate, run
+   `plan_migrations` using the protected GitHub `staging` environment;
+   it validates the UAF project, emits the migration file-set SHA-256,
+   and previews pending remote migrations with `--dry-run`. A reviewer
+   must inspect the actual SQL, target project, pending migration list,
+   environment restrictions and exact candidate commit before approving
+   any subsequent write. Planning does **not** apply migrations.
 3. Configure a segregated PowerSync instance with **Sync Streams** and
    the repository's `infrastructure/powersync/sync-config.yaml`.
    Use only the UAF Postgres database and distinct test credentials.
@@ -65,8 +71,15 @@ for separate human approval before any change.
    coverage. Do not deploy until anonymous route probes prove challenge.
 5. Enter environment secrets only into the reviewed protected staging
    environment; use two SYNTHETIC test users and no production credentials.
-6. Run reviewed `preflight_only`, then protected
-   `deploy_private_staging` only with its separate deployment approval.
+6. Run reviewed `preflight_only`, then the approved
+   `plan_migrations` job after the isolated staging project is funded
+   and available. Only after someone has reviewed the plan and separately
+   authorized deployment should the protected `deploy_private_staging`
+   job be dispatched with the exact `reviewed_migrations_sha256` copied
+   from the approved plan. The digest is rechecked before the database
+   write and fails closed on missing or changed files. It is not proof
+   of a human review or a guarantee that the remote migration history
+   remained unchanged; compare the immediate deploy dry-run too.
 7. Require ALL nine real browser tests (zero skips, zero flakiness).
    Verify auth changes, offline reload/no-reload, tab lock, conflict,
    CRUD, and two-account data isolation.
