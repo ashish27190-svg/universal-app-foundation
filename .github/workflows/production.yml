@@ -1,5 +1,10 @@
-name: Deploy Production
+name: Deploy Production (Blocked Pending Release Assurance)
 
+# P0 safeguard on the draft branch. Do not restore deployment until the
+# production authorization, migration review, access policy, E2E evidence
+# and rollback gates have passed and have separately approved implementation.
+# This dispatch deliberately fails WITHOUT reading secrets or contacting
+# Supabase, PowerSync or Cloudflare.
 on:
   workflow_dispatch:
 
@@ -11,37 +16,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  no_production_deployment:
+    name: Production release is explicitly blocked
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 2
     environment: production
-    env:
-      VITE_UAF_ENVIRONMENT: production
-      VITE_SUPABASE_URL: ${{ secrets.PRODUCTION_SUPABASE_URL }}
-      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.PRODUCTION_SUPABASE_PUBLISHABLE_KEY }}
-      VITE_POWERSYNC_URL: ${{ secrets.PRODUCTION_POWERSYNC_URL }}
-      VITE_SENTRY_DSN: ${{ secrets.PRODUCTION_SENTRY_DSN }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.PRODUCTION_SUPABASE_DB_PASSWORD }}
-      SUPABASE_PROJECT_REF: ${{ secrets.PRODUCTION_SUPABASE_PROJECT_REF }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          package-manager-cache: false
-      - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
-      - name: Apply production Supabase migrations
+      - name: Deny all production mutations until separately approved
         run: |
-          pnpm supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          pnpm supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
-      - name: Deploy production Edge Functions
-        run: |
-          pnpm supabase functions deploy sync-apply --project-ref "$SUPABASE_PROJECT_REF"
-          pnpm supabase functions deploy resolve-conflict --project-ref "$SUPABASE_PROJECT_REF"
-      - name: Deploy production PWA
-        run: pnpm wrangler deploy --config apps/reference-app/wrangler.jsonc
+          echo "::error::PRODUCTION_RELEASE_BLOCKED: Private staging and hosted acceptance are incomplete. A separately reviewed production workflow is required."
+          exit 1
