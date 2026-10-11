@@ -14,8 +14,20 @@ It **does not** link Supabase, run migrations, configure PowerSync,
 publish a Worker, touch production, or prove the site is SSO protected.
 
 Status: the same major checks are already enforced in PR CI.
-Actual execution of manual `preflight_only` on the chosen head is still
-separate evidence; do not claim it was run.
+**Critical default-branch caveat:** `main` still contains the OLD
+`Deploy Staging` workflow, whose `push: [main]` trigger can run staging
+migrations, Edge Functions and Cloudflare deploy **automatically**, and
+whose manual dispatch has no `preflight_only` input. The default branch
+also retains a scheduled connected-E2E workflow. The hardened
+`preflight_only` variant is available only in this draft PR branch.
+**Do not dispatch `Deploy Staging` from the current default-branch Actions
+UI or merge PR #5** based on an assumption that the guarded preflight is
+already the default. A specific approval is needed to apply a minimal
+protective workflow-only change on `main`, or the default branch must be
+otherwise secured and independently verified. No such change has been
+made. Until then, rely only on already-running PR CI/disposable tests.
+Actual execution of manual `preflight_only` on the chosen head is
+pending; do not claim it was run.
 
 ## Decision 1 — financial and security approval required
 
@@ -65,6 +77,10 @@ result.
 
 ## Current permitted next step
 
-Run the manual **preflight_only** action for the reviewed draft head.
-Then assemble an itemized staging cost/security proposal to approve
-**before** reactivating or deploying any hosted component.
+**Do not click the existing default-branch Deploy Staging workflow.**
+First obtain approval for a **workflow-only, no-deploy guard change** that
+removes its automatic `main` push deploy and eliminates default-branch
+scheduled connected E2E (or prove equivalent protections). Review the
+proposed change without running any hosted job. Only then run the guarded
+`preflight_only` workflow on its reviewed head, and separately approve an
+itemized staging cost/security proposal before activating hosted services.
