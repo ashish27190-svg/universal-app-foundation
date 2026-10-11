@@ -23,8 +23,12 @@ export function manualOnlyWorkflowErrors(source) {
       errors.push('Malformed workflow event indentation.');
       continue;
     }
-    const event = /^ {2}([a-z][a-z0-9_-]*):\s*(?:.*)$/.exec(line);
-    if (event) events.push(event[1]);
+    if (line.startsWith('  ') && !line.startsWith('    ')) {
+      // YAML also permits quoted event names; never let these evade checks.
+      const event = /^ {2}["']?([a-z][a-z0-9_-]*)["']?:\s*(?:.*)$/.exec(line);
+      if (event) events.push(event[1]);
+      else errors.push('Unrecognized workflow event mapping.');
+    }
   }
   if (events.length !== 1 || events[0] !== 'workflow_dispatch') {
     errors.push('Only workflow_dispatch is permitted; observed: ' + (events.join(', ') || 'none'));
@@ -60,14 +64,16 @@ function selfTest() {
   check(manualOnlyWorkflowErrors('name: Missing\njobs:\n').length > 0, 'missing events rejected');
   check(manualOnlyWorkflowErrors('on:\n  workflow_dispatch:\non:\n  push:\n').length > 0, 'duplicate roots rejected');
   check(manualOnlyWorkflowErrors(safe.replace('  workflow_dispatch:', '  schedule:')).length > 0, 'scheduled-only rejected');
-  console.log('PASS: manual-only workflow event gate (12 synthetic assertions).');
+  check(manualOnlyWorkflowErrors(safe.replace('  workflow_dispatch:', '  workflow_dispatch:\n  "push":')).length > 0, 'quoted push rejected');
+  check(manualOnlyWorkflowErrors(safe.replace('  workflow_dispatch:', '  workflow_dispatch:\n  - push')).length > 0, 'event list rejected');
+  console.log('PASS: manual-only workflow event gate (14 synthetic assertions).');
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   if (process.argv.includes('--self-test')) selfTest();
   else {
-    const paths = ['.github/workflows/staging.yml', '.github/workflows/connected-e2e.yml'];
+    const paths = ['.github/workflows/staging.yml', '.github/workflows/connected-e2e.yml', '.github/workflows/production.yml'];
     for (const path of paths) assertManualOnlyWorkflow(readFileSync(path, 'utf8'), path);
-    console.log('PASS: staging and connected E2E workflows allow manual dispatch only.');
+    console.log('PASS: staging, connected E2E and production workflows allow manual dispatch only.');
   }
 }
