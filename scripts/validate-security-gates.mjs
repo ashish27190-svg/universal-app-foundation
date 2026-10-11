@@ -114,9 +114,9 @@ for (const token of ['localVaultTabLease.acquire()', 'localVaultTabLease.release
                      'getSession()', 'localVaultOwnership.attach(userId)']) {
   if (!persistence.includes(token)) violations.push('Browser identity/lock wiring missing: ' + token);
 }
-if (!app.includes('previousUserId !== userId') ||
+if (!app.includes('if (previousUserId !== null)') ||
     !app.includes('generation !== bootstrapGeneration.current')) {
-  violations.push('Authenticated user change must cancel old sync before bootstrapping new workspace.');
+  violations.push('Any resumed auth identity must halt prior sync and cancel stale bootstraps.');
 }
 if (!fs.existsSync(path.join(root, 'apps/reference-app/src/sync/local-vault-tab-lease.test.ts'))) {
   violations.push('Cross-tab Web Locks must have explicit regression tests.');
@@ -152,6 +152,26 @@ for (const token of ['suspendRemoteWhileOffline', 'reconnectSameOwner(userId)'])
   if (!localOwnerGate.includes(token) && !persistence.includes(token)) {
     violations.push('Offline stream permission gate missing: ' + token);
   }
+}
+// An initial ONLINE bootstrap must verify the server's membership before
+// invoking the PowerSync uploader. Reconnect must preserve the precise
+// previously-confirmed personal workspace, even when Supabase could return a
+// different workspace for the same user.
+const onlineBootstrap = app.split('// Online: verify the server')[1]?.split('}\n        if (!disposed')[0] ?? '';
+if (!onlineBootstrap.includes('workspace = await uafServices.workspaces.ensurePersonalWorkspace()') ||
+    !onlineBootstrap.includes('await connectReferenceAppSync(userId!)') ||
+    onlineBootstrap.indexOf('ensurePersonalWorkspace()') > onlineBootstrap.indexOf('connectReferenceAppSync(userId!)')) {
+  violations.push('Online workspace membership must be verified before connecting PowerSync.');
+}
+const reconnectCode = app.split('// Once online again, a locally cached membership')[1] ?? '';
+if (!reconnectCode.includes('assertConfirmedWorkspaceContinuity(window.localStorage, current, verified)') ||
+    reconnectCode.indexOf('assertConfirmedWorkspaceContinuity(') > reconnectCode.indexOf('await resumeReferenceAppSyncAfterReconnect()')) {
+  violations.push('Reconnection must verify exact previous workspace before uploading cached mutations.');
+}
+if (!app.includes('setTimeout(() =>') || !app.includes('authTimers.add(handle)') ||
+    !app.includes('clearTimeout(handle)') ||
+    app.includes('onAuthStateChange((session) => { void applySession(session)')) {
+  violations.push('Supabase auth event must defer API work until its callback has returned.');
 }
 // Offline startup cannot depend on an online workspace RPC when browser
 // connectivity is unavailable. The fallback must be bound to the confirmed
