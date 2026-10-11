@@ -22,6 +22,7 @@ declare
   allowed_fields text[];
   result jsonb;
   replay_id uuid;
+  authorized boolean;
 begin
   if p_conflict_id is null or p_actor_user_id is null
      or p_reviewed_server_revision is null or p_reviewed_server_revision < 1
@@ -37,17 +38,20 @@ begin
     return pg_catalog.jsonb_build_object('status','not_found');
   end if;
 
-  -- The SQL transaction re-authorizes the claimed actor, rather than trusting
-  -- just the Edge function's earlier membership check.
-  if not exists (
-    select 1 from public.workspace_memberships membership
+  -- Re-authorize the actor within SQL, and hold both active membership
+  -- and workspace rows with SHARE locks through conflict replay/closure.
+  -- Without locks, a concurrent revocation or archive could commit after
+  -- this check but before the nested mutation and final resolution audit.
+  select true into authorized
+    from public.workspace_memberships membership
       join public.workspaces workspace on workspace.id = membership.workspace_id
-    where membership.workspace_id = target.workspace_id
-      and membership.user_id = p_actor_user_id
-      and membership.status = 'active'
-      and membership.role in ('owner','admin')
-      and workspace.status = 'active'
-  ) then
+   where membership.workspace_id = target.workspace_id
+     and membership.user_id = p_actor_user_id
+     and membership.status = 'active'
+     and membership.role in ('owner','admin')
+     and workspace.status = 'active'
+   for share of membership, workspace;
+  if authorized is distinct from true then
     return pg_catalog.jsonb_build_object('status','denied');
   end if;
 
