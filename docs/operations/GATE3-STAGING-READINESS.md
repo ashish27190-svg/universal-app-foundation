@@ -188,6 +188,26 @@ Tier C requires **separate evidence from the protected Worker itself**, includin
 manual Worker-level policy review, anonymous Access probes, and a logged-in PWA
 test. Never upload live tokens, Access cookies or production records in test logs.
 
+## CRITICAL — default branch workflow is not yet safe for manual preflight
+
+Read-only inspection of `main` on **11 October 2026** confirmed that the
+existing `.github/workflows/staging.yml` still listens on `push: [main]`
+and has an unconditional deploy job with migration, Edge Function and
+Cloudflare Worker deploy steps. It does **not** expose the draft
+`preflight_only` input. The default branch's connected-E2E workflow also
+still has a weekly `schedule`. The guarded versions in draft PR #5
+**have not replaced those default-branch files**.
+
+**Do not click/run the existing default-branch `Deploy Staging` workflow
+or interpret its manual dispatch as a no-write preflight.** The only
+verified zero-hosted-mutation checks today are the PR's CI and disposable
+local tests. Before a manual preflight can be advised, obtain explicit
+approval to neutralize the legacy main auto-deployment/schedule with a
+workflow-only protective change (or independently verify an equivalent
+restriction). Do not deploy, merge the full PR, migrate or reactivate
+any project as part of that protective change. See
+`docs/operations/GATE3-AUTHORIZATION-DECISION.md`.
+
 ## Steps to enable the connected release gate
 
 1. Review potential charges and re-activate **only** the named UAF staging
@@ -218,9 +238,14 @@ test. Never upload live tokens, Access cookies or production records in test log
    each with its own personal workspace. Do not reuse real personal/business
    credentials. Fresh browser contexts must receive only their own records.
    Direct hosted RLS/role-revocation testing remains a separate gate.
-6. Run **Deploy Staging (Guarded) → preflight_only** first. Once the
-   environment, migration review and private Access policy are verified,
-   explicitly run `deploy_private_staging` from the reviewed branch.
+6. **First ensure the guarded workflow is actually installed on the
+   default branch and the legacy automatic deploy path has been disabled
+   with explicit approval.** Do NOT click the current legacy
+   `Deploy Staging` manual dispatch. Only after its protection is
+   verified, run **Deploy Staging (Guarded) → preflight_only** on the
+   reviewed head. When infrastructure and Access policy are separately
+   approved, use `deploy_private_staging` through the protected
+   environment, not an unguarded branch or trigger.
 7. Run **Connected E2E** and inspect the assertion count, skip count,
    traces, data provenance, anonymous-access denial and project audit evidence.
    No green-only shortcut; manual validation for Android PWA install and
