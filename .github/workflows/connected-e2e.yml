@@ -1,6 +1,9 @@
 name: Connected E2E
 
 # Run manually only after the dedicated staging services are active.
+# These tests execute in an ephemeral localhost Vite preview, connected to
+# REAL staging Supabase + PowerSync. They do NOT test the hosted Cloudflare
+# Worker or its SSO/Access policy; that requires separate hosted evidence.
 # Do not schedule guaranteed failures while staging is paused.
 on:
   workflow_dispatch:
@@ -36,7 +39,26 @@ jobs:
         run: node scripts/validate-staging-readiness.mjs --e2e
       - run: pnpm --filter @uaf/reference-app exec playwright install --with-deps chromium
       - run: pnpm --filter @uaf/reference-app build
+      - name: Verify connected report gate with synthetic evidence
+        run: node scripts/validate-connected-e2e-results.mjs --self-test
+      - name: Discover required browser scenarios (no credentialed requests)
+        run: pnpm --filter @uaf/reference-app exec playwright test --list
       - name: Start preview server
-        run: pnpm --filter @uaf/reference-app exec vite preview --host 127.0.0.1 --port 4173 > /tmp/uaf-preview.log 2>&1 &
-      - name: Run connected reliability journeys
-        run: pnpm --filter @uaf/reference-app test:e2e
+        run: |
+          pnpm --filter @uaf/reference-app exec vite preview --host 127.0.0.1 --port 4173 > /tmp/uaf-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4173/; then
+              echo "Private CI localhost preview is ready."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Local preview did not start; no connected evidence claimed." >&2
+          exit 1
+      - name: Run connected reliability journeys and collect JSON evidence
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: /tmp/uaf-connected-e2e-report.json
+        run: pnpm --filter @uaf/reference-app test:e2e --reporter=dot,json
+      - name: Fail closed on skipped, flaky, or missing scenarios
+        if: always()
+        run: node scripts/validate-connected-e2e-results.mjs
