@@ -49,7 +49,7 @@ for (const token of [
 const migrationPlan = staging.split('\n  migration_plan:')[1]?.split('\n  deploy:')[0] ?? '';
 const migrationDeploy = staging.split('\n  deploy:')[1] ?? '';
 for (const token of [
-  'plan_migrations', 'reviewed_migrations_sha256',
+  'plan_migrations', 'reviewed_migrations_sha256', 'reviewed_candidate_sha',
   'node scripts/validate-staging-readiness.mjs --plan',
   'node scripts/validate-staging-migration-approval.mjs --print',
   'supabase --workdir infrastructure db push --linked --dry-run',
@@ -62,6 +62,25 @@ if (!migrationPlan.includes('environment: staging') ||
     /^\s*run: .*db push --linked\s*$/m.test(migrationPlan)) {
   throw new Error('Migration planning must be protected and read-only.');
 }
+// The reviewed SQL-file digest must be accompanied by the SAME reviewed
+// complete source candidate. Reject an unreviewed PWA/Edge/workflow change.
+if (!migrationPlan.includes('node scripts/validate-staging-candidate-approval.mjs --print') ||
+    !migrationDeploy.includes('REVIEWED_CANDIDATE_SHA: ${{ inputs.reviewed_candidate_sha }}') ||
+    !migrationDeploy.includes('node scripts/validate-staging-candidate-approval.mjs --verify') ||
+    migrationDeploy.indexOf('Refuse deployment of an unreviewed candidate commit') < 0 ||
+    migrationDeploy.indexOf('Refuse deployment of an unreviewed candidate commit') >
+      migrationDeploy.indexOf('Require independently reviewed exact migration file-set')) {
+  throw new Error('Staging deploy must pin reviewed source commit BEFORE all remote operations.');
+}
+for (const [name, source] of [['CI', ci], ['staging', staging]]) {
+  if (!source.includes('node scripts/validate-staging-candidate-approval.mjs --self-test')) {
+    throw new Error(name + ' must test exact candidate SHA rejection.');
+  }
+}
+if (!existsSync('scripts/validate-staging-candidate-approval.mjs')) {
+  throw new Error('Staging candidate-commit approval verifier is missing.');
+}
+
 if ((migrationDeploy.match(/run: node scripts\/validate-staging-migration-approval\.mjs --verify/g) ?? []).length !== 2 ||
     !migrationDeploy.includes('REVIEWED_MIGRATIONS_SHA256: ${{ inputs.reviewed_migrations_sha256 }}') ||
     migrationDeploy.indexOf('Require independently reviewed exact migration file-set') < 0 ||
