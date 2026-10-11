@@ -12,7 +12,7 @@ import { PowerSyncHouseholdAssetRepository } from '../data/household-asset-repos
 import { LocalAuditRepository } from '../data/audit-repository';
 import { runtimeEnvironment, uafServices } from '../services';
 import { LOCAL_VAULT_OWNER_KEY, LocalVaultOwnership } from './local-vault-ownership';
-import { LocalVaultTabLease } from './local-vault-tab-lease';
+import { localVaultTabLease } from './local-vault-tab-lease';
 
 if (!runtimeEnvironment.VITE_POWERSYNC_URL) {
   throw new Error('PowerSync configuration is required by the Household Vault manifest.');
@@ -70,12 +70,15 @@ export const syncStatusStore = new PowerSyncStatusStore(powerSyncDatabase, {
   isOnline: () => (typeof navigator === 'undefined' ? true : navigator.onLine),
 });
 
-const localVaultTabLease = new LocalVaultTabLease();
 let streamingConnected = false;
 
 const localVaultOwnership = new LocalVaultOwnership({
   acquireTab: () => localVaultTabLease.acquire(),
-  releaseTab: () => localVaultTabLease.release(),
+  // PowerSync's constructor opens/initializes SQLite eagerly and cannot be
+  // reopened safely in another tab just because sync.disconnect() ran. Keep
+  // the bootstrap Web Lock for this document's ENTIRE lifetime. Browsers
+  // release Web Locks automatically when the document is closed.
+  releaseTab: async () => {},
   // Persistent marker is intentionally limited to opaque user ID. If browser
   // storage is blocked, abort rather than risking a cross-account cache.
   readOwner: () => window.localStorage.getItem(LOCAL_VAULT_OWNER_KEY),
