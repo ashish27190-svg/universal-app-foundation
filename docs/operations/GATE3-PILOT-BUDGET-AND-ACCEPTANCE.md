@@ -49,6 +49,23 @@ business or personal database. If the paid Supabase upgrade is necessary,
 present the exact expected recurring charge and teardown/restore policy
 for separate human approval before any change.
 
+## Prerequisite: repository release governance
+
+- [PR #7](https://github.com/ashish27190-svg/universal-app-foundation/pull/7)
+  was explicitly approved and merged to `main` as `4e673500`. Main's
+  production workflow now fails closed and is deliberately non-operational.
+- The larger PR #5 is still DRAFT; the default-branch staging workflow is
+  still an inert kill switch. GitHub's `workflow_dispatch` requires a
+  workflow on the default branch; do not assume draft-only guarded inputs
+  can be dispatched without a separately authorized guarded-workflow merge.
+- Repository environment reviewer restrictions, branch protection and
+  Cloudflare Access policies have not been verified. Human confirmation
+  of these settings is a **required prerequisite** before hosted activity,
+  not a substitute for GitHub workflow/source review.
+- PR #5's candidate-commit review gate pins all approved source bytes to
+  the reviewed plan's Git SHA, *in addition* to the migration-set digest.
+  No Gate 3 hosting, costs or production release is authorized by either.
+
 ## One batch after approved staging budget (requires separate authorization)
 
 1. Verify UAF project ref and current billing, and obtain a specific
@@ -71,13 +88,18 @@ for separate human approval before any change.
    coverage. Do not deploy until anonymous route probes prove challenge.
 5. Enter environment secrets only into the reviewed protected staging
    environment; use two SYNTHETIC test users and no production credentials.
-6. Run reviewed `preflight_only`, then the approved
-   `plan_migrations` job after the isolated staging project is funded
-   and available. Only after someone has reviewed the plan and separately
-   authorized deployment should the protected `deploy_private_staging`
-   job be dispatched with the exact `reviewed_migrations_sha256` copied
-   from the approved plan. The digest is rechecked before the database
-   write and fails closed on missing or changed files. It is not proof
+6. Once a guarded workflow is separately approved for use on the default
+   branch (the current `main` workflow is intentionally an inert kill
+   switch), run `preflight_only`, then the approved `plan_migrations`
+   on the funded isolated staging project. The planning run must display
+   BOTH `UAF_REVIEWED_CANDIDATE_SHA` (exact source Git commit) and
+   `UAF_MIGRATIONS_SHA256` (exact migration file-set digest).
+   An independent reviewer must inspect the candidate, SQL and remote
+   dry-run output. Only after a separate deployment authorization should
+   `deploy_private_staging` be dispatched with BOTH unchanged values.
+   The gates reject a changed application/Edge/workflow candidate OR SQL
+   migration set. Neither fingerprint proves human review or unchanged
+   remote migration history; compare the immediate deploy dry-run too. It is not proof
    of a human review or a guarantee that the remote migration history
    remained unchanged; compare the immediate deploy dry-run too.
 7. Require ALL nine real browser tests (zero skips, zero flakiness).
@@ -92,8 +114,9 @@ for separate human approval before any change.
 
 ## Current unblocked evidence
 
-- Exact-head full CI and disposable local Supabase tests passed on
-  `4fac01de`. More recent changes must independently pass.
+- Exact-head full CI, Chromium smoke, local authentication browser and
+  disposable Supabase tests with **59/59 pgTAP assertions** all passed
+  on `b7791d0a`. More recent changes must independently pass.
 - A real **hermetic Chromium smoke** workflow now tests pre-auth SQLite
   Web Lock behavior using only synthetic public URLs and a production
   build. This proves only the tested Chromium/browser conditions, not
