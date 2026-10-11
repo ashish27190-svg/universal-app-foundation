@@ -12,6 +12,7 @@ set search_path = ''
 as $$
 declare
   target public.write_conflicts%rowtype;
+  authorized boolean;
 begin
   if p_actor_user_id is null or p_conflict_id is null then
     return pg_catalog.jsonb_build_object('status', 'not_found');
@@ -28,13 +29,19 @@ begin
   end if;
 
   -- The Edge Function is not the sole authorization boundary.
-  if not exists (
-    select 1 from public.workspace_memberships m
-    where m.workspace_id = target.workspace_id
-      and m.user_id = p_actor_user_id
-      and m.status = 'active'
-      and m.role in ('owner', 'admin')
-  ) then
+  -- Match atomic mutation authorization: both the writer membership and
+  -- workspace must be active. SHARE locks prevent a concurrent membership
+  -- revocation/archive from committing during this resolution transaction.
+  select true into authorized
+    from public.workspace_memberships membership
+    join public.workspaces workspace on workspace.id = membership.workspace_id
+   where membership.workspace_id = target.workspace_id
+     and membership.user_id = p_actor_user_id
+     and membership.status = 'active'
+     and membership.role in ('owner', 'admin')
+     and workspace.status = 'active'
+   for share of membership, workspace;
+  if authorized is distinct from true then
     return pg_catalog.jsonb_build_object('status', 'denied');
   end if;
 
