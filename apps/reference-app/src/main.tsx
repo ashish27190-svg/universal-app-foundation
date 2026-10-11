@@ -27,7 +27,7 @@ async function bootstrap(): Promise<void> {
       import('./services'),
     ]);
     initializeMonitoring(runtimeEnvironment, householdVaultManifest);
-    createRoot(root).render(
+    createRoot(root!).render(
       <StrictMode>
         <MonitoringErrorBoundary>
           <App />
