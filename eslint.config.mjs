@@ -42,7 +42,9 @@ export default tseslint.config(
   {
     files: [
       'apps/reference-app/playwright.config.ts',
+      'apps/reference-app/playwright.smoke.config.ts',
       'apps/reference-app/tests/e2e/**/*.{ts,tsx}',
+      'apps/reference-app/tests/smoke/**/*.{ts,tsx}',
       'infrastructure/supabase/functions/**/*.{ts,tsx}',
       'packages/core/type-tests/**/*.{ts,tsx}',
     ],
