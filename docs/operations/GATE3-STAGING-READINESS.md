@@ -1,8 +1,8 @@
 # Gate 3 — private Household Vault staging: release checklist
 
-**Status on 10 Oct 2026: blocked on hosted services, not deployed.**
-The prior final branch at `e444597e` passed both standard CI and disposable local
-Supabase; subsequent changes are validated independently on their latest commit.
+**Status on 11 Oct 2026: blocked on hosted services, not deployed.**
+The reviewed Gate 3 baseline `3b282745` passed both standard CI and disposable
+local Supabase; subsequent changes require fresh validation on their own head.
 
 Scope: only the existing dedicated `uaf-household-vault-staging` Supabase
 project, ref `vdhfayratdsoexltyrku`. It was **INACTIVE** at the latest
@@ -168,6 +168,25 @@ pending mutations on account change, or unknown database target.
   to offline asset-create, browser-reload, reconnect and
   fresh-browser convergence journey. It **has not been executed** against hosted
   PowerSync or a real private staging deployment.
+
+## Evidence classification (never conflate the three gates)
+
+| Evidence tier | Where it runs | What a pass establishes | What it **does not** establish |
+| --- | --- | --- | --- |
+| A — static / disposable | GitHub CI and disposable local Supabase | Build, unit logic, migration/RLS/atomic mutation tests, synthetic privacy checks | Hosted uptime, browser persistence, SSO privacy, real PowerSync |
+| B — connected E2E | Ephemeral **localhost Vite preview** backed by dedicated staging Supabase/PowerSync | Nine browser journeys actually pass with no skips/flakes; cross-account, offline, replay and sync checks | Hosted Cloudflare Worker behavior, actual SSO policy, mobile PWA install |
+| C — hosted private acceptance | Exact protected Cloudflare Worker URL and real browser | Access denies unauthenticated routes, authorized sessions function, assets and PWA work on the protected deployed origin | Evidence for any other unlisted hostname, future policy changes or production |
+
+The connected workflow now saves a local Playwright JSON report and runs
+`scripts/validate-connected-e2e-results.mjs`. It rejects missing reports,
+skipped, flaky, failed, missing or duplicated scenarios, as well as runs whose
+critical scenarios did not pass cleanly on their first attempt. The gate
+runs eight synthetic self-checks in ordinary CI and manual staging preflight.
+
+Do not label a Tier B localhost preview result as a Tier C private hosted pass.
+Tier C requires **separate evidence from the protected Worker itself**, including
+manual Worker-level policy review, anonymous Access probes, and a logged-in PWA
+test. Never upload live tokens, Access cookies or production records in test logs.
 
 ## Steps to enable the connected release gate
 
