@@ -13,21 +13,18 @@ test discovery, lint, type-checks, unit tests and production PWA build.
 It **does not** link Supabase, run migrations, configure PowerSync,
 publish a Worker, touch production, or prove the site is SSO protected.
 
-Status: the same major checks are already enforced in PR CI.
-**Critical default-branch caveat:** `main` still contains the OLD
-`Deploy Staging` workflow, whose `push: [main]` trigger can run staging
-migrations, Edge Functions and Cloudflare deploy **automatically**, and
-whose manual dispatch has no `preflight_only` input. The default branch
-also retains a scheduled connected-E2E workflow. The hardened
-`preflight_only` variant is available only in this draft PR branch.
-**Do not dispatch `Deploy Staging` from the current default-branch Actions
-UI or merge PR #5** based on an assumption that the guarded preflight is
-already the default. A specific approval is needed to apply a minimal
-protective workflow-only change on `main`, or the default branch must be
-otherwise secured and independently verified. No such change has been
-made. Until then, rely only on already-running PR CI/disposable tests.
-Actual execution of manual `preflight_only` on the chosen head is
-pending; do not claim it was run.
+Status: PR #6 was explicitly approved and merged to `main` as
+`9fb6ad38` on 11 October 2026. Read-only verification confirmed that
+the legacy push-to-main staging deploy and weekly connected-E2E
+schedule were removed. The default branch now contains **inert, fail-closed
+manual kill switches** (not a preflight job). Its CI passed.
+Draft PR #5 was reconciled with this change using a two-parent merge commit;
+the guarded `preflight_only` workflow remains on its own draft branch,
+which has not been merged. This prevents the old automation from silently
+reactivating, but the default-branch manual action must NOT be mistaken for
+`preflight_only`: it deliberately fails. Running a guarded branch-specific
+preflight remains separate work. PR CI/disposable tests are still not
+hosted browser or Cloudflare Access proof.
 
 ## Decision 1 — financial and security approval required
 
@@ -77,10 +74,11 @@ result.
 
 ## Current permitted next step
 
-**Do not click the existing default-branch Deploy Staging workflow.**
-First obtain approval for a **workflow-only, no-deploy guard change** that
-removes its automatic `main` push deploy and eliminates default-branch
-scheduled connected E2E (or prove equivalent protections). Review the
-proposed change without running any hosted job. Only then run the guarded
-`preflight_only` workflow on its reviewed head, and separately approve an
-itemized staging cost/security proposal before activating hosted services.
+The legacy auto-deployment kill switch is now merged and independently
+verified. Next run the **guarded branch-specific** `preflight_only` on
+`gate2-security-hardening` (if workflow dispatch supports that selected
+ref; otherwise rely on PR CI and the preflight tests). Do **not** launch
+the default-branch kill-switch workflow expecting validation, and do
+not choose `deploy_private_staging`. Obtain a separate itemized approval
+for all billable staging and Cloudflare/PowerSync configuration before
+activating hosted services.
