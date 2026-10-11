@@ -128,14 +128,19 @@ pending mutations on account change, or unknown database target.
   The offline/reconnect browser acceptance journey now explicitly checks
   offline reload and later cross-browser convergence; it remains **not run**
   against hosted private staging.
-- The reference app now holds a **single exclusive Web Lock per browser origin**
-  for the lifetime of its local SQLite session. It acquires the lock before
-  reading or clearing local ownership and refuses a second tab immediately
-  (never stealing the lock). Auth loss and successful logout disconnect PowerSync
-  before releasing this lease. Browser crashes release Web Locks automatically;
-  the persisted account marker remains, so pending writes survive restart.
-  Browsers missing Web Locks fail closed rather than using racy localStorage
-  lease timestamps. Web Locks require HTTPS or a secure local origin.
+- The reference app now holds a **single exclusive Web Lock per browser origin
+  for the entire browser document lifetime**. SDK source inspection found
+  that `@powersync/web` starts opening SQLite in the `PowerSyncDatabase`
+  constructor, before `connect()`. The earlier application-level lock was
+  therefore acquired **too late** to guarantee protection from concurrent
+  database initialization. The `main.tsx` entrypoint now first acquires the
+  document-wide lock and only then dynamically imports `App`, which imports
+  the PowerSync persistence module. A second tab fails closed before loading
+  the database. Normal logout and external auth loss disconnect PowerSync but
+  **do not release the lock**, because the SQLite adapter may remain open.
+  Closing or reloading the browser document releases Web Locks automatically.
+  Browsers without Web Locks fail closed; no racy localStorage-lock fallback
+  is permitted. Web Locks require HTTPS or another secure context.
 - Authentication changes are checked immediately before and after sync
   attachment, and stale asynchronous bootstrap attempts must not reactivate
   a previous identity. The old uploader stops before a different account can
@@ -145,6 +150,13 @@ pending mutations on account change, or unknown database target.
   auth-session handoff. Connected Playwright now also checks that a second
   tab gets a clear unavailable message while the first owns local SQLite and
   can attach only after that first tab closes.
+- The change preserves same-tab sign-out/sign-in but deliberately prevents
+  other tabs on the same origin from opening Household Vault while this tab
+  is open, even at its sign-in screen. This is a conservative privacy tradeoff
+  until the SDK's browser initialization and lock lifetime are validated with
+  genuine connected Playwright tests. The release security invariant now
+  requires lock acquisition before the dynamic app import and forbids an
+  early release in the persistence module.
 - This does **not** prove cross-tab storage safety on the full production
   browser/device matrix, browser extensions, separate origins, or
   browser-vendor edge cases. Hosted connected and offline reload tests
