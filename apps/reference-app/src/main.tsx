@@ -35,9 +35,8 @@ async function bootstrap(): Promise<void> {
       </StrictMode>,
     );
   } catch (cause) {
-    // Import/render setup did not complete. No app-owned SQLite session should
-    // remain usable; relinquish the lease rather than blocking other tabs.
-    await localVaultTabLease.release();
+    // Some imported modules may already have opened SQLite. Do not release
+    // the lock while this document is alive; user can close/reload the tab.
     throw cause;
   }
 }
