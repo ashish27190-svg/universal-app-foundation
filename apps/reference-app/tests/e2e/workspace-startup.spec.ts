@@ -4,7 +4,7 @@ import { e2eEmail, e2ePassword, hasE2ECredentials } from './helpers';
 // Requires the REAL SSO-protected staging site and a synthetic test account.
 test.skip(!hasE2ECredentials, 'Dedicated private staging E2E account required.');
 
-test('online bootstrap verifies workspace before mounting shared SQLite or starting sync', async ({ browser }) => {
+test('online bootstrap holds SQLite lease before verifying workspace or starting sync', async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();
   let unblockVerification = () => {};
@@ -24,15 +24,17 @@ test('online bootstrap verifies workspace before mounting shared SQLite or start
     await page.getByRole('button', { name: 'Sign in' }).click();
     await verifyRequest;
 
-    // Before the server confirms membership there must be no asset editor,
-    // no account-bound local SQLite lease, and no PowerSync upload channel.
+    // A single exclusive SQLite lease must exist BEFORE Supabase workspace
+    // verification, because the PowerSync constructor starts database init.
+    // The editor and remote PowerSync uploader must still be unavailable
+    // until server membership has been confirmed.
     await expect(page.getByRole('heading', { name: 'Your assets' })).toHaveCount(0);
     const hasLocalLease = await page.evaluate(async () => {
       const locks = await navigator.locks.query();
       return locks.held?.some((item) =>
         item.name === 'uaf.household-vault.sqlite.exclusive.v1') ?? false;
     });
-    expect(hasLocalLease).toBe(false);
+    expect(hasLocalLease).toBe(true);
   } finally {
     unblockVerification();
     await page.unroute('**/rest/v1/rpc/ensure_personal_workspace');
