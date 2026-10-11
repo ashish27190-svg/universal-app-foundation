@@ -8,10 +8,18 @@ code changes are on draft PR #5; the dedicated staging Supabase project
 
 - **Local SQL hardening:** `reapply_conflict_transaction` now holds active
   writer-membership and workspace SHARE locks during the replay transaction,
-  consistent with `keep_server_conflict_transaction`. Seven new pgTAP checks
+  consistent with `keep_server_conflict_transaction`. Seven pgTAP checks
   cover archived workspace and revoked-writer denial, restoration, and no
-  unintended audit events. The local suite targets **48 assertions**; never
+  unintended audit events. The extended suite targets **59 assertions**; never
   report a new commit as passed before its exact-head CI completes.
+- **Workspace least privilege:** an additive migration updates
+  `can_write_workspace` to deny archived-workspace writes and replaces
+  authenticated table-wide `workspaces` UPDATE with column grants for
+  `name` and `status` only. Immutable creator, type, and timestamps
+  remain server-controlled. Eleven new pgTAP checks bring the disposable
+  suite to **59 planned assertions**, subject to exact-head passing CI
+  before they count as validated. This does NOT grant users authorization
+  to delete or transfer a workspace.
 - **Safety pull request:** [PR #7](https://github.com/ashish27190-svg/universal-app-foundation/pull/7)
   is a separately scoped, CI-passed **DRAFT** production kill switch.
   It modifies only the production workflow and is NOT merged. The existing
