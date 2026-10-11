@@ -110,9 +110,27 @@ for (const token of ['navigator.locks.request', "ifAvailable: true", "mode: 'exc
                      'LocalVaultBusyError']) {
   if (!tabLease.includes(token)) violations.push('Cross-tab SQLite lock missing: ' + token);
 }
-for (const token of ['localVaultTabLease.acquire()', 'localVaultTabLease.release()',
+for (const token of ['localVaultTabLease.acquire()', 'releaseTab: async () => {}',
                      'getSession()', 'localVaultOwnership.attach(userId)']) {
   if (!persistence.includes(token)) violations.push('Browser identity/lock wiring missing: ' + token);
+}
+// @powersync/web starts opening its SQLite adapter in its constructor,
+// which is invoked at module-import time. The exclusive browser lease MUST
+// therefore be held before import('./App') loads sync/persistence.
+const bootstrapMain = fs.readFileSync(
+  path.join(root, 'apps/reference-app/src/main.tsx'),
+  'utf8',
+);
+const leaseIndex = bootstrapMain.indexOf('await localVaultTabLease.acquire()');
+const appImportIndex = bootstrapMain.indexOf("import('./App')");
+if (leaseIndex < 0 || appImportIndex < 0 || leaseIndex >= appImportIndex ||
+    bootstrapMain.includes("import { App } from './App'") ||
+    bootstrapMain.includes('localVaultTabLease.release()')) {
+  violations.push('Web Lock must be obtained before the eager PowerSync constructor and held for the full page lifetime.');
+}
+if (!tabLease.includes('export const localVaultTabLease = new LocalVaultTabLease()') ||
+    !persistence.includes('releaseTab: async () => {}')) {
+  violations.push('Persistent SQLite owner must share bootstrap lease and not release it on auth loss.');
 }
 if (!app.includes('if (previousUserId !== null)') ||
     !app.includes('generation !== bootstrapGeneration.current')) {
