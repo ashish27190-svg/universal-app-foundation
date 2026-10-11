@@ -58,10 +58,27 @@ for (const token of [
 }
 if (!migrationPlan.includes('environment: staging') ||
     !migrationPlan.includes("inputs.action == 'plan_migrations'") ||
+    !migrationPlan.includes("github.ref == 'refs/heads/main' && github.ref_protected") ||
+    !migrationPlan.includes('run: node scripts/validate-staging-github-context.mjs') ||
     !migrationPlan.includes('db push --linked --dry-run') ||
     /^\s*run: .*db push --linked\s*$/m.test(migrationPlan)) {
   throw new Error('Migration planning must be protected and read-only.');
 }
+// Never let a user-supplied dispatch ref select arbitrary code with
+// staging migration or deployment credentials. Protected main is required,
+// plus an in-job runtime check before any remote planning or writes.
+if (!migrationDeploy.includes("github.ref == 'refs/heads/main' && github.ref_protected") ||
+    migrationDeploy.indexOf('run: node scripts/validate-staging-github-context.mjs') < 0 ||
+    migrationDeploy.indexOf('run: node scripts/validate-staging-github-context.mjs') >
+      migrationDeploy.indexOf('run: node scripts/validate-staging-candidate-approval.mjs --verify')) {
+  throw new Error('Staging deploy must validate protected main before any hosted action.');
+}
+if (!ci.includes('node scripts/validate-staging-github-context.mjs --self-test') ||
+    !staging.includes('node scripts/validate-staging-github-context.mjs --self-test') ||
+    !existsSync('scripts/validate-staging-github-context.mjs')) {
+  throw new Error('Staging protected-main/ref checks must have CI and preflight regression tests.');
+}
+
 // The reviewed SQL-file digest must be accompanied by the SAME reviewed
 // complete source candidate. Reject an unreviewed PWA/Edge/workflow change.
 if (!migrationPlan.includes('node scripts/validate-staging-candidate-approval.mjs --print') ||
