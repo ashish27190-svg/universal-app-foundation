@@ -56,6 +56,57 @@ before running a hosted action. A first-ever private Worker publication may
 need its own independent Cloudflare Access bootstrap/policy verification plan;
 do not bypass the prepublish challenge check to force deployment.
 
+## Current approval packet — verified 11 October 2026
+
+**Decision: NO-GO on hosted activation or release until the items below are
+explicitly approved.** Read-only Supabase account check: the organization is
+Free, `uaf-household-vault-staging` (`vdhfayratdsoexltyrku`) is INACTIVE,
+and two unrelated projects are ACTIVE_HEALTHY. Do not restart staging, upgrade
+billing, or pause either unrelated project based only on "next"/"go".
+
+The final human approval must specify:
+
+1. **Cost scope:** the dedicated UAF staging project alone, the proposed plan,
+   an exact recurring/maximum spend, region, owner, and stop/teardown decision.
+   Free eligibility is not assumed; confirm billing before signing.
+2. **Data scope:** new isolated UAF schema, dedicated PowerSync staging service,
+   narrowly scoped replication and two synthetic users. NO personal-money
+   or unrelated-business database changes, NO real user records.
+3. **Privacy scope:** GitHub `staging` required reviewers and branch restrictions
+   verified in repository settings; Worker-level Cloudflare Access allow-list,
+   `workers.dev`, any preview/custom domains, and anonymous static assets.
+   The Access/bootstrap and prepublish challenge sequence must be demonstrated:
+   an unconfigured or nonexistent Worker is NOT proof of private protection.
+4. **Migration scope:** the intended commit, protected `plan_migrations` output,
+   all SQL changes and file-set digest reviewed **before a second dispatch**
+   including the digest. The local digest does not attest remote migration
+   history, so check the fresh deploy dry-run too.
+5. **Acceptance:** nine first-attempt connected localhost browser journeys,
+   plus separate real SSO-protected hosted Worker/PWA validation, role changes,
+   offline queue and account isolation. Any failed/skipped/flaky case is NO-GO.
+
+**Repository/source visibility:** GitHub reports this repository is PUBLIC.
+This is distinct from a private website. Treat all tracked code and documents
+as public, never commit credentials or proprietary customer data; choose
+private repository visibility only through a separate explicit decision.
+
+**Production freeze on draft PR #5:** a fail-closed production workflow
+replaces the earlier unguarded migration/app deployment *on the draft branch
+only*. It deliberately exits with `PRODUCTION_RELEASE_BLOCKED` and references
+no production secrets. Until the change is separately reviewed and merged,
+the `main` production workflow is unchanged and its manual deployment MUST
+NOT be dispatched. Production approval requires its own design, access
+review, rollback and release evidence, separate from staging approval.
+
+### Hosted pilot authorizations are not yet granted
+
+The planned sequence is: approve isolated cost and project access → verify
+GitHub environment restrictions → restore ONLY UAF staging → configure
+private Cloudflare/PowerSync safely → run protected migration plan for review
+→ approve exact staged deployment and digest → apply/verify staging only →
+run connected and hosted acceptance → independent release decision.
+Nothing in this document grants execution permission.
+
 ## Decision 1 — financial and security approval required
 
 Before any hosted work, obtain explicit approval **specific to UAF** for:
