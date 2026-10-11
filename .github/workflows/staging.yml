@@ -6,13 +6,19 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "Run an isolated build check, or request private staging deployment"
+        description: "Run offline checks, inspect remote migration plan, or request separately approved private staging deployment"
         required: true
         type: choice
         default: preflight_only
         options:
           - preflight_only
+          - plan_migrations
           - deploy_private_staging
+      reviewed_migrations_sha256:
+        description: "Exact SHA-256 from a separately reviewed plan_migrations run; required for deploy only"
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -37,12 +43,43 @@ jobs:
       - run: node scripts/validate-staging-readiness.mjs --self-test
       - run: node scripts/verify-private-staging.mjs --self-test
       - run: node scripts/validate-connected-e2e-results.mjs --self-test
+      - run: node scripts/validate-staging-migration-approval.mjs --self-test
       - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
       - name: Discover browser journeys without starting staging services
         run: pnpm --filter @uaf/reference-app exec playwright test --list
 
+  migration_plan:
+    name: Preview ONLY isolated remote migrations (no apply, no publish)
+    if: ${{ inputs.action == 'plan_migrations' }}
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+      SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.STAGING_SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Require only the exact isolated UAF database for the read-only plan
+        run: node scripts/validate-staging-readiness.mjs --plan
+      - name: Print migration file-set digest for human review
+        run: node scripts/validate-staging-migration-approval.mjs --print
+      - name: Link only the approved staging database
+        run: pnpm supabase --workdir infrastructure link --project-ref "$SUPABASE_PROJECT_REF"
+      - name: Show migrations pending on that database; DO NOT apply
+        run: pnpm supabase --workdir infrastructure db push --linked --dry-run
+
   deploy:
-    name: Deploy only after dedicated staging and private Access approvals
+    name: Deploy only after reviewed migration plan and private Access approvals
     if: ${{ inputs.action == 'deploy_private_staging' }}
     needs: preflight
     runs-on: ubuntu-latest
@@ -74,6 +111,10 @@ jobs:
           package-manager-cache: false
       - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
       - run: pnpm install --frozen-lockfile
+      - name: Require independently reviewed exact migration file-set
+        env:
+          REVIEWED_MIGRATIONS_SHA256: ${{ inputs.reviewed_migrations_sha256 }}
+        run: node scripts/validate-staging-migration-approval.mjs --verify
       - name: Validate only the dedicated UAF staging project is configured
         run: node scripts/validate-staging-readiness.mjs --deploy
       - name: Require approved Cloudflare Access across all four anonymous paths
@@ -86,7 +127,11 @@ jobs:
           # SUPABASE_DB_PASSWORD stays in the environment instead of a CLI argument.
           pnpm supabase --workdir infrastructure link --project-ref "$SUPABASE_PROJECT_REF"
           pnpm supabase --workdir infrastructure db push --linked --dry-run
-      - name: Apply approved staging migrations (manual protected job only)
+      - name: Refuse changed migrations before approved database write
+        env:
+          REVIEWED_MIGRATIONS_SHA256: ${{ inputs.reviewed_migrations_sha256 }}
+        run: node scripts/validate-staging-migration-approval.mjs --verify
+      - name: Apply reviewed staging migrations (manual protected job only)
         run: pnpm supabase --workdir infrastructure db push --linked
       - name: Deploy UAF Edge Functions only to dedicated staging
         run: |
