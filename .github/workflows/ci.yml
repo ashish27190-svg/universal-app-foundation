@@ -29,6 +29,8 @@ jobs:
         run: node scripts/validate-staging-readiness.mjs --self-test
       - name: Verify staging Access checks fail closed (synthetic)
         run: node scripts/verify-private-staging.mjs --self-test
+      - name: Verify connected browser evidence gate rejects skips/flakes (synthetic)
+        run: node scripts/validate-connected-e2e-results.mjs --self-test
       - run: pnpm validate:structure
       - run: pnpm validate:core-boundary
       - run: pnpm validate:config-boundary
