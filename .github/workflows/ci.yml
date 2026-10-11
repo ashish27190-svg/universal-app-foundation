@@ -33,6 +33,10 @@ jobs:
         run: node scripts/validate-connected-e2e-results.mjs --self-test
       - name: Verify exact staging migration-set approval (synthetic)
         run: node scripts/validate-staging-migration-approval.mjs --self-test
+      - name: Reject automatic staging/connected E2E/production workflow triggers
+        run: |
+          node scripts/validate-manual-workflow-triggers.mjs --self-test
+          node scripts/validate-manual-workflow-triggers.mjs
       - run: pnpm validate:structure
       - run: pnpm validate:core-boundary
       - run: pnpm validate:config-boundary
