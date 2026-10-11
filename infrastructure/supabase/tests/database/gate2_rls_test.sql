@@ -1,7 +1,7 @@
 -- Disposable UAF local Gate-2 RLS test; never run against a linked production project.
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(41);
+select extensions.plan(48);
 
 -- Synthetic users. Transactional fixture data rolls back after pgTAP execution.
 insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
@@ -115,6 +115,69 @@ select extensions.is(
   (select count(*)::int from public.audit_events
    where correlation_id = 'a1000000-0000-4000-8000-000000000778'), 1,
   'Idempotent keep-server retry never duplicates audit');
+
+-- Reapply must use the same active workspace and writer authorization as
+-- keep-server, and retain row locks for the complete replay transaction.
+-- This fixture never applies a mutation or changes another test's audit rows.
+insert into public.write_conflicts (
+  id,workspace_id,entity_type,entity_id,conflict_type,operation,
+  client_revision,server_revision,client_payload
+) values (
+  'a1000000-0000-4000-8000-000000000779',
+  'a1000000-0000-4000-8000-000000000011',
+  'household_assets','a1000000-0000-4000-8000-000000000777',
+  'revision','update',1,1,'{"name":"Deferred update"}'::jsonb
+);
+update public.workspaces set status='archived'
+ where id='a1000000-0000-4000-8000-000000000011';
+select extensions.is(
+  public.reapply_conflict_transaction(
+    'a1000000-0000-4000-8000-000000000779',
+    'a1000000-0000-4000-8000-000000000001',1,
+    '{"name":"Deferred update"}'::jsonb
+  )->>'status','denied',
+  'Archived workspace denies conflict reapply despite active owner membership');
+select extensions.is(
+  (select count(*)::int from public.write_conflicts
+   where id='a1000000-0000-4000-8000-000000000779' and resolved_at is null),1,
+  'Denied reapply does not close conflict');
+select extensions.is(
+  (select count(*)::int from public.audit_events
+   where correlation_id='a1000000-0000-4000-8000-000000000779'),0,
+  'Denied reapply does not create audit');
+update public.workspaces set status='active'
+ where id='a1000000-0000-4000-8000-000000000011';
+select extensions.is(
+  public.reapply_conflict_transaction(
+    'a1000000-0000-4000-8000-000000000779',
+    'a1000000-0000-4000-8000-000000000001',1,
+    '{"name":"Deferred update"}'::jsonb,'Synthetic validation veto'
+  )->>'status','invalid',
+  'Active owner passes authorization and reaches validation without writing');
+update public.workspace_memberships set role='viewer'
+ where workspace_id='a1000000-0000-4000-8000-000000000011'
+   and user_id='a1000000-0000-4000-8000-000000000001';
+select extensions.is(
+  public.reapply_conflict_transaction(
+    'a1000000-0000-4000-8000-000000000779',
+    'a1000000-0000-4000-8000-000000000001',1,
+    '{"name":"Deferred update"}'::jsonb
+  )->>'status','denied',
+  'Viewer cannot replay conflicts after owner role revoked');
+update public.workspace_memberships set role='owner'
+ where workspace_id='a1000000-0000-4000-8000-000000000011'
+   and user_id='a1000000-0000-4000-8000-000000000001';
+select extensions.is(
+  public.reapply_conflict_transaction(
+    'a1000000-0000-4000-8000-000000000779',
+    'a1000000-0000-4000-8000-000000000001',1,
+    '{"name":"Deferred update"}'::jsonb,'Synthetic validation veto'
+  )->>'status','invalid',
+  'Restored owner reauthorizes conflict reapply');
+select extensions.is(
+  (select count(*)::int from public.audit_events
+   where correlation_id='a1000000-0000-4000-8000-000000000779'),0,
+  'Validation veto and denied replays leave no resolution audit');
 
 -- A normal authenticated browser must never invoke the server transaction RPC.
 select extensions.ok(
