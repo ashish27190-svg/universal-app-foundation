@@ -5,7 +5,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { VaultApp } from './components/VaultApp';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { uafServices } from './services';
-import { clearConfirmedPersonalWorkspace, readConfirmedPersonalWorkspace, saveConfirmedPersonalWorkspace } from './offline-workspace';
+import { assertConfirmedWorkspaceContinuity, clearConfirmedPersonalWorkspace, readConfirmedPersonalWorkspace, saveConfirmedPersonalWorkspace } from './offline-workspace';
 import { LocalVaultOwnershipConflictError } from './sync/local-vault-ownership';
 import {
   connectReferenceAppSync,
@@ -70,14 +70,13 @@ export function App() {
           await pauseReferenceAppSyncForAuthChange();
         }
         if (disposed || generation !== bootstrapGeneration.current) return;
-        // The ownership Web Lock and account marker must be checked BEFORE
-        // any cached workspace context can be read or rendered.
-        await connectReferenceAppSync(userId!);
-        syncAttached = true;
-        if (disposed || generation !== bootstrapGeneration.current) return;
-
         let workspace: WorkspaceContext;
         if (!navigator.onLine) {
+          // Offline: mount only the account-bound SQLite cache. The local
+          // owner/Web Lock must be verified before reading cached membership.
+          await connectReferenceAppSync(userId!);
+          syncAttached = true;
+          if (disposed || generation !== bootstrapGeneration.current) return;
           const saved = readConfirmedPersonalWorkspace(window.localStorage, session);
           if (!saved) {
             throw new Error(
@@ -88,7 +87,13 @@ export function App() {
           workspace = saved;
           offlineVerification = { userId: userId!, generation };
         } else {
+          // Online: verify the server's current membership BEFORE mounting
+          // SQLite/PowerSync, so no queued mutation can upload under an
+          // unverified workspace or an obsolete identity.
           workspace = await uafServices.workspaces.ensurePersonalWorkspace();
+          if (disposed || generation !== bootstrapGeneration.current) return;
+          await connectReferenceAppSync(userId!);
+          syncAttached = true;
           if (disposed || generation !== bootstrapGeneration.current) return;
           saveConfirmedPersonalWorkspace(window.localStorage, session, workspace);
         }
@@ -116,7 +121,17 @@ export function App() {
     void uafServices.auth.getSession().then(applySession).catch((cause) => {
       if (!disposed) setBoot({ session: null, workspace: null, loading: false, error: cause instanceof Error ? cause.message : 'Could not read the auth session.' });
     });
-    const unsubscribeAuth = uafServices.auth.onAuthStateChange((session) => { void applySession(session); });
+    // Auth callbacks must return synchronously. Supabase may hold an auth
+    // lock while notifying subscribers; querying its client from the callback
+    // risks a cross-tab deadlock. Defer account bootstrapping to a new task.
+    const authTimers = new Set<ReturnType<typeof setTimeout>>();
+    const unsubscribeAuth = uafServices.auth.onAuthStateChange((session) => {
+      const handle = setTimeout(() => {
+        authTimers.delete(handle);
+        if (!disposed) void applySession(session);
+      }, 0);
+      authTimers.add(handle);
+    });
 
     const refreshNetworkState = () => {
       void refreshReferenceAppSyncStatus().catch(() => undefined);
@@ -161,8 +176,12 @@ export function App() {
         }
         const verified = await uafServices.workspaces.ensurePersonalWorkspace();
         if (disposed || pending.generation !== bootstrapGeneration.current) return;
-        saveConfirmedPersonalWorkspace(window.localStorage, current, verified);
+        // ensure_personal_workspace may create/return a different workspace.
+        // That must NEVER repurpose queued edits from the former workspace.
+        assertConfirmedWorkspaceContinuity(window.localStorage, current, verified);
         await resumeReferenceAppSyncAfterReconnect();
+        if (disposed || pending.generation !== bootstrapGeneration.current) return;
+        saveConfirmedPersonalWorkspace(window.localStorage, current, verified);
         if (disposed || pending.generation !== bootstrapGeneration.current) return;
         setBoot((previous) => ({ ...previous, session: current, workspace: verified, loading: false, error: null }));
       })().catch(async (cause) => {
@@ -185,6 +204,8 @@ export function App() {
 
     return () => {
       disposed = true;
+      for (const handle of authTimers) clearTimeout(handle);
+      authTimers.clear();
       unsubscribeAuth();
       unsubscribeSync();
       window.removeEventListener('online', refreshNetworkState);
