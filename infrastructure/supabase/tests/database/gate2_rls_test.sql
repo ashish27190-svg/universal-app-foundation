@@ -1,7 +1,7 @@
 -- Disposable UAF local Gate-2 RLS test; never run against a linked production project.
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(48);
+select extensions.plan(59);
 
 -- Synthetic users. Transactional fixture data rolls back after pgTAP execution.
 insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
@@ -54,6 +54,54 @@ select extensions.throws_ok($$select mutation_id from public.processed_mutations
 select extensions.lives_ok($$select * from public.ensure_personal_workspace('A Personal')$$,'Workspace bootstrap succeeds');
 select extensions.lives_ok($$select * from public.ensure_personal_workspace('A Personal')$$,'Workspace bootstrap is idempotent');
 select extensions.is((select count(*)::int from public.workspaces where created_by='a1000000-0000-4000-8000-000000000001' and workspace_type='personal' and status='active'),1,'One active personal workspace');
+
+-- Least-privilege workspace updates: owner/admin may update editable
+-- fields only, never reassign tenant ownership or corrupt identity/audit.
+select extensions.ok(
+  not pg_catalog.has_table_privilege('authenticated','public.workspaces','UPDATE'),
+  'Authenticated writer has no table-wide workspace UPDATE privilege');
+select extensions.ok(
+  pg_catalog.has_column_privilege('authenticated','public.workspaces','name','UPDATE'),
+  'Workspace name remains an editable client field');
+select extensions.ok(
+  pg_catalog.has_column_privilege('authenticated','public.workspaces','status','UPDATE'),
+  'Workspace status remains an editable client field');
+select extensions.ok(
+  not pg_catalog.has_column_privilege('authenticated','public.workspaces','created_by','UPDATE'),
+  'Workspace creator is immutable to browser clients');
+select extensions.ok(
+  not pg_catalog.has_column_privilege('authenticated','public.workspaces','workspace_type','UPDATE'),
+  'Workspace type is immutable to browser clients');
+select extensions.ok(
+  not pg_catalog.has_column_privilege('authenticated','public.workspaces','updated_at','UPDATE'),
+  'Workspace audit timestamp is not client-writable');
+select extensions.throws_ok($update public.workspaces
+  set created_by='b2000000-0000-4000-8000-000000000002'
+  where id='a1000000-0000-4000-8000-000000000011'$,
+  '42501','Authenticated client cannot transfer workspace creator');
+select extensions.throws_ok($update public.workspaces
+  set workspace_type='team'
+  where id='a1000000-0000-4000-8000-000000000011'$,
+  '42501','Authenticated client cannot change workspace type');
+select extensions.lives_ok($update public.workspaces set name='A Personal edited'
+  where id='a1000000-0000-4000-8000-000000000011'$,
+  'Active owner can still rename own workspace');
+reset role;
+update public.workspaces set status='archived'
+ where id='a1000000-0000-4000-8000-000000000011';
+set local role authenticated;
+select extensions.ok(
+  not public.can_write_workspace('a1000000-0000-4000-8000-000000000011'),
+  'Archived workspace is not writable despite active owner membership');
+select extensions.is(
+  (with attempted as (update public.workspaces set name='Archived edit should fail'
+     where id='a1000000-0000-4000-8000-000000000011' returning id)
+   select count(*)::int from attempted),0,
+  'Archived workspace has no client-writable row through RLS');
+reset role;
+update public.workspaces set status='active'
+ where id='a1000000-0000-4000-8000-000000000011';
+set local role authenticated;
 
 select set_config('request.jwt.claim.sub','b2000000-0000-4000-8000-000000000002',true);
 select extensions.is((select count(*)::int from public.household_assets where workspace_id='b2000000-0000-4000-8000-000000000022'),1,'B can see B asset');
