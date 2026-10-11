@@ -64,9 +64,11 @@ export function App() {
       if (!disposed) setBoot({ session, workspace: null, loading: true, error: null });
       let syncAttached = false;
       try {
-        if (previousUserId !== null && previousUserId !== userId) {
-          // A different auth identity must immediately stop the previous
-          // PowerSync uploader before we bootstrap the new workspace.
+        if (previousUserId !== null) {
+          // Any resumed authentication (including the SAME user after token
+          // refresh) must stop the previous uploader before verifying current
+          // server membership. A changed identity additionally requires
+          // the old local owner to be checked before new sync can attach.
           await pauseReferenceAppSyncForAuthChange();
         }
         if (disposed || generation !== bootstrapGeneration.current) return;
