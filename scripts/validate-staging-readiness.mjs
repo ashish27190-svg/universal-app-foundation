@@ -4,7 +4,10 @@ const STAGING_REF = 'vdhfayratdsoexltyrku';
 
 export function validateStagingEnvironment(env, mode = 'e2e') {
   const errors = [];
-  const required = [
+  const required = mode === 'plan'
+    ? ['VITE_SUPABASE_URL', 'STAGING_SUPABASE_PROJECT_REF',
+       'SUPABASE_ACCESS_TOKEN', 'STAGING_SUPABASE_DB_PASSWORD']
+    : [
     'VITE_SUPABASE_URL',
     'VITE_SUPABASE_PUBLISHABLE_KEY',
     'VITE_POWERSYNC_URL',
@@ -101,7 +104,7 @@ export function validateStagingEnvironment(env, mode = 'e2e') {
       env.E2E_EMAIL.trim().toLowerCase() === env.E2E_SECOND_EMAIL.trim().toLowerCase()) {
     errors.push('Two separate synthetic test accounts are required to prove workspace isolation.');
   }
-  if (!['e2e', 'deploy'].includes(mode)) errors.push('Invalid staging validation mode.');
+  if (!['e2e', 'deploy', 'plan'].includes(mode)) errors.push('Invalid staging validation mode.');
   return errors;
 }
 
@@ -129,6 +132,9 @@ function selfTest() {
     if (!condition) throw new Error('Staging validator self-test failed: ' + message);
   };
   assert(validateStagingEnvironment(valid, 'deploy').length === 0, 'valid isolated staging accepted');
+  assert(validateStagingEnvironment(valid, 'plan').length === 0, 'valid isolated migration plan accepted');
+  assert(validateStagingEnvironment({...valid,SUPABASE_ACCESS_TOKEN:''}, 'plan').length > 0, 'missing plan token rejected');
+  assert(validateStagingEnvironment({...valid,STAGING_SUPABASE_PROJECT_REF:'isysgaovvexvsohkhldv'}, 'plan').length > 0, 'foreign plan project rejected');
   assert(validateStagingEnvironment(valid, 'e2e').length === 0, 'valid E2E accepted');
   assert(validateStagingEnvironment({...valid,STAGING_SUPABASE_PROJECT_REF:'isysgaovvexvsohkhldv'}, 'deploy').length > 0, 'other project rejected');
   assert(validateStagingEnvironment({...valid,VITE_SUPABASE_URL:'https://not-uaf.supabase.co'}, 'e2e').length > 0, 'foreign URL rejected');
@@ -145,14 +151,14 @@ function selfTest() {
   assert(validateStagingEnvironment({...valid,STAGING_POWERSYNC_APPROVED_ORIGIN:'https://other-sync.example.invalid/'}, 'deploy').length > 0, 'unapproved PowerSync origin rejected');
   assert(validateStagingEnvironment({...valid,STAGING_WORKERS_SUBDOMAIN:'wrong.subdomain'}, 'deploy').length > 0, 'malformed workers subdomain rejected');
 
-  console.log('PASS: isolated UAF staging configuration validator (15 synthetic assertions).');
+  console.log('PASS: isolated UAF staging configuration validator (18 synthetic assertions).');
 }
 
 const isEntry = process.argv[1] && import.meta.url === new URL('file://' + process.argv[1]).href;
 if (isEntry) {
   if (process.argv.includes('--self-test')) selfTest();
   else {
-    const mode = process.argv.includes('--deploy') ? 'deploy' : 'e2e';
+    const mode = process.argv.includes('--deploy') ? 'deploy' : process.argv.includes('--plan') ? 'plan' : 'e2e';
     const errors = validateStagingEnvironment(process.env, mode);
     if (errors.length) {
       for (const e of errors) console.error('STAGING GATE: ' + e);
