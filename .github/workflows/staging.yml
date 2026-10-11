@@ -50,13 +50,14 @@ jobs:
       - run: node scripts/validate-connected-e2e-results.mjs --self-test
       - run: node scripts/validate-staging-migration-approval.mjs --self-test
       - run: node scripts/validate-staging-candidate-approval.mjs --self-test
+      - run: node scripts/validate-staging-github-context.mjs --self-test
       - run: pnpm lint && pnpm typecheck && pnpm test && pnpm build
       - name: Discover browser journeys without starting staging services
         run: pnpm --filter @uaf/reference-app exec playwright test --list
 
   migration_plan:
     name: Preview ONLY isolated remote migrations (no apply, no publish)
-    if: ${{ inputs.action == 'plan_migrations' }}
+    if: ${{ inputs.action == 'plan_migrations' && github.ref == 'refs/heads/main' && github.ref_protected }}
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -75,6 +76,8 @@ jobs:
           package-manager-cache: false
       - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
       - run: pnpm install --frozen-lockfile
+      - name: Require protected main, exact repo and manual action before remote planning
+        run: node scripts/validate-staging-github-context.mjs
       - name: Require only the exact isolated UAF database for the read-only plan
         run: node scripts/validate-staging-readiness.mjs --plan
       - name: Print reviewed candidate source commit before remote planning
@@ -88,7 +91,7 @@ jobs:
 
   deploy:
     name: Deploy only after reviewed migration plan and private Access approvals
-    if: ${{ inputs.action == 'deploy_private_staging' }}
+    if: ${{ inputs.action == 'deploy_private_staging' && github.ref == 'refs/heads/main' && github.ref_protected }}
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -119,6 +122,8 @@ jobs:
           package-manager-cache: false
       - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
       - run: pnpm install --frozen-lockfile
+      - name: Require protected main, exact repo and manual action before deployment
+        run: node scripts/validate-staging-github-context.mjs
       - name: Refuse deployment of an unreviewed candidate commit
         env:
           REVIEWED_CANDIDATE_SHA: ${{ inputs.reviewed_candidate_sha }}
