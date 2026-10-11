@@ -26,6 +26,36 @@ reactivating, but the default-branch manual action must NOT be mistaken for
 preflight remains separate work. PR CI/disposable tests are still not
 hosted browser or Cloudflare Access proof.
 
+## Migration review split — fail closed before a hosted write
+
+Draft PR #5 now defines three manual choices. They are **not** active on
+`main`, whose staging workflow is still the approved inert kill switch.
+
+- `preflight_only`: synthetic and local validation only. No hosted connection.
+- `plan_migrations`: **only after separate permission to access an isolated
+  active UAF staging database**, uses the protected `staging` GitHub environment,
+  confirms the exact project identity, prints the source migration-set SHA-256
+  and runs `supabase db push --linked --dry-run` without applying migrations.
+  It does not deploy Edge Functions or publish a Worker. GitHub reviewers must
+  examine the actual remote pending-migration output and all migration SQL.
+- `deploy_private_staging`: requires a separately authorized deployment,
+  external Cloudflare Access verification, protected environment review and
+  a nonempty `reviewed_migrations_sha256` dispatch input copied from the
+  previously reviewed plan for the exact source tree. The job verifies this
+  digest before any remote link and immediately before applying migrations.
+  Missing or changed files fail closed.
+
+**Important limits:** the SHA-256 binds approved *local migration file bytes*
+to the dispatched commit; it does NOT authenticate the reviewer, prove that
+the remote migration history is unchanged, prove the remote dry-run was
+read, or provide hosted privacy evidence. Those remain independent human
+checks and release blockers. GitHub environment approval settings cannot be
+assumed to be enabled just because the workflow specifies `environment: staging`;
+confirm configured required reviewers and deployment branch protections
+before running a hosted action. A first-ever private Worker publication may
+need its own independent Cloudflare Access bootstrap/policy verification plan;
+do not bypass the prepublish challenge check to force deployment.
+
 ## Decision 1 — financial and security approval required
 
 Before any hosted work, obtain explicit approval **specific to UAF** for:
@@ -51,7 +81,7 @@ not establish acceptance of new recurring charges or a specific deployment.
 | 1 | GitHub candidate | Full CI and disposable local Supabase green on the exact SHA |
 | 2 | Isolated infrastructure | Approved staging ref healthy; dedicated PowerSync origin; no production database; two synthetic distinct users |
 | 3 | Private website | Worker-level Access policy reviewed; anonymous root, manifest, icon and unknown path challenged **before** publish |
-| 4 | Staging deployment | Protected manual job; reviewed migrations; staged functions; exact approved Worker hostname; same privacy checks **after** publish |
+| 4 | Staging deployment | Separate protected dry-run review and source SHA-256; approved manual deploy; staged functions; exact approved Worker hostname; same privacy checks **after** publish |
 | 5 | Connected backend/browser | Playwright JSON evidence from localhost preview with all **nine required** journeys passing, zero skipped, zero flaky, zero unexpected |
 | 6 | Actual hosted Worker | Real browser visits exact SSO-protected Worker, authenticates via Access, verifies navigation, PWA installation, offline reload, reconnect and session expiry |
 | 7 | Release decision | Human approval after role revocation, offline queue, cross-account and Access evidence; keep PR draft until all blockers clear |
@@ -75,7 +105,7 @@ result.
 ## Current permitted next step
 
 The legacy auto-deployment kill switch is now merged and independently
-verified. Next run the **guarded branch-specific** `preflight_only` on
+verified. Next validate the **guarded branch-specific** `preflight_only` on
 `gate2-security-hardening` (if workflow dispatch supports that selected
 ref; otherwise rely on PR CI and the preflight tests). Do **not** launch
 the default-branch kill-switch workflow expecting validation, and do
