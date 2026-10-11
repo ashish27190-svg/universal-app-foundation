@@ -4,6 +4,30 @@
 code changes are on draft PR #5; the dedicated staging Supabase project
 `vdhfayratdsoexltyrku` was observed **INACTIVE**. Production is unchanged.
 
+## Consolidated release blockers — 11 October 2026
+
+- **Local SQL hardening:** `reapply_conflict_transaction` now holds active
+  writer-membership and workspace SHARE locks during the replay transaction,
+  consistent with `keep_server_conflict_transaction`. Seven new pgTAP checks
+  cover archived workspace and revoked-writer denial, restoration, and no
+  unintended audit events. The local suite targets **48 assertions**; never
+  report a new commit as passed before its exact-head CI completes.
+- **Safety pull request:** [PR #7](https://github.com/ashish27190-svg/universal-app-foundation/pull/7)
+  is a separately scoped, CI-passed **DRAFT** production kill switch.
+  It modifies only the production workflow and is NOT merged. The existing
+  manual production database/Worker deploy path remains present on `main`.
+  Do not dispatch that workflow. This is independent of the larger draft
+  [PR #5](https://github.com/ashish27190-svg/universal-app-foundation/pull/5).
+- **Reviewer controls unverified:** GitHub reports no repository rulesets,
+  while a read-only attempt to inspect `main` branch protection returned
+  HTTP 403 and the environment protection endpoint was unavailable through
+  the connector. This is NOT proof that branch or environment reviewers
+  are configured. Confirm directly in GitHub repository Settings before
+  authorizing any migration plan or hosted deployment.
+- **No hosted proof:** Staging Supabase remains intentionally inactive,
+  and the nine connected browser journeys, private Cloudflare Worker Access,
+  hosted offline/PWA evidence and production release approval remain open.
+
 ## Decision 0 — safe without activating hosted services
 
 The manual **Deploy Staging (Guarded)** workflow offers a
