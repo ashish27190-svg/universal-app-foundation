@@ -78,6 +78,25 @@ pending mutations on account change, or unknown database target.
   owner membership and a non-expired local Supabase access token. The local
   cache has a seven-day maximum age; the access token typically expires much
   sooner, so this does **not** promise indefinite offline unlock.
+- A release audit found **two further trust-order gaps**: normal ONLINE
+  startup connected PowerSync before an online workspace lookup completed,
+  and reconnect could accept a newly created personal workspace for the same
+  account while retaining pending edits from the former workspace. Both
+  paths now verify current membership before allowing the uploader to attach.
+  Reconnect additionally requires that the verified workspace ID matches the
+  exact last-confirmed workspace. A mismatch fails closed without rewriting
+  or deleting the old owner cache, queued edits or confirmed workspace record.
+- Auth callbacks now return synchronously and schedule expensive Supabase
+  client calls in the next browser task. This avoids initiating additional
+  auth/database requests inside the auth event callback, which can deadlock
+  in legacy Supabase auth-lock implementations. Any resumed session (even
+  a token refresh for the same user) suspends its prior uploader before
+  revalidating permissions and attaching again.
+- Unit regression tests cover same-workspace reconnect, changed workspace,
+  expired/stale confirmation, removed membership and wrong local owner.
+  A connected Playwright test holds the online personal-workspace RPC and
+  verifies the local SQLite exclusive Web Lock is not acquired before the
+  server returns. These tests remain **unexecuted on hosted staging**.
 - Reconnect permission gate now **unmounts all editing surfaces immediately**
   when a previously offline session returns online, before requesting any
   workspace context. The app shows a loading state while the authenticated
