@@ -93,11 +93,13 @@ set local role authenticated;
 select extensions.ok(
   not public.can_write_workspace('a1000000-0000-4000-8000-000000000011'),
   'Archived workspace is not writable despite active owner membership');
+update public.workspaces set name='Archived edit should fail'
+ where id='a1000000-0000-4000-8000-000000000011';
 select extensions.is(
-  (with attempted as (update public.workspaces set name='Archived edit should fail'
-     where id='a1000000-0000-4000-8000-000000000011' returning id)
-   select count(*)::int from attempted),0,
-  'Archived workspace has no client-writable row through RLS');
+  (select name from public.workspaces
+    where id='a1000000-0000-4000-8000-000000000011'),
+  'A Personal edited',
+  'Archived workspace name remains unchanged after attempted client UPDATE');
 reset role;
 update public.workspaces set status='active'
  where id='a1000000-0000-4000-8000-000000000011';
