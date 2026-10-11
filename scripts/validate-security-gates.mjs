@@ -51,6 +51,33 @@ if (!/revoke\s+all\s+on\s+table\s+public\.processed_mutations\s+from\s+anon,\s*a
 
 
 const functionsConfig = fs.readFileSync(path.join(root, 'infrastructure/supabase/config.toml'), 'utf8');
+// Server-side conflict resolutions must keep the authoritative workspace
+// state and actor role stable until the atomic SQL transaction completes.
+for (const migration of [
+  '20261010000200_atomic_keep_server_conflict.sql',
+  '20261010000400_atomic_reapply_conflict.sql',
+]) {
+  const sql = fs.readFileSync(path.join(root, 'infrastructure/supabase/migrations', migration), 'utf8');
+  for (const required of [
+    'workspace.status = \'active\'',
+    'membership.status = \'active\'',
+    'membership.role in (\'owner\',\'admin\')',
+    'for share of membership, workspace',
+    'if authorized is distinct from true then',
+  ]) {
+    if (!sql.includes(required)) violations.push(migration + ' lacks transaction-held writer authorization: ' + required);
+  }
+}
+const pgtap = fs.readFileSync(
+  path.join(root, 'infrastructure/supabase/tests/database/gate2_rls_test.sql'), 'utf8');
+for (const regression of [
+  'Archived workspace denies conflict reapply',
+  'Viewer cannot replay conflicts after owner role revoked',
+  'Archived workspace blocks keep-server resolution',
+]) {
+  if (!pgtap.includes(regression)) violations.push('Missing local pgTAP conflict authorization coverage: ' + regression);
+}
+
 for (const functionName of ['sync-apply', 'resolve-conflict']) {
   const escaped = functionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = new RegExp(`\\[functions\\.${escaped}\\]\\s*verify_jwt\\s*=\\s*true`, 'i');
