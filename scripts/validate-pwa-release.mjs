@@ -56,8 +56,24 @@ if (/\\nschedule:\\s*(\\n|$)/.test(connectedE2E)) {
   throw new Error('Connected E2E should remain manual while staging is paused.');
 }
 
+for (const token of [
+  'PLAYWRIGHT_JSON_OUTPUT_FILE',
+  'test:e2e --reporter=dot,json',
+  'node scripts/validate-connected-e2e-results.mjs',
+  'if: always()',
+  'These tests execute in an ephemeral localhost Vite preview',
+]) {
+  if (!connectedE2E.includes(token)) throw new Error(`Connected E2E report gate missing: ${token}`);
+}
+for (const [name, source] of [['CI', ci], ['staging', staging]]) {
+  if (!source.includes('node scripts/validate-connected-e2e-results.mjs --self-test')) {
+    throw new Error(`${name} must exercise skipped/flaky connected E2E report rejection.`);
+  }
+}
+
 if (!existsSync('apps/reference-app/tests/e2e/tenant-isolation.spec.ts') ||
-    !existsSync('apps/reference-app/tests/e2e/offline-restart.spec.ts')) {
+    !existsSync('apps/reference-app/tests/e2e/offline-restart.spec.ts') ||
+    !existsSync('apps/reference-app/tests/e2e/workspace-startup.spec.ts')) {
   throw new Error('Staging E2E must include distinct-user isolation and offline-restart journeys.');
 }
 
