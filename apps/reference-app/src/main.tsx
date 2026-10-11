@@ -27,7 +27,7 @@ async function bootstrap(): Promise<void> {
       import('./services'),
     ]);
     initializeMonitoring(runtimeEnvironment, householdVaultManifest);
-    createRoot(root!).render(
+    createRoot(root).render(
       <StrictMode>
         <MonitoringErrorBoundary>
           <App />
@@ -42,8 +42,8 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap().catch((cause) => {
-  root!.setAttribute('role', 'alert');
-  root!.textContent = cause instanceof Error
+  root.setAttribute('role', 'alert');
+  root.textContent = cause instanceof Error
     ? cause.message
     : 'Household Vault could not start securely. Close other tabs and retry.';
 });
