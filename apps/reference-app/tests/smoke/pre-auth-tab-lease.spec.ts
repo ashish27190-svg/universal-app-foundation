@@ -1,7 +1,5 @@
 import { expect, test } from '@playwright/test';
 
-const LOCK_NAME = 'uaf.household-vault.sqlite.exclusive.v1';
-
 test('production-built PWA acquires exclusive SQLite lock before auth; second tab blocked', async ({ browser }) => {
   const context = await browser.newContext({ serviceWorkers: 'block' });
   try {
@@ -14,7 +12,7 @@ test('production-built PWA acquires exclusive SQLite lock before auth; second ta
     await expect(first.getByRole('heading', { name: 'Household Vault' })).toBeVisible();
     await expect.poll(async () => first.evaluate(async () => {
       const locks = await navigator.locks.query();
-      return locks.held?.some((lock) => lock.name === LOCK_NAME) ?? false;
+      return locks.held?.some((lock) => lock.name === 'uaf.household-vault.sqlite.exclusive.v1') ?? false;
     })).toBe(true);
 
     const second = await context.newPage();
@@ -29,7 +27,7 @@ test('production-built PWA acquires exclusive SQLite lock before auth; second ta
     await expect(second.getByRole('heading', { name: 'Household Vault' })).toBeVisible();
     await expect.poll(async () => second.evaluate(async () => {
       const locks = await navigator.locks.query();
-      return locks.held?.some((lock) => lock.name === LOCK_NAME) ?? false;
+      return locks.held?.some((lock) => lock.name === 'uaf.household-vault.sqlite.exclusive.v1') ?? false;
     })).toBe(true);
   } finally {
     await context.close();
