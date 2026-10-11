@@ -23,8 +23,27 @@ if (/\npush:\s*(\n|$)/.test(production)) throw new Error('Production deployment 
 if (!production.includes('environment: production')) throw new Error('Production must use a protected GitHub environment.');
 
 const staging = readFileSync('.github/workflows/staging.yml', 'utf8');
-for (const token of ['environment: staging', 'supabase db push', 'resolve-conflict', '--env staging']) {
-  if (!staging.includes(token)) throw new Error(`Staging workflow missing invariant: ${token}`);
+const connectedE2E = readFileSync('.github/workflows/connected-e2e.yml', 'utf8');
+const legacyShutdown = staging.includes('name: Deploy Staging (Guarded Workflow Pending)');
+if (legacyShutdown) {
+  // Protective interim main-branch configuration: no API credentials, no
+  // database migrations, no scheduled jobs and no deployment commands.
+  for (const [name, workflow] of [['staging', staging], ['connected E2E', connectedE2E]]) {
+    if (!workflow.includes('workflow_dispatch:') ||
+        !workflow.includes('exit 1') ||
+        workflow.includes('branches: [main]') ||
+        /^\s*(?:push|schedule):\s*$/m.test(workflow) ||
+        /^\s*environment:\s*staging\s*$/m.test(workflow) ||
+        /\bsecrets\./.test(workflow) ||
+        /\b(?:supabase|wrangler)\s+(?:db|functions|deploy)/.test(workflow)) {
+      throw new Error(`Temporary ${name} workflow must remain no-op and fail closed.`);
+    }
+  }
+} else {
+  for (const token of ['environment: staging', 'supabase db push', 'resolve-conflict', '--env staging']) {
+    if (!staging.includes(token)) throw new Error(`Staging workflow missing invariant: ${token}`);
+  }
 }
+
 
 console.log('PWA/release invariant validation: PASS');
