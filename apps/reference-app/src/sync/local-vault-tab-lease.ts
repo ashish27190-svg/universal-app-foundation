@@ -65,3 +65,10 @@ export class LocalVaultTabLease {
     this.requestFinished = null;
   }
 }
+
+/**
+ * One lease per browser document. Bootstrap acquires it BEFORE any module may
+ * instantiate the PowerSync database. Persistence deliberately retains this
+ * lease until page unload because PowerSync's constructor starts SQLite init.
+ */
+export const localVaultTabLease = new LocalVaultTabLease();
