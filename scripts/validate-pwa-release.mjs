@@ -34,6 +34,42 @@ for (const token of [
   if (!staging.includes(token)) throw new Error(`Staging workflow missing invariant: ${token}`);
 }
 
+// A hosted dry-run is a read-only planning step. Applying migrations must
+// require a separate dispatch with an exact human-reviewed file-set digest,
+// in addition to the GitHub environment approval and Access verification.
+const migrationPlan = staging.split('\n  migration_plan:')[1]?.split('\n  deploy:')[0] ?? '';
+const migrationDeploy = staging.split('\n  deploy:')[1] ?? '';
+for (const token of [
+  'plan_migrations', 'reviewed_migrations_sha256',
+  'node scripts/validate-staging-readiness.mjs --plan',
+  'node scripts/validate-staging-migration-approval.mjs --print',
+  'supabase --workdir infrastructure db push --linked --dry-run',
+]) {
+  if (!staging.includes(token)) throw new Error('Staging migration planning guard missing: ' + token);
+}
+if (!migrationPlan.includes('environment: staging') ||
+    !migrationPlan.includes("inputs.action == 'plan_migrations'") ||
+    !migrationPlan.includes('db push --linked --dry-run') ||
+    /^\s*run: .*db push --linked\s*$/m.test(migrationPlan)) {
+  throw new Error('Migration planning must be protected and read-only.');
+}
+if ((migrationDeploy.match(/run: node scripts\/validate-staging-migration-approval\.mjs --verify/g) ?? []).length !== 2 ||
+    !migrationDeploy.includes('REVIEWED_MIGRATIONS_SHA256: ${{ inputs.reviewed_migrations_sha256 }}') ||
+    migrationDeploy.indexOf('Require independently reviewed exact migration file-set') < 0 ||
+    migrationDeploy.indexOf('Refuse changed migrations before approved database write') < 0 ||
+    migrationDeploy.indexOf('Refuse changed migrations before approved database write') >
+      migrationDeploy.indexOf('Apply reviewed staging migrations')) {
+  throw new Error('Migration apply must be bound to the exact approved digest before remote writes.');
+}
+for (const [name, source] of [['CI', ci], ['staging', staging]]) {
+  if (!source.includes('node scripts/validate-staging-migration-approval.mjs --self-test')) {
+    throw new Error(name + ' must test migration review digest rejection.');
+  }
+}
+if (!existsSync('scripts/validate-staging-migration-approval.mjs')) {
+  throw new Error('Staging migration file-set approval verifier is missing.');
+}
+
 if (/\\npush:\\s*(\\n|$)/.test(staging)) {
   throw new Error('Private staging deployment must never trigger automatically on push.');
 }
