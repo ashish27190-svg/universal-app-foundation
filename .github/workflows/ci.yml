@@ -33,6 +33,8 @@ jobs:
         run: node scripts/validate-connected-e2e-results.mjs --self-test
       - name: Verify exact staging migration-set approval (synthetic)
         run: node scripts/validate-staging-migration-approval.mjs --self-test
+      - name: Verify staging commit fingerprint rejects unreviewed candidates (synthetic)
+        run: node scripts/validate-staging-candidate-approval.mjs --self-test
       - name: Reject automatic staging/connected E2E/production workflow triggers
         run: |
           node scripts/validate-manual-workflow-triggers.mjs --self-test
