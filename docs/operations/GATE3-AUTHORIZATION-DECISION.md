@@ -29,6 +29,16 @@ Only the approved production **workflow kill switch** (PR #7) changed on
   secret references or deploy commands, and is intentionally non-operational.
   Draft [PR #5](https://github.com/ashish27190-svg/universal-app-foundation/pull/5)
   remains unmerged; `main` staging automation is also inert.
+- **Hosted dispatch protection added (draft only):** Both protected staging
+  migration-planning and deploy jobs now require a manual run on the exact
+  `main` ref with GitHub's `GITHUB_REF_PROTECTED=true`. An executable
+  pre-remote-access gate verifies the repository identity, branch, protection
+  signal and manual event; 11 synthetic rejection cases run in CI. This
+  does not prove environment reviewers are configured or grant deployment
+  permission. Use
+  [Gate 3 GitHub reviewer setup](./GATE3-GITHUB-REVIEWER-SETUP.md)
+  for exact manual configuration and screenshot evidence.
+
 - **Reviewer controls unverified:** GitHub reports no repository rulesets,
   while a read-only attempt to inspect `main` branch protection returned
   HTTP 403 and the environment protection endpoint was unavailable through
