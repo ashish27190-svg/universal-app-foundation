@@ -63,13 +63,19 @@ reset role;
 
 -- A writer's active membership must never allow conflict closure in an
 -- archived workspace. Restore it and prove one closure/audit only on retry.
+-- Use a dedicated asset fixture to avoid contaminating reapply rollback
+-- assertions elsewhere in this same transaction.
+insert into public.household_assets (id,workspace_id,name,category)
+values ('a1000000-0000-4000-8000-000000000777',
+        'a1000000-0000-4000-8000-000000000011',
+        'Archived-workspace fixture', 'appliance');
 insert into public.write_conflicts (
   id, workspace_id, entity_type, entity_id, conflict_type, client_payload, server_payload
 ) values (
   'a1000000-0000-4000-8000-000000000778',
   'a1000000-0000-4000-8000-000000000011',
-  'household_assets', 'a1000000-0000-4000-8000-000000000101', 'revision',
-  '{"name":"Offline edit"}'::jsonb, '{"name":"Asset A"}'::jsonb
+  'household_assets', 'a1000000-0000-4000-8000-000000000777', 'revision',
+  '{"name":"Offline edit"}'::jsonb, '{"name":"Archived-workspace fixture"}'::jsonb
 );
 update public.workspaces set status = 'archived'
  where id = 'a1000000-0000-4000-8000-000000000011';
