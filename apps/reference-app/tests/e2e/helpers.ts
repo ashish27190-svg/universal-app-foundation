@@ -4,10 +4,10 @@ export const e2eEmail = process.env.E2E_EMAIL;
 export const e2ePassword = process.env.E2E_PASSWORD;
 export const hasE2ECredentials = Boolean(e2eEmail && e2ePassword);
 
-export async function signIn(page: Page) {
+export async function signIn(page: Page, credentials?: { email: string; password: string }) {
   await page.goto('/');
-  await page.getByLabel('Email').fill(e2eEmail ?? '');
-  await page.getByLabel('Password').fill(e2ePassword ?? '');
+  await page.getByLabel('Email').fill(credentials?.email ?? e2eEmail ?? '');
+  await page.getByLabel('Password').fill(credentials?.password ?? e2ePassword ?? '');
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { name: 'Your assets' })).toBeVisible();
 }

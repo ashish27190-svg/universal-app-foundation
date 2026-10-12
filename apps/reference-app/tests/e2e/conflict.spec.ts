@@ -26,7 +26,15 @@ test('stale offline edit is surfaced instead of silently overwriting the server'
     await expect(pageA.getByText('Needs attention', { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(pageA.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
     await expect(pageA.getByRole('button', { name: 'Keep server version' })).toBeVisible();
-    await expect(pageA.getByRole('button', { name: 'Reapply my version' })).toBeVisible();
+    await expect(pageA.getByRole('button', { name: 'Review reapplication' })).toBeVisible();
+    await pageA.getByRole('button', { name: 'Review reapplication' }).click();
+    const review = pageA.getByRole('dialog', { name: 'Review conflicting changes' });
+    await expect(review).toBeVisible();
+    await expect(review.getByText('reviewed server revision')).toBeVisible();
+    await expect(review.getByText(`${original} offline A`)).toBeVisible();
+    await expect(review.getByText(`${original} online B`)).toBeVisible();
+    await expect(review.getByRole('button', { name: 'Confirm reapply my version' })).toBeEnabled();
+    await review.getByRole('button', { name: 'Cancel' }).click();
   } finally {
     await Promise.all([contextA.close(), contextB.close()]);
   }

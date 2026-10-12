@@ -1,0 +1,262 @@
+# Gate 3 — private Household Vault staging: release checklist
+
+**Status on 11 Oct 2026: blocked on hosted services, not deployed.**
+The reviewed Gate 3 baseline `3b282745` passed both standard CI and disposable
+local Supabase; subsequent changes require fresh validation on their own head.
+
+Scope: only the existing dedicated `uaf-household-vault-staging` Supabase
+project, ref `vdhfayratdsoexltyrku`. It was **INACTIVE** at the latest
+read-only project inspection. This document authorizes no migration, restore,
+billing change, public website, or production release.
+
+## Release decisions and acceptance
+
+| Gate | Objective | Evidence required |
+| --- | --- | --- |
+| G3.0 Source and isolated local database | No syntax, type, local RLS or transaction regressions | CI and Gate 2 local Supabase both green on identical commit |
+| G3.1 Dedicated hosted staging | UAF Supabase project healthy; no business database touched | Explicit staging project ref/status; migrations, Edge Functions and two-user auth against staging only |
+| G3.2 PowerSync staging | Authenticated Sync Streams scoped to workspace | Staging PowerSync instance, stream config review, propagation to/from Postgres, revocation tests |
+| G3.3 Private hosting | Public traffic cannot see staging app | Worker-level Cloudflare Access policy covering all URLs, no bypass; unauthenticated `workers.dev` request redirects to Access before AND after publish |
+| G3.4 Connected browser reliability | Real browser SQLite, offline edit, reload, reconnect, two-device convergence and stale-conflict review work | Connected Playwright success, no skipped scenarios, fresh identity/data state |
+| G3.4a Same-device account isolation | Account A and B never inherit each other's persisted SQLite; a second tab never opens the active SQLite cache | Unit ownership/Web Lock tests, two-tab denial and same-browser A→B→A staging Playwright evidence |
+| G3.5 Pilot authorization | Demonstrated security and data reliability | Human review of staging evidence and cost/security posture before merging/promoting |
+
+**Release-blocking failures:** cross-workspace read/write, viewer mutation,
+audit/ledger partial commit, replay duplication, silent stale overwrite,
+offline data loss on reload, accidental public access, missing test account,
+inactive PowerSync, unguarded cross-account local cache reuse, loss of offline
+pending mutations on account change, or unknown database target.
+
+## What was tightened on the Gate 3 draft branch
+
+- `.github/workflows/staging.yml` is **manual-only**, with `preflight_only`
+  as the default. It no longer deploys on every `main` push.
+- `scripts/validate-staging-readiness.mjs` rejects other Supabase project IDs,
+  mismatched Supabase URLs, leaked service-role browser keys, unapproved PowerSync origins,
+  non-HTTPS/loopback PowerSync URLs, absent E2E account
+  credentials and missing staging deploy prerequisites. It prints missing
+  **secret names only**, never credential values. Synthetic self-tests run in PR CI.
+- The deploy action requires GitHub's `staging` environment, the expected
+  UAF project ID, and an explicit operator-attested Access approval secret.
+  An attestation alone is **not** sufficient proof of privacy.
+- `scripts/verify-private-staging.mjs` refuses deployment unless an
+  unauthenticated request to the **pre-existing** staging Worker URL redirects
+  to the Cloudflare Access login. Its URL and challenge checks are covered by
+  18 synthetic positive/negative assertions in CI. It checks the Worker root,
+  manifest, icon and an unknown path against the exact approved Access team,
+  before and after deployment.
+  This check cannot prove protection of alternative domains or policies that
+  change later. A Worker-level Access policy still requires human verification.
+- Staging Wrangler disables preview URLs; this does not replace Access on the
+  regular `workers.dev` and any custom domain.
+- `.github/workflows/connected-e2e.yml` now requires actual staging credentials
+  and exact project identity. It is manual-only while staging is inactive.
+  Without credentials for **two distinct synthetic accounts**, it **fails**, rather than silently passing zero tests.
+- The Supabase CLI in the protected deployment job now explicitly uses
+  `--workdir infrastructure`, where the actual config/migrations/functions live,
+  and prints a migration **dry-run** before the approved staging push. No
+  migrations were run on a hosted database during this preparation.
+- The reference app's persistent PowerSync SQLite uses one fixed filename.
+  A new per-device owner marker now binds its contents to the last authenticated
+  user. Before changing identity, it checks for queued mutations: if pending
+  writes exist, the new account is **blocked**, not given the previous user's
+  cache or mutation queue. If no pending writes exist, the previous cache is
+  cleared before a new identity attaches. Standard logout also refuses to erase
+  unsynced writes. An external auth-loss event disconnects but preserves queued
+  data, so signing back into the original account can resume upload. Unit tests
+  cover clearing, account transitions, recovery, missing marker and failure cases.
+- A specific blocked-switch error gives the user an explicit route back to
+  sign-in without bypassing the pending-write cleanup rule. This is NOT an
+  encryption-at-rest or malicious-device-user security guarantee. Multi-tab
+  concurrent account switching remains a hosted acceptance/risk check.
+- Previously the app called Supabase `ensure_personal_workspace` on **every**
+  mount, including after an offline browser restart; that made the cached
+  SQLite asset records unusable until a network connection returned. The app
+  now acquires account-bound SQLite ownership first, then uses its last
+  **server-confirmed personal workspace** while the browser is explicitly
+  offline, if its cached record matches the current user, owner marker, active
+  owner membership and a non-expired local Supabase access token. The local
+  cache has a seven-day maximum age; the access token typically expires much
+  sooner, so this does **not** promise indefinite offline unlock.
+- A release audit found **two further trust-order gaps**: normal ONLINE
+  startup connected PowerSync before an online workspace lookup completed,
+  and reconnect could accept a newly created personal workspace for the same
+  account while retaining pending edits from the former workspace. Both
+  paths now verify current membership before allowing the uploader to attach.
+  Reconnect additionally requires that the verified workspace ID matches the
+  exact last-confirmed workspace. A mismatch fails closed without rewriting
+  or deleting the old owner cache, queued edits or confirmed workspace record.
+- Auth callbacks now return synchronously and schedule expensive Supabase
+  client calls in the next browser task. This avoids initiating additional
+  auth/database requests inside the auth event callback, which can deadlock
+  in legacy Supabase auth-lock implementations. Any resumed session (even
+  a token refresh for the same user) suspends its prior uploader before
+  revalidating permissions and attaching again.
+- Unit regression tests cover same-workspace reconnect, changed workspace,
+  expired/stale confirmation, removed membership and wrong local owner.
+  A connected Playwright test holds the online personal-workspace RPC and
+  verifies the local SQLite exclusive Web Lock is not acquired before the
+  server returns. These tests remain **unexecuted on hosted staging**.
+- Reconnect permission gate now **unmounts all editing surfaces immediately**
+  when a previously offline session returns online, before requesting any
+  workspace context. The app shows a loading state while the authenticated
+  membership is rechecked. A revoked/failed membership causes a blocking
+  error, not a return to cached editing. Local pending mutations stay in
+  SQLite.
+- Also applies to a normal browser session that goes offline and reconnects
+  **without a page reload**: the previous PowerSync uploader is disconnected
+  while offline (retaining the SQLite cache and exclusive browser lock),
+  and can only resume after successful server membership revalidation.
+- Added local owner tests covering upload-stream suspension with unsynced
+  writes and a non-bootstrapped vault. Connected Playwright acceptance cases
+  now deliberately delay the workspace RPC to verify editing is hidden during
+  verification, both with and without an offline reload. These hosted
+  acceptance cases are written, **not yet executed**.
+- The offline boot deliberately does NOT open the remote PowerSync stream.
+  On an `online` event it rechecks the authenticated user and actual
+  workspace membership against Supabase, then attaches the original account's
+  mutation queue to PowerSync. If verification fails, the stream is
+  disconnected and the app shows an error without clearing pending SQLite
+  edits. Unknown, expired and different-account caches fail closed.
+- The workspace fallback is a local UX cache, **not a permission grant**.
+  A device's localStorage is not a trusted authorization source; all server
+  writes and sync stream access must still enforce Supabase RLS and workspace
+  membership. A cached workspace from a since-revoked account must never
+  be accepted by the server after reconnect.
+- Six unit tests cover owner/account mismatch, cache expiry, stale/forged
+  membership, unexpired session, malformed data and logout clearing.
+  The offline/reconnect browser acceptance journey now explicitly checks
+  offline reload and later cross-browser convergence; it remains **not run**
+  against hosted private staging.
+- The reference app now holds a **single exclusive Web Lock per browser origin
+  for the entire browser document lifetime**. SDK source inspection found
+  that `@powersync/web` starts opening SQLite in the `PowerSyncDatabase`
+  constructor, before `connect()`. The earlier application-level lock was
+  therefore acquired **too late** to guarantee protection from concurrent
+  database initialization. The `main.tsx` entrypoint now first acquires the
+  document-wide lock and only then dynamically imports `App`, which imports
+  the PowerSync persistence module. A second tab fails closed before loading
+  the database. Normal logout and external auth loss disconnect PowerSync but
+  **do not release the lock**, because the SQLite adapter may remain open.
+  Closing or reloading the browser document releases Web Locks automatically.
+  Browsers without Web Locks fail closed; no racy localStorage-lock fallback
+  is permitted. Web Locks require HTTPS or another secure context.
+- Authentication changes are checked immediately before and after sync
+  attachment, and stale asynchronous bootstrap attempts must not reactivate
+  a previous identity. The old uploader stops before a different account can
+  connect, including when the browser's auth state changes externally.
+- Unit tests simulate simultaneous tabs, exclusive-lock refusal, lock release,
+  unsupported browser, pending mutations, recovered account transitions and
+  auth-session handoff. Connected Playwright now also checks that a second
+  tab gets a clear unavailable message while the first owns local SQLite and
+  can attach only after that first tab closes.
+- The change preserves same-tab sign-out/sign-in but deliberately prevents
+  other tabs on the same origin from opening Household Vault while this tab
+  is open, even at its sign-in screen. This is a conservative privacy tradeoff
+  until the SDK's browser initialization and lock lifetime are validated with
+  genuine connected Playwright tests. The release security invariant now
+  requires lock acquisition before the dynamic app import and forbids an
+  early release in the persistence module.
+- This does **not** prove cross-tab storage safety on the full production
+  browser/device matrix, browser extensions, separate origins, or
+  browser-vendor edge cases. Hosted connected and offline reload tests
+  remain release-blocking.
+- A new connected browser journey switches A→B→A **in the same browser profile**
+  after each account's changes have synced. It verifies that cached records
+  cannot appear in the other account. Not yet run on hosted PowerSync.
+- The browser suite includes two separate-account isolation checks, in addition
+  to offline asset-create, browser-reload, reconnect and
+  fresh-browser convergence journey. It **has not been executed** against hosted
+  PowerSync or a real private staging deployment.
+
+## Evidence classification (never conflate the three gates)
+
+| Evidence tier | Where it runs | What a pass establishes | What it **does not** establish |
+| --- | --- | --- | --- |
+| A — static / disposable | GitHub CI and disposable local Supabase | Build, unit logic, migration/RLS/atomic mutation tests, synthetic privacy checks | Hosted uptime, browser persistence, SSO privacy, real PowerSync |
+| B — connected E2E | Ephemeral **localhost Vite preview** backed by dedicated staging Supabase/PowerSync | Nine browser journeys actually pass with no skips/flakes; cross-account, offline, replay and sync checks | Hosted Cloudflare Worker behavior, actual SSO policy, mobile PWA install |
+| C — hosted private acceptance | Exact protected Cloudflare Worker URL and real browser | Access denies unauthenticated routes, authorized sessions function, assets and PWA work on the protected deployed origin | Evidence for any other unlisted hostname, future policy changes or production |
+
+The connected workflow now saves a local Playwright JSON report and runs
+`scripts/validate-connected-e2e-results.mjs`. It rejects missing reports,
+skipped, flaky, failed, missing or duplicated scenarios, as well as runs whose
+critical scenarios did not pass cleanly on their first attempt. The gate
+runs eight synthetic self-checks in ordinary CI and manual staging preflight.
+
+Do not label a Tier B localhost preview result as a Tier C private hosted pass.
+Tier C requires **separate evidence from the protected Worker itself**, including
+manual Worker-level policy review, anonymous Access probes, and a logged-in PWA
+test. Never upload live tokens, Access cookies or production records in test logs.
+
+## Legacy main-branch staging automation is now disabled
+
+On **11 October 2026**, explicitly approved PR #6 was merged as
+`9fb6ad38`, replacing the default-branch automatic staging deployment
+and scheduled connected tests with **fail-closed manual kill switches**.
+Read-only verification confirmed no staging workflow push trigger,
+scheduled E2E, embedded credentials, or deploy commands; the default-branch
+CI passed. These inert workflows contain `workflow_dispatch` solely to
+explain why the old commands cannot execute; selecting them does **not**
+run `preflight_only` and deliberately exits with failure.
+
+Draft PR #5 now includes the new main-branch safety merge parent and remains
+**draft and unmerged**. Its guarded `preflight_only` implementation
+is on branch `gate2-security-hardening`. Do not accidentally choose
+the inert default-branch job or the separately approval-gated
+`deploy_private_staging` option. The only currently verified evidence
+remains source CI/disposable local tests. For further deployment steps,
+see `docs/operations/GATE3-AUTHORIZATION-DECISION.md`.
+
+## Steps to enable the connected release gate
+
+1. Review potential charges and re-activate **only** the named UAF staging
+   Supabase project. Do not touch other projects. Confirm it reports healthy.
+2. Prepare a separate staging PowerSync instance and configure workspace-scoped
+   streams from `infrastructure/powersync/sync-config.yaml`; use dedicated
+   staging connection credentials and no business-production connection.
+3. In Cloudflare Zero Trust, protect the **entire**
+   `uaf-household-vault-staging` Worker (production + preview destinations)
+   with an allow-list policy. Verify there is no broad bypass policy and no
+   alternate public URL. The Worker and Access application must already
+   exist before the guarded deploy workflow can be used.
+4. In GitHub `staging` Environment set only the staging secrets:
+   `STAGING_SUPABASE_PROJECT_REF`, `STAGING_SUPABASE_URL`,
+   `STAGING_SUPABASE_PUBLISHABLE_KEY`, `STAGING_SUPABASE_DB_PASSWORD`,
+   `STAGING_POWERSYNC_URL`, `SUPABASE_ACCESS_TOKEN`,
+   `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`,
+   `STAGING_PROTECTED_URL` (the protected `https://uaf-household-vault-staging.<account>.workers.dev/`),
+   `STAGING_WORKERS_SUBDOMAIN` (the exact `<account>` DNS label),
+   `STAGING_ACCESS_TEAM_DOMAIN` (the approved `<team>.cloudflareaccess.com`),
+   `STAGING_POWERSYNC_APPROVED_ORIGIN` (the separately verified HTTPS PowerSync origin),
+   and `STAGING_PRIVATE_ACCESS_CONFIRMED` with the exact release-approval value
+   required by the staging validator. The optional `STAGING_SENTRY_DSN`
+   must not enable PII collection.
+5. For connected E2E, provide `STAGING_E2E_EMAIL`,
+   `STAGING_E2E_PASSWORD`, `STAGING_E2E_SECOND_EMAIL` and
+   `STAGING_E2E_SECOND_PASSWORD` for **two distinct synthetic accounts**,
+   each with its own personal workspace. Do not reuse real personal/business
+   credentials. Fresh browser contexts must receive only their own records.
+   Direct hosted RLS/role-revocation testing remains a separate gate.
+6. The default-branch **automatic deploy route is now disabled**.
+   The default-branch manual job is an intentional kill switch, not
+   preflight. Use only the reviewed **branch-specific** guarded
+   `preflight_only` action on `gate2-security-hardening`, if available,
+   or PR CI for non-hosted preflight evidence. Only after separate
+   infrastructure, budget and Access policy approvals should anyone
+   use `deploy_private_staging` in the protected GitHub environment.
+7. Run **Connected E2E** and inspect the assertion count, skip count,
+   traces, data provenance, anonymous-access denial and project audit evidence.
+   No green-only shortcut; manual validation for Android PWA install and
+   browser sleep/reconnect also remains mandatory.
+
+The Access redirect checks only confirm that the checked paths challenge
+an anonymous visitor at the expected Access tenant. They do **not** prove that
+the Access policy's allow-list is narrow, that no bypass policy exists, or that
+unlisted alternate domains are protected. Use Cloudflare's **Worker-level
+Access** policy (All traffic) rather than only a hostname/path Access rule;
+independently verify the destination, allow-list, bypass policies and preview
+configuration before enabling deployment.
+
+A workflow passing the static/preflight gate does **not** imply hosted
+readiness. No Supabase restore, migration, Cloudflare release or PowerSync
+configuration was performed during this Gate 3 preparation.

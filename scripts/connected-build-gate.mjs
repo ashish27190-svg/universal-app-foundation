@@ -52,12 +52,17 @@ run('pnpm', ['test']);
 run('pnpm', ['build']);
 
 if (withE2E) {
-  const required = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY', 'VITE_POWERSYNC_URL', 'E2E_EMAIL', 'E2E_PASSWORD'];
+  const required = [
+    'VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY',
+    'VITE_POWERSYNC_URL', 'STAGING_SUPABASE_PROJECT_REF',
+    'E2E_EMAIL', 'E2E_PASSWORD', 'E2E_SECOND_EMAIL', 'E2E_SECOND_PASSWORD',
+  ];
   const missing = required.filter((key) => !process.env[key]);
   if (missing.length) {
     console.error(`Cannot run connected E2E. Missing: ${missing.join(', ')}`);
     process.exit(3);
   }
+  run(process.execPath, ['scripts/validate-staging-readiness.mjs', '--e2e']);
   run('pnpm', ['--filter', '@uaf/reference-app', 'exec', 'playwright', 'install', '--with-deps', 'chromium']);
   run('pnpm', ['--filter', '@uaf/reference-app', 'test:e2e']);
 }

@@ -108,7 +108,10 @@ export class HttpConflictResolver {
     this.fetchImpl = options.fetchImpl ?? fetch;
   }
 
-  async resolve(conflictId: string, choice: ConflictResolutionChoice): Promise<void> {
+  async resolve(conflictId: string, choice: ConflictResolutionChoice, reviewedRevision?: Revision | null): Promise<void> {
+    if (choice === 'reapply_client' && (!Number.isSafeInteger(reviewedRevision) || Number(reviewedRevision) < 1)) {
+      throw new Error('Review the latest server revision before reapplying your version.');
+    }
     const session = await this.options.auth.getSession();
     if (!session) throw new Error('Cannot resolve a conflict without an authenticated session.');
     const response = await this.fetchImpl(this.options.endpoint, {
@@ -117,7 +120,7 @@ export class HttpConflictResolver {
         Authorization: `Bearer ${session.accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ conflictId, choice }),
+      body: JSON.stringify({ conflictId, choice, ...(choice === 'reapply_client' ? { reviewedRevision } : {}) }),
     });
     const body = await response.json().catch(() => ({})) as { message?: string };
     if (!response.ok) throw new Error(body.message ?? `Conflict resolver returned HTTP ${response.status}.`);
