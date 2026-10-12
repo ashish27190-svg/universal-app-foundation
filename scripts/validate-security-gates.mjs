@@ -93,6 +93,30 @@ for (const assertion of [
   }
 }
 
+// RLS row restrictions cannot prevent authenticated users from forging
+// profile audit fields when table-wide UPDATE is granted. Restrict to name.
+const profileLockdown = fs.readFileSync(
+  path.join(root, 'infrastructure/supabase/migrations/20261012000200_profiles_display_name_only.sql'),
+  'utf8');
+for (const required of [
+  'revoke update on table public.profiles from authenticated;',
+  'grant update (display_name) on table public.profiles to authenticated;',
+]) {
+  if (!profileLockdown.includes(required)) {
+    violations.push('Missing profile least-privilege grant: ' + required);
+  }
+}
+const securityTap = fs.readFileSync(
+  path.join(root, 'infrastructure/supabase/tests/database/gate2_rls_test.sql'),
+  'utf8');
+for (const test of [
+  'Profile creation time cannot be changed by signed-in client',
+  'Profile audit time cannot be changed by signed-in client',
+  'Other user profile remains unchanged after unauthorized update',
+]) {
+  if (!securityTap.includes(test)) violations.push('Missing profile security regression: ' + test);
+}
+
 const functionsConfig = fs.readFileSync(path.join(root, 'infrastructure/supabase/config.toml'), 'utf8');
 // Server-side conflict resolutions must keep the authoritative workspace
 // state and actor role stable until the atomic SQL transaction completes.
