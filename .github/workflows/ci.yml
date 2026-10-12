@@ -27,6 +27,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Enforce no direct package-script staging or production deployments
         run: node scripts/guard-release-scripts.mjs --self-test
+      - name: Prove both direct deploy shortcuts reject execution (no credentials)
+        run: |
+          if pnpm deploy:staging; then
+            echo "::error::Direct staging deploy unexpectedly succeeded."
+            exit 1
+          fi
+          if pnpm deploy:production; then
+            echo "::error::Direct production deploy unexpectedly succeeded."
+            exit 1
+          fi
+          echo "PASS: both direct deployment scripts blocked without cloud access."
       - run: pnpm validate:structure
       - run: pnpm validate:core-boundary
       - run: pnpm validate:config-boundary
