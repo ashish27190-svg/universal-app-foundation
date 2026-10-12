@@ -1,7 +1,7 @@
 -- Disposable UAF local Gate-2 RLS test; never run against a linked production project.
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(59);
+select extensions.plan(68);
 
 -- Synthetic users. Transactional fixture data rolls back after pgTAP execution.
 insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
@@ -335,6 +335,78 @@ select extensions.is((select count(*)::int from public.write_conflicts
 
 drop trigger gate2_test_reject_reapply_audit on public.audit_events;
 drop function public.gate2_test_reject_reapply_audit();
+
+-- Personal workspace bootstrap must never undo a deliberate suspended,
+-- removed or downgraded membership. A single sign-in/RPC retry is NOT an
+-- administrative reinstatement. This synthetic third user is isolated from
+-- prior tenant fixtures and all test data rolls back.
+insert into auth.users (id,instance_id,aud,role,email,created_at,updated_at)
+values ('c3000000-0000-4000-8000-000000000003',
+ '00000000-0000-0000-0000-000000000000',
+ 'authenticated','authenticated','uaf-rls-c@example.invalid',now(),now());
+insert into public.workspaces (id,name,workspace_type,created_by)
+values ('c3000000-0000-4000-8000-000000000033',
+        'C Personal','personal','c3000000-0000-4000-8000-000000000003');
+insert into public.workspace_memberships (workspace_id,user_id,role,status)
+values ('c3000000-0000-4000-8000-000000000033',
+        'c3000000-0000-4000-8000-000000000003','owner','active');
+
+select set_config('request.jwt.claim.sub','c3000000-0000-4000-8000-000000000003',true);
+set local role authenticated;
+select extensions.is(
+  (select workspace_id from public.ensure_personal_workspace()),
+  'c3000000-0000-4000-8000-000000000033'::uuid,
+  'Active personal owner can bootstrap idempotently');
+reset role;
+update public.workspace_memberships set status='suspended'
+ where workspace_id='c3000000-0000-4000-8000-000000000033';
+set local role authenticated;
+select extensions.throws_ok(
+  $bootstrap$select workspace_id from public.ensure_personal_workspace()$bootstrap$,
+  '42501',null,
+  'Suspended personal owner cannot reactivate via bootstrap');
+reset role;
+select extensions.is(
+  (select status from public.workspace_memberships
+   where workspace_id='c3000000-0000-4000-8000-000000000033'),
+  'suspended','Suspended membership remains suspended');
+update public.workspace_memberships set status='active',role='viewer'
+ where workspace_id='c3000000-0000-4000-8000-000000000033';
+set local role authenticated;
+select extensions.throws_ok(
+  $bootstrap$select workspace_id from public.ensure_personal_workspace()$bootstrap$,
+  '42501',null,
+  'Downgraded personal owner cannot regain owner via bootstrap');
+reset role;
+select extensions.is(
+  (select role from public.workspace_memberships
+   where workspace_id='c3000000-0000-4000-8000-000000000033'),
+  'viewer','Downgraded viewer role remains unchanged');
+update public.workspace_memberships set status='removed',role='owner'
+ where workspace_id='c3000000-0000-4000-8000-000000000033';
+set local role authenticated;
+select extensions.throws_ok(
+  $bootstrap$select workspace_id from public.ensure_personal_workspace()$bootstrap$,
+  '42501',null,
+  'Removed personal owner cannot reactivate via bootstrap');
+reset role;
+select extensions.is(
+  (select status from public.workspace_memberships
+   where workspace_id='c3000000-0000-4000-8000-000000000033'),
+  'removed','Removed membership remains removed');
+update public.workspace_memberships set status='active',role='owner'
+ where workspace_id='c3000000-0000-4000-8000-000000000033';
+set local role authenticated;
+select extensions.is(
+  (select workspace_id from public.ensure_personal_workspace()),
+  'c3000000-0000-4000-8000-000000000033'::uuid,
+  'Explicit administrative restoration permits original personal workspace');
+reset role;
+select extensions.is(
+  (select count(*)::int from public.workspace_memberships
+   where workspace_id='c3000000-0000-4000-8000-000000000033'
+     and user_id='c3000000-0000-4000-8000-000000000003'),1,
+  'Restoration preserves one membership without duplicate or replacement');
 
 select set_config('request.jwt.claim.sub','',true);
 set local role anon;
