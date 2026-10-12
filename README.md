@@ -26,25 +26,34 @@ The repository is currently at **UAF v0.3 — BUILD 0.21**. Architecture and sta
 - pnpm 10.15.1 (pinned through `packageManager`)
 - Internet access for the first dependency install
 
-## First connected verification
+## Verified test evidence vs unproven hosted gates (12 October 2026)
 
-The authoring environment cannot reach npm and currently runs Node 22, so the repository intentionally has no fabricated lockfile or dependency-backed PASS result.
+The repository now **tracks `pnpm-lock.yaml`** and GitHub Actions has run
+real Node 24/pnpm dependency-backed lint, typechecks, tests and builds.
+The last completely verified draft PR #5 baseline was commit `6c84011e`:
+four workflows passed, including **81/81** disposable PostgreSQL pgTAP
+assertions and **83** local HTTP/authorization checks. Those checks use
+isolated local infrastructure; they are **not hosted staging acceptance**.
 
-On an internet-connected Node 24 machine run:
+The current draft branch is newer than that checkpoint and is still
+awaiting fresh exact-head validation. It also needs explicit conflict
+resolution with `main` after separately approved production safety PR #7
+and direct-deploy safety PR #10; do not assume past CI applies to a new SHA.
+
+To reproduce local verification on a connected Node 24 environment:
 
 ```bash
-node scripts/connected-build-gate.mjs
+pnpm install --frozen-lockfile
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
 ```
 
-That command creates the initial `pnpm-lock.yaml` if necessary, runs all static validators, then runs lint, typecheck, tests and the complete build. Commit the lockfile only after that gate passes.
-
-For connected staging browser tests:
-
-```bash
-node scripts/connected-build-gate.mjs --with-e2e
-```
-
-See `docs/operations/CONNECTED-BUILD-GATE.md`.
+See `docs/operations/PR5-INTEGRATION-REVIEW-PLAN.md` and
+`docs/operations/GATE3-AUTHORIZATION-DECISION.md`.
+The `--with-e2e` connected gate requires separately approved dedicated
+staging credentials and funding. Do not use unrelated Supabase projects.
 
 ## Repository layout
 
@@ -69,7 +78,12 @@ Foundation never imports a specific app domain upward. Browser code never receiv
 
 ## Current blocker
 
-The remaining gates require a connected Node 24 + npm/pnpm environment and real staging services. No unavailable runtime check is represented as passing in `BUILD-STATUS.md`.
+The remaining gates are **independent code review / PR #5 conflict
+resolution**, verified GitHub environment reviewers and protected branch,
+approved isolated staging budget, real PowerSync/Supabase/Cloudflare Access
+hosting, nine connected browser journeys, and actual PWA/mobile acceptance.
+The default-branch staging and production workflows deliberately fail closed.
+Root deployment shortcuts are also blocked after approved PR #10.
 
 ## Current release candidate
 
