@@ -1,7 +1,7 @@
 -- Disposable UAF local Gate-2 RLS test; never run against a linked production project.
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(68);
+select extensions.plan(79);
 
 -- Synthetic users. Transactional fixture data rolls back after pgTAP execution.
 insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
@@ -54,6 +54,52 @@ select extensions.throws_ok($$select mutation_id from public.processed_mutations
 select extensions.lives_ok($$select * from public.ensure_personal_workspace('A Personal')$$,'Workspace bootstrap succeeds');
 select extensions.lives_ok($$select * from public.ensure_personal_workspace('A Personal')$$,'Workspace bootstrap is idempotent');
 select extensions.is((select count(*)::int from public.workspaces where created_by='a1000000-0000-4000-8000-000000000001' and workspace_type='personal' and status='active'),1,'One active personal workspace');
+
+-- Profile display name is the ONLY authenticated UPDATE field.
+-- Tenant-auth ID and creation/update times are not browser-writable even
+-- though the profile's own row remains readable and its name editable.
+select extensions.ok(
+  not pg_catalog.has_table_privilege('authenticated','public.profiles','UPDATE'),
+  'Authenticated clients have no table-wide profile update grant');
+select extensions.ok(
+  pg_catalog.has_column_privilege('authenticated','public.profiles','display_name','UPDATE'),
+  'Authenticated client can edit profile display name');
+select extensions.ok(
+  not pg_catalog.has_column_privilege('authenticated','public.profiles','id','UPDATE'),
+  'Authenticated client cannot edit profile identity');
+select extensions.ok(
+  not pg_catalog.has_column_privilege('authenticated','public.profiles','created_at','UPDATE'),
+  'Authenticated client cannot backdate profile creation');
+select extensions.ok(
+  not pg_catalog.has_column_privilege('authenticated','public.profiles','updated_at','UPDATE'),
+  'Authenticated client cannot forge profile audit timestamp');
+select extensions.throws_ok(
+  $profile$update public.profiles set created_at='2000-01-01'::timestamptz
+    where id='a1000000-0000-4000-8000-000000000001'$profile$,
+  '42501',null,'Profile creation time cannot be changed by signed-in client');
+select extensions.throws_ok(
+  $profile$update public.profiles set updated_at='2000-01-01'::timestamptz
+    where id='a1000000-0000-4000-8000-000000000001'$profile$,
+  '42501',null,'Profile audit time cannot be changed by signed-in client');
+select extensions.lives_ok(
+  $profile$update public.profiles set display_name='A Profile'
+    where id='a1000000-0000-4000-8000-000000000001'$profile$,
+  'Signed-in user may update their own display name');
+select extensions.is(
+  (select display_name from public.profiles
+    where id='a1000000-0000-4000-8000-000000000001'),
+  'A Profile','Signed-in user reads their updated profile');
+select extensions.lives_ok(
+  $profile$update public.profiles set display_name='Unauthorized change'
+    where id='b2000000-0000-4000-8000-000000000002'$profile$,
+  'Cross-account profile update fails closed without changing foreign row');
+reset role;
+select extensions.is(
+  (select count(*)::int from public.profiles
+    where id='b2000000-0000-4000-8000-000000000002'
+      and display_name is null),1,
+  'Other user profile remains unchanged after unauthorized update');
+set local role authenticated;
 
 -- Least-privilege workspace updates: owner/admin may update editable
 -- fields only, never reassign tenant ownership or corrupt identity/audit.
