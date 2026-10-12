@@ -29,9 +29,11 @@ It spans database authentication and sync transactions, offline PWA lifetime
 semantics, browser security, and GitHub release automation. Even fully green
 local CI is insufficient to prove those combined behaviors against real
 PowerSync, private Cloudflare Access, two staging users and devices.
-At the time of this note GitHub reported `mergeable=false`, likely due to
-branch divergence/integration conflicts after main's two safety PRs.
-Do not force-merge, rewrite protected main, or resolve by dropping safeguards.
+Following source-level reconciliation with PR #10 and relocation of
+CI-only synthetic checks to avoid overlapping Git merge hunks, GitHub
+reported `mergeable=true`. This is **NOT** approval to merge, evidence
+that hosted gates passed, or a substitute for fresh exact-head CI.
+Do not force-merge, rewrite protected main, or drop safeguards.
 
 ## Proposed review slices (dependency order; review only until approved)
 
