@@ -65,6 +65,34 @@ for (const token of [
   }
 }
 
+// A bootstrap RPC is a one-time membership initializer, NEVER an authorization
+// reset. Login retries must not silently reverse suspension or role downgrades.
+const bootstrapLockdown = fs.readFileSync(
+  path.join(root, 'infrastructure/supabase/migrations/20261012000100_prevent_personal_membership_reactivation.sql'),
+  'utf8');
+for (const token of [
+  'do nothing;',
+  'for share;',
+  "recorded_role is distinct from 'owner'",
+  "recorded_status is distinct from 'active'",
+  "using errcode = '42501'",
+]) {
+  if (!bootstrapLockdown.includes(token)) {
+    violations.push('Missing fail-closed personal workspace bootstrap authorization: ' + token);
+  }
+}
+for (const assertion of [
+  'Suspended personal owner cannot reactivate via bootstrap',
+  'Downgraded personal owner cannot regain owner via bootstrap',
+  'Removed personal owner cannot reactivate via bootstrap',
+]) {
+  const tests = fs.readFileSync(
+    path.join(root, 'infrastructure/supabase/tests/database/gate2_rls_test.sql'), 'utf8');
+  if (!tests.includes(assertion)) {
+    violations.push('Missing bootstrap privilege-regression test: ' + assertion);
+  }
+}
+
 const functionsConfig = fs.readFileSync(path.join(root, 'infrastructure/supabase/config.toml'), 'utf8');
 // Server-side conflict resolutions must keep the authoritative workspace
 // state and actor role stable until the atomic SQL transaction completes.
