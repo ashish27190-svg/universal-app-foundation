@@ -6,6 +6,21 @@ Supabase project `vdhfayratdsoexltyrku` was observed **INACTIVE**.
 Only the approved production **workflow kill switch** (PR #7) changed on
 `main`; no production service or database was deployed or mutated.
 
+## Profile field privilege hardening — 12 October 2026
+
+The original `profiles` table allowed authenticated **table-wide UPDATE**.
+Even with self-only RLS, a signed-in user could change their own
+`created_at` or `updated_at` audit fields. The forward-only draft
+`20261012000200_profiles_display_name_only.sql` now revokes this
+permission and grants `UPDATE(display_name)` only. RLS continues
+to restrict modifications and reads to the authenticated user's row;
+the database trigger retains control of `updated_at`.
+The disposable pgTAP suite was expanded from 68 to **81 planned
+assertions**, including immutable identity/timestamps, valid self-edit,
+cross-account read denial and foreign update denial. These additions
+are not accepted until all exact-head jobs pass; no hosted database
+migration has been applied.
+
 ## Bootstrap authorization hardening — 12 October 2026
 
 Source-only forward migration
