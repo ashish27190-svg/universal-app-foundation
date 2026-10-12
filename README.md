@@ -35,10 +35,11 @@ four workflows passed, including **81/81** disposable PostgreSQL pgTAP
 assertions and **83** local HTTP/authorization checks. Those checks use
 isolated local infrastructure; they are **not hosted staging acceptance**.
 
-The current draft branch is newer than that checkpoint and is still
-awaiting fresh exact-head validation. It also needs explicit conflict
-resolution with `main` after separately approved production safety PR #7
-and direct-deploy safety PR #10; do not assume past CI applies to a new SHA.
+The newer draft has now been reconciled at the source-file level with
+approved safety PRs #7 and #10, and GitHub has reported it as mergeable
+without merging it. Nevertheless, fresh **four-workflow exact-head**
+validation and explicit independent review remain necessary before ANY
+future integration. Historic CI results do not validate a changed SHA.
 
 To reproduce local verification on a connected Node 24 environment:
 
