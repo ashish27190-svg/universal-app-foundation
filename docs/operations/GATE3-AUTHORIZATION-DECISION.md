@@ -6,6 +6,26 @@ Supabase project `vdhfayratdsoexltyrku` was observed **INACTIVE**.
 Only the approved production **workflow kill switch** (PR #7) changed on
 `main`; no production service or database was deployed or mutated.
 
+## Bootstrap authorization hardening — 12 October 2026
+
+Source-only forward migration
+`20261012000100_prevent_personal_membership_reactivation.sql` changes
+`ensure_personal_workspace` to create a **missing** owner membership only,
+never overwrite an existing suspended, removed or downgraded membership.
+It verifies the final owner/active state under a membership SHARE lock and
+returns `42501` for revoked roles. The SQL plan now contains **68**
+disposable pgTAP assertions, including nine synthetic suspension/downgrade/
+removal/restoration regression cases. Green tests from earlier 59-assertion
+commits do NOT validate this change; check the exact current PR-head runs.
+
+One separate lifecycle limitation is documented at
+[workspace archive/restore issue #9](https://github.com/ashish27190-svg/universal-app-foundation/issues/9):
+the current active-workspace RLS `WITH CHECK` denies active → archived,
+while `USING` denies archived → active. Do not relax authorization merely
+to make either transition work. An explicit scoped product/lifecycle
+decision and audited implementation may be required before offering
+archive/restore in an app.
+
 ## Consolidated release blockers — 11 October 2026
 
 - **Local SQL hardening:** `reapply_conflict_transaction` now holds active
