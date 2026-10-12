@@ -38,6 +38,7 @@ jobs:
             exit 1
           fi
           echo "PASS: both direct deployment scripts blocked without cloud access."
+      - run: pnpm validate:structure
       - name: Verify isolated staging guard against synthetic configurations
         run: node scripts/validate-staging-readiness.mjs --self-test
       - name: Verify staging Access checks fail closed (synthetic)
@@ -54,7 +55,6 @@ jobs:
         run: |
           node scripts/validate-manual-workflow-triggers.mjs --self-test
           node scripts/validate-manual-workflow-triggers.mjs
-      - run: pnpm validate:structure
       - run: pnpm validate:core-boundary
       - run: pnpm validate:config-boundary
       - run: pnpm validate:auth-boundary
