@@ -1,7 +1,7 @@
 -- Disposable UAF local Gate-2 RLS test; never run against a linked production project.
 begin;
 create extension if not exists pgtap with schema extensions;
-select extensions.plan(79);
+select extensions.plan(81);
 
 -- Synthetic users. Transactional fixture data rolls back after pgTAP execution.
 insert into auth.users (id, instance_id, aud, role, email, created_at, updated_at)
@@ -73,6 +73,14 @@ select extensions.ok(
 select extensions.ok(
   not pg_catalog.has_column_privilege('authenticated','public.profiles','updated_at','UPDATE'),
   'Authenticated client cannot forge profile audit timestamp');
+select extensions.is(
+  (select count(*)::int from public.profiles
+    where id='b2000000-0000-4000-8000-000000000002'),0,
+  'Authenticated user cannot read another account profile');
+select extensions.throws_ok(
+  $profile$update public.profiles set id='b2000000-0000-4000-8000-000000000002'
+    where id='a1000000-0000-4000-8000-000000000001'$profile$,
+  '42501',null,'Profile owner identity cannot be rewritten by browser client');
 select extensions.throws_ok(
   $profile$update public.profiles set created_at='2000-01-01'::timestamptz
     where id='a1000000-0000-4000-8000-000000000001'$profile$,
