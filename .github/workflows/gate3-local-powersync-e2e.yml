@@ -1,0 +1,84 @@
+name: Gate 3 Local PowerSync E2E (No Hosted Staging)
+
+# Genuine LOCAL Postgres -> PowerSync -> SQLite -> Edge upload proof.
+# All services use disposable GitHub runner Docker; NO hosted credentials,
+# staging environment, worker deployment, Supabase link or paid account.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/gate3-local-powersync-e2e.yml'
+      - 'infrastructure/powersync/**'
+      - 'infrastructure/supabase/**'
+      - 'scripts/gate3-seed-local-auth.mjs'
+      - 'scripts/validate-connected-e2e-results.mjs'
+      - 'apps/reference-app/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  local-full-sync:
+    name: Disposable real PowerSync and nine connected browser journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      E2E_BASE_URL: http://127.0.0.1:4173
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Create ephemeral asymmetric JWT signing key (never commit)
+        run: |
+          cd infrastructure
+          ../node_modules/.bin/supabase gen signing-key --algorithm ES256 --append
+      - name: Start isolated LOCAL UAF Supabase and apply migrations
+        run: |
+          cd infrastructure
+          ../node_modules/.bin/supabase start --exclude studio,imgproxy,mailpit,realtime,storage-api,logflare,vector,supavisor
+          ../node_modules/.bin/supabase db reset --local --no-seed
+          docker network inspect supabase_network_uaf-household-vault-local >/dev/null
+      - name: Validate and start localhost-only PowerSync with isolated Mongo
+        run: |
+          docker compose -f infrastructure/powersync/local/compose.yaml config --quiet
+          docker compose -f infrastructure/powersync/local/compose.yaml up -d --wait --wait-timeout 180
+          curl --fail --silent --show-error http://127.0.0.1:54399/probes/liveness >/dev/null
+          echo "PASS: local PowerSync live at loopback only."
+      - name: Create two unique LOCAL synthetic Auth accounts
+        run: node scripts/gate3-seed-local-auth.mjs
+      - name: Build Household Vault with local endpoints only
+        run: pnpm build
+      - name: Install test browser
+        run: pnpm --filter @uaf/reference-app exec playwright install --with-deps chromium
+      - name: Verify no-skip/no-retry E2E evidence rules
+        run: node scripts/validate-connected-e2e-results.mjs --self-test
+      - name: Start only local Vite preview
+        run: |
+          pnpm --filter @uaf/reference-app exec vite preview --host 127.0.0.1 --port 4173 > /tmp/uaf-local-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4173/; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::Local-only Vite preview could not start."
+          exit 1
+      - name: Run nine full LOCAL Supabase + PowerSync browser journeys
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: /tmp/uaf-local-powersync-report.json
+        run: pnpm --filter @uaf/reference-app test:e2e --reporter=dot,json
+      - name: Reject skipped, flaky and missing local sync scenarios
+        if: always()
+        env:
+          UAF_E2E_JSON_REPORT: /tmp/uaf-local-powersync-report.json
+        run: node scripts/validate-connected-e2e-results.mjs
+      - name: Destroy local-only Mongo, PowerSync and Supabase
+        if: always()
+        run: |
+          docker compose -f infrastructure/powersync/local/compose.yaml down --volumes --remove-orphans || true
+          cd infrastructure
+          ../node_modules/.bin/supabase stop --no-backup || true
