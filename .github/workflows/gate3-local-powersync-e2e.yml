@@ -59,6 +59,12 @@ jobs:
           ../node_modules/.bin/supabase start --exclude studio,imgproxy,mailpit,realtime,storage-api,logflare,vector,supavisor
           ../node_modules/.bin/supabase db reset --local --no-seed
           docker network inspect supabase_network_uaf-household-vault-local >/dev/null
+      - name: Configure six-table replication publication in disposable LOCAL database
+        run: |
+          docker exec -i supabase_db_uaf-household-vault-local \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < scripts/gate3-local-powersync-publication.sql
+          echo "PASS: only the six synthetic UAF domain tables are published for local sync."
       - name: Confirm local Supabase publishes ES256 JWKS (never print key material)
         run: |
           node --input-type=module -e 'const u="http://127.0.0.1:54321/auth/v1/.well-known/jwks.json";const r=await fetch(u,{signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error("Local JWKS HTTP "+r.status);const j=await r.json();if(!Array.isArray(j.keys)||!j.keys.some(k=>k.alg==="ES256"&&k.kty==="EC"&&!k.d))throw new Error("Local ES256 public key unavailable");console.log("PASS: JWKS advertises local-only ES256 public key.");'
