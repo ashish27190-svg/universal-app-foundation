@@ -85,6 +85,8 @@ jobs:
           done
           echo "::error::Local-only Vite preview could not start."
           exit 1
+      - name: Prove initial local PowerSync authenticated handshake with privacy-safe diagnostics
+        run: pnpm --filter @uaf/reference-app exec playwright test --config playwright.local-sync.config.ts --reporter=line --workers=1 --retries=0
       - name: Run nine full LOCAL Supabase + PowerSync browser journeys
         id: e2e
         env:
