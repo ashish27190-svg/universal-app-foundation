@@ -85,8 +85,17 @@ jobs:
           done
           echo "::error::Local-only Vite preview could not start."
           exit 1
+      - name: Inspect local PowerSync readiness code (no credentialed call)
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:54399/probes/readiness || true)
+          echo "LOCAL_POWERSYNC_READINESS_HTTP_STATUS=$status"
       - name: Prove initial local PowerSync authenticated handshake with privacy-safe diagnostics
+        id: handshake
         run: pnpm --filter @uaf/reference-app exec playwright test --config playwright.local-sync.config.ts --reporter=line --workers=1 --retries=0
+      - name: Classify LOCAL PowerSync service errors without exposing credentials
+        if: ${{ failure() && steps.handshake.outcome == 'failure' }}
+        run: |
+          docker compose -f infrastructure/powersync/local/compose.yaml logs --no-color --tail=500 powersync 2>&1 | node scripts/classify-local-powersync-logs.mjs
       - name: Run nine full LOCAL Supabase + PowerSync browser journeys
         id: e2e
         env:
