@@ -39,6 +39,7 @@ export function DiagnosticsPanel() {
             <div><dt>App</dt><dd>{data.appId} · {data.appVersion}</dd></div>
             <div><dt>Environment</dt><dd>{data.environment}</dd></div>
             <div><dt>Sync state</dt><dd>{data.syncState}</dd></div>
+            <div><dt>Sync error category</dt><dd>{data.syncErrorCategory}</dd></div>
             <div><dt>Pending writes</dt><dd>{data.pendingMutations}</dd></div>
             <div><dt>Unresolved conflicts</dt><dd>{data.unresolvedConflicts}</dd></div>
             <div><dt>Connected</dt><dd>{String(data.connected)}</dd></div>
