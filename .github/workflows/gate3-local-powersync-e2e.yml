@@ -38,16 +38,27 @@ jobs:
         run: |
           node scripts/validate-local-powersync-gate.mjs
           node scripts/validate-local-powersync-gate.mjs --self-test
-      - name: Create ephemeral asymmetric JWT signing key (never commit)
+      - name: Create and ACTIVATE ephemeral ES256 local signing key without logging private material
         run: |
           cd infrastructure
-          ../node_modules/.bin/supabase gen signing-key --algorithm ES256 --append
+          if grep -q '^\\[auth\\]' supabase/config.toml; then
+            echo "::error::Local signing config unexpectedly changed; refuse unsafe override."
+            exit 1
+          fi
+          printf '\\n[auth]\\nsigning_keys_path = "./signing_key.json"\\n' >> supabase/config.toml
+          umask 077
+          printf '[]\\n' > supabase/signing_key.json
+          ../node_modules/.bin/supabase gen signing-key --algorithm ES256 --append 1>/dev/null
+          node -e 'const fs=require("node:fs");const keys=JSON.parse(fs.readFileSync("supabase/signing_key.json","utf8"));if(!Array.isArray(keys)||keys.length!==1||keys[0].alg!=="ES256"||!keys[0].d)process.exit(1);console.log("PASS: private ES256 signing key active in local config (contents hidden).")'
       - name: Start isolated LOCAL UAF Supabase and apply migrations
         run: |
           cd infrastructure
           ../node_modules/.bin/supabase start --exclude studio,imgproxy,mailpit,realtime,storage-api,logflare,vector,supavisor
           ../node_modules/.bin/supabase db reset --local --no-seed
           docker network inspect supabase_network_uaf-household-vault-local >/dev/null
+      - name: Confirm local Supabase publishes ES256 JWKS (never print key material)
+        run: |
+          node --input-type=module -e 'const u="http://127.0.0.1:54321/auth/v1/.well-known/jwks.json";const r=await fetch(u,{signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error("Local JWKS HTTP "+r.status);const j=await r.json();if(!Array.isArray(j.keys)||!j.keys.some(k=>k.alg==="ES256"&&k.kty==="EC"&&!k.d))throw new Error("Local ES256 public key unavailable");console.log("PASS: JWKS advertises local-only ES256 public key.");'
       - name: Validate and start localhost-only PowerSync with isolated Mongo
         run: |
           docker compose -f infrastructure/powersync/local/compose.yaml config --quiet
