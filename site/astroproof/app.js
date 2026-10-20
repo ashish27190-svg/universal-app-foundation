@@ -336,7 +336,7 @@ function renderOverview(){
   const cfg={today:[1,1,'today'],week:[7,1,'this week'],month:[30,1,'this month'],year:[365,1,'this year']}[nowRange]||[7,1,'this week'];
   const current=rankForecasts(transitForecast(cfg[0],cfg[1]));
   const year=cfg[0]===365?current:rankForecasts(transitForecast(365,1));
-  const main=current[0]||year[0]||null;
+  const main=current[0]||null;
   const upcoming=year.filter(x=>!main||x.mover!==main.mover||x.target!==main.target||x.aspect!==main.aspect).slice(0,3);
   const phase=chart.vedic.dasha.active;
   const history=historicalPhases().slice(-3);
@@ -525,13 +525,82 @@ function renderLifeEvents(){
   $('life-events').innerHTML=state.lifeEvents.slice().sort((a,b)=>b.event_date.localeCompare(a.event_date)).map(e=>`<div class="record" data-event-id="${esc(e.id)}"><b>${esc(e.event_type.replaceAll('_',' '))}</b><p class="muted">${esc(e.event_date)} · ${esc(e.date_precision)} · ${e.purpose==='validation_holdout'?'🔒 Hidden from prediction engine':'⚙ Used for birth-time calibration'}</p>${e.note?`<p>${esc(e.note)}</p>`:''}<button class="ghost delete-life-event">Delete</button></div>`).join('')||'<p class="muted">No life events recorded.</p>';
 }
 function renderLedger(){let reviewed=0;for(const r of state.records)if(r.events?.length)reviewed++;$('ledger-summary').textContent=`${state.records.length} statements · ${reviewed} reviewed`;$('records').innerHTML=state.records.slice().reverse().map(r=>`<div class="record" data-id="${r.id}"><b>${esc(r.statement)}</b><p class="muted">Criteria: ${esc(r.criteria)} · Deadline ${esc(r.deadline)}</p>${(r.events||[]).map(e=>`<div class="hint">${esc(e.at.slice(0,10))} · ${esc(e.result)} · ${esc(e.note)}</div>`).join('')}<div class="actions"><select class="outcome"><option value="unclear">Unclear</option><option value="yes">Yes</option><option value="no">No</option></select><button class="ghost review">Append review</button></div></div>`).join('')||'<p class="muted">No statements yet.</p>'}
+
+function astroChatPacket(){
+  if(!chart)return null;
+  const compactHit=h=>({
+    life_area:h.topic||'overview',
+    traditional_signal:h.mover+' '+h.aspect+' natal '+h.target,
+    start_date:h.window_start||h.date,
+    end_date:h.window_end||h.date,
+    peak_date:h.date,
+    orb_degrees:Number(h.orb.toFixed(4)),
+    rank_score:Number(h.score.toFixed(2)),
+    dasha_support:h.dasha_support,
+    forecast_type:'traditional astrology timing interpretation; no established outcome probability'
+  });
+  const recent=rankForecasts(transitForecast(30,1)).slice(0,3).map(compactHit);
+  const upcoming=rankForecasts(transitForecast(365,1)).slice(0,8).map(compactHit);
+  const past=historicalPhases().slice(-6).map(p=>({
+    start:p.start,end:p.end,mahadasha:p.mahadasha,antardasha:p.antardasha,
+    derived_from_birth_chart_only:true
+  }));
+  const payload={
+    packet_version:'astroproof-chat-bridge-v0.1',
+    created_at:new Date().toISOString(),
+    declared_birth_time_quality:state.profile?.time_precision||'unspecified',
+    computation:{engine:chart.meta.engine,ayanamsa_degrees:chart.meta.ayanamsa_deg,
+      birth_instant_utc:chart.meta.utc,
+      caveat:'Hosted browser research engine, not independently certified against precision ephemeris',
+      conventions:['Vedic approximate Lahiri sidereal','mean lunar node','whole-sign house baseline']},
+    western:{planets:chart.western.planets,ascendant:chart.western.ascendant},
+    vedic:{planets:chart.vedic.planets,ascendant:chart.vedic.ascendant,
+      moon_nakshatra:chart.vedic.moon_nakshatra,moon_pada:chart.vedic.moon_pada,
+      current_dasha:chart.vedic.dasha.active,
+      D9:chart.vedic.divisional?.D9,D10:chart.vedic.divisional?.D10,
+      yoga_candidates:chart.vedic.yogas,gochar:chart.vedic.gochar},
+    numerology:chart.numerology,
+    bazi:{year:chart.chinese.year,day:chart.chinese.day,hour:chart.chinese.hour,
+      method:chart.chinese.method},
+    calculated_recent_past_periods:past,
+    current_30_day_transit_signals:recent,
+    next_12_month_transit_signals:upcoming,
+    excluded_on_purpose:['nickname','birth name','birthplace display name','coordinates','lifeEvents','Reality Check ledger']
+  };
+  const instructions=[
+    'AstroProof Chat Mode — interpret the following calculation packet for me.',
+    'Present a plain-language reading in this order: 1) My recent past (traditionally interpreted timing phases), 2) What is active now, 3) Up to three upcoming windows, 4) Practical actions, 5) Optional traditional practice only if source-backed.',
+    'For each window explain what might manifest and what would count as a miss. Never fabricate a personal event or imply a guaranteed outcome.',
+    'Do not claim these predictions are proven, quantified probabilities, or historically validated unless actual independent test results are provided.',
+    'Do not use my previous chats, memory, or biographical history to retrofit the past. The accompanying past periods were calculated from the chart only; they do not establish actual past events.',
+    'Treat the supplied positions as provisional because the browser calculator is not independently certified. Do not invent missing charts, Prashna, KP, Nadi manuscripts, Jaimini, or research-source citations.',
+    'Do not repeat raw planet tables unless I request technical explanations. Ask at most one meaningful follow-up if something essential is missing.',
+    'DATA PACKET (this includes a birth-related UTC instant; use only for my requested reading):',
+    JSON.stringify(payload)
+  ];
+  return instructions.join('\n\n');
+}
+async function copyAstroChatPacket(){
+  if(!chart)return toast('Enter your birth details and calculate a reading first.');
+  if(!confirm('Copy your birth-chart and timing information to the clipboard? This includes birth-related time data but excludes your name, birthplace coordinates and recorded life events. Nothing is sent until you paste it.'))return;
+  const packet=astroChatPacket();
+  try{
+    if(!navigator.clipboard?.writeText)throw new Error('Clipboard unavailable');
+    await navigator.clipboard.writeText(packet);
+    toast('Reading packet copied. Open ChatGPT and paste it into this conversation.');
+  }catch{
+    exportFile('astroproof-chat-packet.txt',packet,'text/plain');
+    toast('Clipboard unavailable. A text file was downloaded; attach it in ChatGPT.');
+  }
+}
+
 function exportFile(name,data,type='application/json'){const b=new Blob([data],{type}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
 function populate(){const p=$('preset');p.innerHTML='<option value="">Custom coordinates / timezone</option>'+Object.keys(PLACES).map(x=>`<option>${x}</option>`).join('');for(const [k,[,n]] of Object.entries(TOPICS))$('topic').insertAdjacentHTML('beforeend',`<option value="${k}">${n}</option>`);$('life-grid').innerHTML=Object.entries(TOPICS).map(([k,[s,n]])=>`<div class="life" data-topic="${k}"><div class="symbol">${s}</div><b>${n}</b><span>Open report →</span></div>`).join('')}
 function fillProfile(){const p=state.profile;if(!p)return;$('nickname').value=p.nickname||'';$('birth-name').value=p.birth_name||'';$('birthdate').value=p.birthdate;$('birthtime').value=p.birthtime||'';$('timeunknown').checked=!!p.timeunknown;$('birthtime').disabled=!!p.timeunknown;$('preset').value=p.preset||'';$('custom-fields').hidden=!!p.preset;$('latitude').value=p.latitude;$('longitude').value=p.longitude;$('timezone').value=p.timezone;$('bazi-gender').value=p.bazi_gender||'';$('time-precision').value=p.time_precision||(p.timeunknown?'unknown':'recorded');$('consent').checked=true;renderTimeSensitivity()}
 function formProfile(){const preset=$('preset').value;let lat=Number($('latitude').value),lon=Number($('longitude').value),tz=$('timezone').value.trim(),place='Custom place';if(preset){[lat,lon,tz]=PLACES[preset];place=preset}return {nickname:$('nickname').value.trim(),birth_name:$('birth-name').value.trim(),birthdate:$('birthdate').value,birthtime:$('birthtime').value,timeunknown:$('timeunknown').checked,time_precision:$('timeunknown').checked?'unknown':$('time-precision').value,preset,place,latitude:lat,longitude:lon,timezone:tz,bazi_gender:$('bazi-gender').value}}
 function listeners(){document.addEventListener('click',e=>{const r=e.target.closest('[data-page]');if(r)return page(r.dataset.page);const sc=e.target.closest('[data-scroll-target]');if(sc){document.getElementById(sc.dataset.scrollTarget)?.scrollIntoView({behavior:'smooth',block:'start'});return}const nr=e.target.closest('[data-now-range]');if(nr){nowRange=nr.dataset.nowRange;renderOverview();return}const to=e.target.closest('[data-timeline-offset]');if(to){const d=new Date();d.setDate(d.getDate()+Number(to.dataset.timelineOffset));$('timeline-date').value=d.toISOString().slice(0,10);renderTimeline();return}const t=e.target.closest('[data-topic]');if(t){$('topic').value=t.dataset.topic;page('reports');return}const q=e.target.closest('[data-question]');if(q){$('question').value=q.dataset.question;page('council')}});$('preset').onchange=()=>{$('custom-fields').hidden=!!$('preset').value};$('timeunknown').onchange=()=>{const u=$('timeunknown').checked;$('birthtime').disabled=u;if(u)$('time-precision').value='unknown';else if($('time-precision').value==='unknown')$('time-precision').value='recorded'};$('birth-form').onsubmit=e=>{e.preventDefault();if(!$('consent').checked)return toast('Consent is required.');const p=formProfile();if(!p.birthdate)return toast('Birth date is required.');if(!p.timeunknown&&!p.birthtime)return toast('Enter birth time or mark it unknown.');if(!Number.isFinite(p.latitude)||!Number.isFinite(p.longitude)||!p.timezone)return toast('Birthplace coordinates and timezone are required.');try{chart=calculateChart(p);state.profile=p;save();renderOverview();renderCharts();renderTimeSensitivity();renderReport();renderTimeline();renderCouncil();renderLifeEvents();page('overview');toast('Personal atlas calculated in your browser.')}catch(err){toast('Calculation error: '+err.message)}};['topic','depth','horizon'].forEach(id=>$(id).onchange=()=>{renderReport();renderCouncil()});$('timeline-date').onchange=renderTimeline;$('life-event-form').onsubmit=e=>{e.preventDefault();const event_type=$('life-event-type').value,event_date=$('life-event-date').value,date_precision=$('life-event-precision').value,purpose=$('life-event-purpose').value,note=$('life-event-note').value.trim();if(!event_date)return toast('Event date is required.');state.lifeEvents.push({id:'le-'+Date.now(),event_type,event_date,date_precision,purpose,note:note.slice(0,300),created_at:new Date().toISOString()});save();e.target.reset();renderLifeEvents();toast(purpose==='validation_holdout'?'Saved as validation holdout. Prediction code will not use it.':'Saved for rectification/calibration; it will not count as independent validation.');};
 $('life-events').onclick=e=>{const b=e.target.closest('.delete-life-event');if(!b)return;const card=b.closest('[data-event-id]');state.lifeEvents=state.lifeEvents.filter(x=>x.id!==card.dataset.eventId);save();renderLifeEvents();};
-$('ask').onclick=()=>{if(!chart)return toast('Create a profile first.');const q=$('question').value.trim();if(q.length<3)return toast('Type or choose a question.');$('answer-area').innerHTML=`<div class="notice"><b>Chart-based response</b><p>${esc(answer(q))}</p><span class="hint">Deterministic browser review; live AI astrologer agents are not connected yet.</span></div>`};$('export-chart').onclick=()=>chart?exportFile('astroproof-chart.json',JSON.stringify(chart,null,2)):toast('Create a chart first.');$('export-report').onclick=()=>report?exportFile('astroproof-report.txt',document.querySelector('#report-area').innerText,'text/plain'):toast('Generate a report first.');$('record-form').onsubmit=e=>{e.preventDefault();const s=$('statement').value.trim(),c=$('criteria').value.trim(),d=$('deadline').value;if(!s||!c||!d)return;state.records.push({id:String(Date.now()),statement:s,criteria:c,deadline:d,createdAt:new Date().toISOString(),events:[]});save();e.target.reset();renderLedger();toast('Statement frozen locally.')};$('records').onclick=e=>{const b=e.target.closest('.review');if(!b)return;const card=b.closest('[data-id]'),r=state.records.find(x=>x.id===card.dataset.id),res=card.querySelector('.outcome').value,note=prompt('What happened?');if(note===null)return;r.events.push({result:res,note:note.slice(0,500),at:new Date().toISOString()});save();renderLedger()};$('export-data').onclick=()=>exportFile('astroproof-backup.json',JSON.stringify(state,null,2));$('import-data').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(!j||!Array.isArray(j.records))throw Error('Invalid backup');state=j;if(!Array.isArray(state.lifeEvents))state.lifeEvents=[];save();fillProfile();chart=state.profile?calculateChart(state.profile):null;renderOverview();renderCharts();renderTimeSensitivity();renderReport();renderTimeline();renderLifeEvents();renderCouncil();renderLedger();toast('Backup imported.')}catch(err){toast('Import failed: '+err.message)}e.target.value=''};$('delete-data').onclick=()=>{if(prompt('Type DELETE to remove AstroProof data from this browser:')!=='DELETE')return;localStorage.removeItem(KEY);state={profile:null,records:[],lifeEvents:[]};chart=null;location.reload()}}
+$('ask').onclick=()=>{if(!chart)return toast('Create a profile first.');const q=$('question').value.trim();if(q.length<3)return toast('Type or choose a question.');$('answer-area').innerHTML=`<div class="notice"><b>Chart-based response</b><p>${esc(answer(q))}</p><span class="hint">Deterministic browser review; live AI astrologer agents are not connected yet.</span></div>`};$('copy-chat-reading').onclick=copyAstroChatPacket;$('copy-chat-reading-secondary').onclick=copyAstroChatPacket;$('export-chart').onclick=()=>chart?exportFile('astroproof-chart.json',JSON.stringify(chart,null,2)):toast('Create a chart first.');$('export-report').onclick=()=>report?exportFile('astroproof-report.txt',document.querySelector('#report-area').innerText,'text/plain'):toast('Generate a report first.');$('record-form').onsubmit=e=>{e.preventDefault();const s=$('statement').value.trim(),c=$('criteria').value.trim(),d=$('deadline').value;if(!s||!c||!d)return;state.records.push({id:String(Date.now()),statement:s,criteria:c,deadline:d,createdAt:new Date().toISOString(),events:[]});save();e.target.reset();renderLedger();toast('Statement frozen locally.')};$('records').onclick=e=>{const b=e.target.closest('.review');if(!b)return;const card=b.closest('[data-id]'),r=state.records.find(x=>x.id===card.dataset.id),res=card.querySelector('.outcome').value,note=prompt('What happened?');if(note===null)return;r.events.push({result:res,note:note.slice(0,500),at:new Date().toISOString()});save();renderLedger()};$('export-data').onclick=()=>exportFile('astroproof-backup.json',JSON.stringify(state,null,2));$('import-data').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(!j||!Array.isArray(j.records))throw Error('Invalid backup');state=j;if(!Array.isArray(state.lifeEvents))state.lifeEvents=[];save();fillProfile();chart=state.profile?calculateChart(state.profile):null;renderOverview();renderCharts();renderTimeSensitivity();renderReport();renderTimeline();renderLifeEvents();renderCouncil();renderLedger();toast('Backup imported.')}catch(err){toast('Import failed: '+err.message)}e.target.value=''};$('delete-data').onclick=()=>{if(prompt('Type DELETE to remove AstroProof data from this browser:')!=='DELETE')return;localStorage.removeItem(KEY);state={profile:null,records:[],lifeEvents:[]};chart=null;location.reload()}}
 function init(){populate();listeners();load();fillProfile();renderLifeEvents();renderLedger();$('deadline').min=new Date(Date.now()+86400000).toISOString().slice(0,10);if(state.profile){try{chart=calculateChart(state.profile);renderOverview();renderCharts();renderTimeSensitivity();renderReport();renderTimeline();renderLifeEvents();renderCouncil()}catch(err){toast('Saved profile needs review: '+err.message)}}}
 init();
 })();
