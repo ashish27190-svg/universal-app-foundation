@@ -21,7 +21,8 @@ export function deletedAssetCard(page: Page, name: string) {
 }
 
 export async function createAsset(page: Page, name: string) {
-  await page.getByRole('button', { name: 'Add asset' }).click();
+  // The empty state and page toolbar both show this action; choose toolbar deterministically.
+  await page.locator('.vault-section-heading').getByRole('button', { name: 'Add asset' }).click();
   await page.getByLabel('Asset name').fill(name);
   await page.getByLabel('Category').selectOption('electronics');
   await page.getByRole('button', { name: 'Save asset' }).click();
