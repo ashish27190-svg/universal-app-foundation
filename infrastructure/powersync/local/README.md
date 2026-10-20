@@ -36,7 +36,15 @@ docker info
 node scripts/validate-local-powersync-gate.mjs --self-test
 
 cd infrastructure
-../node_modules/.bin/supabase gen signing-key --algorithm ES256 --append
+# For this clean local test only, and only if no [auth] section exists:
+cat >> supabase/config.toml <<'UAF_AUTH'
+[auth]
+signing_keys_path = "./signing_key.json"
+UAF_AUTH
+umask 077
+echo '[]' > supabase/signing_key.json
+# NEVER print the generated private JWK to the console or a log.
+../node_modules/.bin/supabase gen signing-key --algorithm ES256 --append >/dev/null
 ../node_modules/.bin/supabase start --exclude studio,imgproxy,mailpit,realtime,storage-api,logflare,vector,supavisor
 ../node_modules/.bin/supabase db reset --local --no-seed
 cd ..
@@ -72,7 +80,10 @@ The Compose `--volumes` and Supabase `--no-backup` options **destroy
 local synthetic data**, not any hosted project. Do not use either command
 on a different Compose project or Supabase directory. The generated
 `infrastructure/supabase/signing_key.json` is gitignored and must never
-be committed. If in doubt about container selection, inspect with
+be committed. The local `supabase/config.toml` is tracked: do not commit
+the test-only `[auth] signing_keys_path` addition. This example is only for
+a clean local configuration without an existing `[auth]` block; if one
+already exists, review it rather than appending duplicate TOML tables. If in doubt about container selection, inspect with
 `docker compose ... ps` and `supabase status` before cleanup.
 
 ## Boundaries and known failure conditions
