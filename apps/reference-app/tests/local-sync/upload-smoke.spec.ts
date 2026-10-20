@@ -30,6 +30,8 @@ test('a synthetic local asset uploads and returns to Synced', async ({ page }) =
 
   await createAsset(page, 'Synthetic local upload smoke');
   try {
+    await expect.poll(() => gatewayCodes.some(code => code === 200), { timeout: 30_000 })
+      .toBe(true);
     await expect(page.getByText('Synced', { exact: true })).toBeVisible({ timeout: 30_000 });
   } catch {
     await page.locator('details.vault-diagnostics > summary').click();
@@ -40,5 +42,4 @@ test('a synthetic local asset uploads and returns to Synced', async ({ page }) =
     throw new Error('LOCAL_MUTATION_UPLOAD_FAILED: local HTTP gateway codes=' +
       JSON.stringify(gatewayCodes.slice(-12)) + '; diagnostics=' + diagnostics.slice(0, 650));
   }
-  expect(gatewayCodes.some(code => code === 200)).toBe(true);
 });
