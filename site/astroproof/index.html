@@ -20,11 +20,18 @@
       <span class="eyebrow">YOUR PERSONAL READING</span>
       <h1>What’s happening.<br><i>What may come next.</i></h1>
       <p>You do not need to understand astrology. Read the four sections below in order. Open “How was this calculated?” only if you want the technical reasoning.</p>
-      <div class="actions"><button class="primary" data-page="profile">Enter / update birth details →</button><button class="ghost" data-page="council">Ask a question</button></div>
+      <div class="actions"><button class="primary" data-page="profile">Enter / update birth details →</button><button class="ghost" id="copy-chat-reading">Copy reading for ChatGPT</button><button class="ghost" data-page="council">Ask inside this website</button></div>
     </div>
     <div class="orb" aria-hidden="true"></div>
   </div>
-  <div class="notice" id="overview-note">Start by entering your birth details. AstroProof will turn the calculations into a plain-language reading.</div>
+  <div class="plain-card" id="chat-handoff" style="margin:16px 0 12px">
+  <span class="eyebrow">EASIER OPTION · CHAT-FIRST</span>
+  <h3>Prefer to talk instead of navigating?</h3>
+  <p>After you enter your birth details, choose <b>Copy reading for ChatGPT</b>. Open your ChatGPT conversation and paste. You can then ask about the past, current period, upcoming windows or practical advice in ordinary language.</p>
+  <p class="hint"><b>Privacy:</b> the copied packet contains chart and timing data, including date-related information. It deliberately excludes your nickname, birth name, saved life events and Reality Check notes. Nothing is sent until you choose to paste it.</p>
+  <div class="actions"><button class="ghost" id="copy-chat-reading-secondary">Copy reading packet</button><a class="ghost" href="https://chatgpt.com/" target="_blank" rel="noopener noreferrer">Open ChatGPT ↗</a></div>
+</div>
+<div class="notice" id="overview-note">Start by entering your birth details. AstroProof will turn the calculations into a plain-language reading.</div>
   <div class="reading-guide" id="reading-guide">
     <button class="guide-step" data-scroll-target="reading-now"><span class="step-no">1</span><b>Read this first</b><span>What seems active now</span></button>
     <button class="guide-step" data-scroll-target="reading-next"><span class="step-no">2</span><b>Then this</b><span>What may come next</span></button>
