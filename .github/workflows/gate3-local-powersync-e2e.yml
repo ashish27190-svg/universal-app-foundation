@@ -95,6 +95,8 @@ jobs:
         run: |
           status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:54399/probes/readiness || true)
           echo "LOCAL_POWERSYNC_READINESS_HTTP_STATUS=$status"
+      - name: Verify localhost browser CORS preflight for both authenticated Edge gateways
+        run: node scripts/validate-local-edge-preflight.mjs
       - name: Prove local PowerSync handshake and authenticated upload before longer journeys
         id: handshake
         run: pnpm --filter @uaf/reference-app exec playwright test --config playwright.local-sync.config.ts --reporter=line --workers=1 --retries=0
