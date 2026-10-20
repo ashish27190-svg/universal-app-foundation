@@ -72,11 +72,12 @@ jobs:
           echo "::error::Local-only Vite preview could not start."
           exit 1
       - name: Run nine full LOCAL Supabase + PowerSync browser journeys
+        id: e2e
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: /tmp/uaf-local-powersync-report.json
         run: pnpm --filter @uaf/reference-app test:e2e --reporter=dot,json
       - name: Reject skipped, flaky and missing local sync scenarios
-        if: always()
+        if: ${{ always() && steps.e2e.outcome != 'skipped' }}
         env:
           UAF_E2E_JSON_REPORT: /tmp/uaf-local-powersync-report.json
         run: node scripts/validate-connected-e2e-results.mjs
