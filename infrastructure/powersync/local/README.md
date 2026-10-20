@@ -49,6 +49,10 @@ echo '[]' > supabase/signing_key.json
 ../node_modules/.bin/supabase db reset --local --no-seed
 cd ..
 
+# Only the disposable UAF Docker database. No remote DB or db push.
+docker exec -i supabase_db_uaf-household-vault-local \
+  psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+  < scripts/gate3-local-powersync-publication.sql
 docker network inspect supabase_network_uaf-household-vault-local
 docker compose -f infrastructure/powersync/local/compose.yaml up -d --wait
 curl -fsS http://127.0.0.1:54399/probes/liveness
@@ -90,6 +94,7 @@ already exists, review it rather than appending duplicate TOML tables. If in dou
 
 - **No Supabase link/login or remote flags.** Never use `--linked`,
   `supabase db push`, hosted connection URIs, or a real business account.
+- PowerSync requires a publication named `powersync`. The local-only SQL file enables replication for exactly six UAF reference tables; it is **not** a hosted migration and must never publish the entire database or `auth.users`.
 - Uses local Postgres's default disposable `postgres` password and
   private Supabase Docker network. It is *unsafe* on an internet-accessible
   machine without isolation.
