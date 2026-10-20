@@ -27,7 +27,7 @@ After staging Supabase and PowerSync are configured, set the staging Vite/E2E en
 node scripts/connected-build-gate.mjs --with-e2e
 ```
 
-The browser suite proves lifecycle, two-browser-context convergence and deliberate revision conflict behavior. It must not be treated as passing until it has run against a real staging backend.
+The browser suite proves lifecycle, two-browser-context convergence, deliberate revision conflicts, offline browser reload, and two distinct-account isolation. It must not be treated as passing until it has run against a real staging backend. The connected gate requires the dedicated staging project ref and both `E2E_EMAIL`/`E2E_PASSWORD` and `E2E_SECOND_EMAIL`/`E2E_SECOND_PASSWORD`; it fails rather than skipping these tests when credentials are absent.
 
 ## Required external services for the connected gate
 

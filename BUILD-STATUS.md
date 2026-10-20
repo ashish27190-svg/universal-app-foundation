@@ -1,5 +1,21 @@
 # UAF Build Status
 
+> **Historical build-by-build archive — not the current release dashboard**
+> (updated 12 October 2026). Early entries below describe offline authoring
+> constraints that no longer apply to GitHub Actions. A pnpm lockfile is now
+> committed; real Node 24 dependency-backed CI and disposable local Auth,
+> database and Chromium tests passed together at PR #5 `6c84011e`.
+> **Current draft head is newer and requires fresh exact-head
+> validation after source-level safety reconciliation with `main`.**
+> GitHub has reported the draft as mergeable, but no merge is authorized.
+> Do not interpret old
+> "NOT RUN" or green labels as current hosted proof. Dedicated UAF
+> staging/PowerSync/private Worker, nine connected browser journeys,
+> independent environment reviewers and production pilot are NOT verified.
+> Current decision: `docs/operations/PR5-INTEGRATION-REVIEW-PLAN.md`;
+> external approvals: `docs/operations/GATE3-AUTHORIZATION-DECISION.md`.
+
+
 ## BUILD 0.1 — Repository Foundation
 
 ### Completed locally

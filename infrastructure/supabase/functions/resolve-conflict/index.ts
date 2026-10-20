@@ -1,6 +1,6 @@
 import { withSupabase } from 'npm:@supabase/server@1.6.0';
-import { mutationHandlers } from '../_shared/handlers.ts';
-import type { MutationEnvelope, MutationOperation } from '../_shared/mutation-protocol.ts';
+import { prepareAtomicAssetFields } from '../_shared/household-assets-handler.ts';
+import type { MutationOperation } from '../_shared/mutation-protocol.ts';
 
 type ConflictResolutionChoice = 'keep_server' | 'reapply_client';
 
@@ -20,19 +20,26 @@ interface ConflictRow {
   resolution: string | null;
 }
 
-function parseRequest(input: unknown): { conflictId: string; choice: ConflictResolutionChoice } {
+function parseRequest(input: unknown): { conflictId: string; choice: ConflictResolutionChoice; reviewedRevision?: number } {
   if (!input || typeof input !== 'object') throw new Error('Invalid conflict resolution request.');
   const value = input as Record<string, unknown>;
   if (typeof value.conflictId !== 'string' || !value.conflictId) throw new Error('conflictId is required.');
   if (value.choice !== 'keep_server' && value.choice !== 'reapply_client') throw new Error('Invalid conflict resolution choice.');
-  return { conflictId: value.conflictId, choice: value.choice };
+  if (value.choice === 'reapply_client' && (!Number.isSafeInteger(value.reviewedRevision) || Number(value.reviewedRevision) < 1)) {
+    throw new Error('reapply_client requires the explicitly reviewed positive server revision.');
+  }
+  return {
+    conflictId: value.conflictId,
+    choice: value.choice,
+    ...(value.choice === 'reapply_client' ? { reviewedRevision: value.reviewedRevision as number } : {}),
+  };
 }
 
 export default {
   fetch: withSupabase({ auth: 'user' }, async (req, ctx) => {
     if (req.method !== 'POST') return Response.json({ message: 'Method not allowed' }, { status: 405 });
 
-    let request: { conflictId: string; choice: ConflictResolutionChoice };
+    let request: { conflictId: string; choice: ConflictResolutionChoice; reviewedRevision?: number };
     try {
       request = parseRequest(await req.json());
     } catch (error) {
@@ -51,30 +58,41 @@ export default {
     if (!visibleConflict) return Response.json({ message: 'Conflict not found.' }, { status: 404 });
 
     const conflict = visibleConflict as ConflictRow;
+
+    // A readable conflict is not necessarily writable by this member.
+    // RLS may permit viewers to read, but resolution mutates server-owned rows.
+    const { data: canWrite, error: writePermissionError } = await ctx.supabase
+      .rpc('can_write_workspace', { target_workspace_id: conflict.workspace_id });
+    if (writePermissionError) {
+      return Response.json({ message: 'Conflict write authorization failed.' }, { status: 503 });
+    }
+    if (canWrite !== true) {
+      return Response.json({ message: 'Workspace write access denied.' }, { status: 403 });
+    }
+
     if (conflict.resolved_at) {
       return Response.json({ status: 'already_resolved', resolution: conflict.resolution });
     }
 
     if (request.choice === 'keep_server') {
-      const { error } = await ctx.supabaseAdmin
-        .from('write_conflicts')
-        .update({ resolved_at: new Date().toISOString(), resolution: 'keep_server' })
-        .eq('id', conflict.id)
-        .is('resolved_at', null);
-      if (error) return Response.json({ message: 'Could not resolve conflict.' }, { status: 503 });
-
-      await ctx.supabaseAdmin.from('audit_events').insert({
-        workspace_id: conflict.workspace_id,
-        actor_user_id: userId,
-        actor_type: 'user',
-        action: 'write_conflict.keep_server',
-        entity_type: conflict.entity_type,
-        entity_id: conflict.entity_id,
-        before_data: { client: conflict.client_payload, server: conflict.server_payload },
-        after_data: conflict.server_payload,
-        source: 'conflict_resolver',
-        correlation_id: conflict.id,
-      });
+      // Single server-side transaction: row lock, writer check, conflict close, audit.
+      // A retry cannot silently close twice or emit a duplicate audit event.
+      const { data, error } = await ctx.supabaseAdmin
+        .rpc('keep_server_conflict_transaction', {
+          p_conflict_id: conflict.id,
+          p_actor_user_id: userId,
+        });
+      if (error) return Response.json({ message: 'Could not resolve conflict; retry later.' }, { status: 503 });
+      if (data?.status === 'denied') {
+        return Response.json({ message: 'Workspace write access denied.' }, { status: 403 });
+      }
+      if (data?.status === 'not_found') return Response.json({ message: 'Conflict not found.' }, { status: 404 });
+      if (data?.status === 'already_resolved') {
+        return Response.json({ status: 'already_resolved', resolution: data.resolution });
+      }
+      if (data?.status !== 'resolved' || data.resolution !== 'keep_server') {
+        return Response.json({ message: 'Unexpected conflict resolution result.' }, { status: 503 });
+      }
       return Response.json({ status: 'resolved', resolution: 'keep_server' });
     }
 
@@ -84,70 +102,54 @@ export default {
     if (conflict.server_revision === null || !Number.isSafeInteger(conflict.server_revision) || conflict.server_revision < 1) {
       return Response.json({ message: 'Conflict is missing a valid server revision.' }, { status: 409 });
     }
-
-    const handler = mutationHandlers[conflict.entity_type];
-    if (!handler) return Response.json({ message: 'No mutation handler exists for this conflict.' }, { status: 409 });
-
-    const replayMutation: MutationEnvelope = {
-      protocolVersion: 1,
-      mutationId: crypto.randomUUID(),
-      clientDatabaseId: 'conflict-resolver',
-      clientOperationId: 0,
-      workspaceId: conflict.workspace_id,
-      entityType: conflict.entity_type,
-      entityId: conflict.entity_id,
-      operation: conflict.operation,
-      expectedRevision: conflict.server_revision,
-      payload: conflict.client_payload ?? {},
-    };
-
-    try {
-      const result = await handler({
-        supabase: ctx.supabase,
-        supabaseAdmin: ctx.supabaseAdmin,
-        actorUserId: userId,
-        mutation: replayMutation,
-      });
-
-      if (result.status === 'conflict') {
-        await ctx.supabaseAdmin
-          .from('write_conflicts')
-          .update({
-            server_revision: result.serverRevision ?? conflict.server_revision,
-            server_payload: result.serverData ?? conflict.server_payload,
-          })
-          .eq('id', conflict.id)
-          .is('resolved_at', null);
-        return Response.json({ message: 'The server record changed again. Review the latest version before retrying.' }, { status: 409 });
-      }
-      if (result.status === 'rejected') {
-        return Response.json({ message: result.message ?? 'The client version can no longer be reapplied safely.' }, { status: 422 });
-      }
-
-      const { error: resolveError } = await ctx.supabaseAdmin
-        .from('write_conflicts')
-        .update({ resolved_at: new Date().toISOString(), resolution: 'reapply_client' })
-        .eq('id', conflict.id)
-        .is('resolved_at', null);
-      if (resolveError) return Response.json({ message: 'The change was reapplied but conflict closure failed; refresh before retrying.' }, { status: 503 });
-
-      await ctx.supabaseAdmin.from('audit_events').insert({
-        workspace_id: conflict.workspace_id,
-        actor_user_id: userId,
-        actor_type: 'user',
-        action: 'write_conflict.reapply_client',
-        entity_type: conflict.entity_type,
-        entity_id: conflict.entity_id,
-        before_data: result.beforeData ?? conflict.server_payload,
-        after_data: result.afterData ?? null,
-        source: 'conflict_resolver',
-        correlation_id: conflict.id,
-      });
-
-      return Response.json({ status: 'resolved', resolution: 'reapply_client' });
-    } catch (error) {
-      console.error('resolve-conflict handler failure', error);
-      return Response.json({ message: 'Conflict resolution failed; retry later.' }, { status: 503 });
+    if (!['household_assets', 'asset_service_records'].includes(conflict.entity_type)) {
+      return Response.json({ message: 'No safe reapply handler for this entity.' }, { status: 409 });
     }
+
+    // Only derive a sanitized field set from this server-owned conflict.
+    // The browser cannot send an arbitrary data patch to the privileged RPC.
+    let fields: Record<string, unknown> = {};
+    let validationError: string | null = null;
+    try {
+      fields = prepareAtomicAssetFields(
+        conflict.entity_type, conflict.operation, conflict.client_payload ?? {}, userId,
+      );
+    } catch (error) {
+      validationError = error instanceof Error ? error.message : 'Invalid conflict payload.';
+    }
+
+    const { data, error } = await ctx.supabaseAdmin.rpc('reapply_conflict_transaction', {
+      p_conflict_id: conflict.id,
+      p_actor_user_id: userId,
+      p_reviewed_server_revision: request.reviewedRevision,
+      p_fields: fields,
+      p_validation_error: validationError,
+    });
+
+    if (error) {
+      console.error('atomic conflict reapplication failed', { code: error.code, conflictId: conflict.id });
+      return Response.json({ message: 'Reapplication failed without a partial commit; retry later.' }, { status: 503 });
+    }
+    if (data?.status === 'denied') return Response.json({ message: 'Workspace write access denied.' }, { status: 403 });
+    if (data?.status === 'not_found') return Response.json({ message: 'Conflict not found.' }, { status: 404 });
+    if (data?.status === 'already_resolved') {
+      return Response.json({ status: 'already_resolved', resolution: data.resolution });
+    }
+    if (data?.status === 'stale' || data?.status === 'review_required') {
+      return Response.json({
+        message: 'The server record changed. Review its latest version before reapplying.',
+        serverRevision: data.serverRevision,
+      }, { status: 409 });
+    }
+    if (data?.status === 'unsupported') {
+      return Response.json({ message: 'This conflict cannot be safely reapplied.' }, { status: 409 });
+    }
+    if (data?.status === 'invalid') {
+      return Response.json({ message: data.message ?? 'The client version is no longer valid.' }, { status: 422 });
+    }
+    if (data?.status !== 'resolved' || data?.resolution !== 'reapply_client') {
+      return Response.json({ message: 'Unexpected conflict resolution result.' }, { status: 503 });
+    }
+    return Response.json({ status: 'resolved', resolution: 'reapply_client' });
   }),
 };

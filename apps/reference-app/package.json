@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest run --exclude \"tests/e2e/**\"",
+    "test": "vitest run --exclude \"tests/e2e/**\" --exclude \"tests/smoke/**\" --exclude \"tests/local-auth/**\"",
     "typecheck": "tsc -b --pretty false",
     "test:e2e": "playwright test"
   },

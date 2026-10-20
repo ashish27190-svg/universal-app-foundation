@@ -39,6 +39,22 @@ jobs:
           fi
           echo "PASS: both direct deployment scripts blocked without cloud access."
       - run: pnpm validate:structure
+      - name: Verify isolated staging guard against synthetic configurations
+        run: node scripts/validate-staging-readiness.mjs --self-test
+      - name: Verify staging Access checks fail closed (synthetic)
+        run: node scripts/verify-private-staging.mjs --self-test
+      - name: Verify connected browser evidence gate rejects skips/flakes (synthetic)
+        run: node scripts/validate-connected-e2e-results.mjs --self-test
+      - name: Verify exact staging migration-set approval (synthetic)
+        run: node scripts/validate-staging-migration-approval.mjs --self-test
+      - name: Verify staging commit fingerprint rejects unreviewed candidates (synthetic)
+        run: node scripts/validate-staging-candidate-approval.mjs --self-test
+      - name: Reject unprotected branch, fork and nonmanual hosted staging contexts (synthetic)
+        run: node scripts/validate-staging-github-context.mjs --self-test
+      - name: Reject automatic staging/connected E2E/production workflow triggers
+        run: |
+          node scripts/validate-manual-workflow-triggers.mjs --self-test
+          node scripts/validate-manual-workflow-triggers.mjs
       - run: pnpm validate:core-boundary
       - run: pnpm validate:config-boundary
       - run: pnpm validate:auth-boundary
@@ -56,3 +72,5 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - name: Discover nine connected browser journeys (no staging credentials)
+        run: pnpm --filter @uaf/reference-app exec playwright test --list
