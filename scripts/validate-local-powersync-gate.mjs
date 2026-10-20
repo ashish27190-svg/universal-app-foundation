@@ -3,7 +3,7 @@
 // binding. Real acceptance requires the isolated Docker+browser workflow.
 import {readFileSync} from 'node:fs';
 
-export function inspectLocalPowerSync(compose, service, streams, workflow, gitignore) {
+export function inspectLocalPowerSync(compose, service, streams, workflow, gitignore, publication) {
   const errors=[];
   function demand(ok,msg) {if(!ok) errors.push(msg);}
   demand(compose.includes('name: uaf-local-powersync'), 'Dedicated Compose project missing.');
@@ -43,6 +43,20 @@ export function inspectLocalPowerSync(compose, service, streams, workflow, gitig
     'Local full-sync CI needs no-skip proof and disposable cleanup.');
   demand(gitignore.includes('infrastructure/supabase/signing_key.json'),
     'Generated local JWT signing key must be ignored.');
+  demand(workflow.includes('supabase_db_uaf-household-vault-local') &&
+    workflow.includes('scripts/gate3-local-powersync-publication.sql') &&
+    !workflow.includes('supabase db push'),
+    'Bounded local publication must be applied to the exact disposable container.');
+  const allowedTables = [
+    'public.workspaces', 'public.workspace_memberships', 'public.household_assets',
+    'public.asset_service_records', 'public.write_conflicts', 'public.audit_events',
+  ];
+  demand(publication.includes('CREATE PUBLICATION powersync FOR TABLE') &&
+    allowedTables.every(t=>publication.includes(t)) &&
+    !/FOR ALL TABLES/i.test(publication) &&
+    !/auth\.users/i.test(publication.replace(/^--.*$/gm,'')),
+    'PowerSync local publication must include six domain tables, never auth data or ALL TABLES.');
+
   return errors;
 }
 
@@ -51,7 +65,8 @@ const files=[
   'infrastructure/powersync/local/service.yaml',
   'infrastructure/powersync/sync-config.yaml',
   '.github/workflows/gate3-local-powersync-e2e.yml',
-  '.gitignore'
+  '.gitignore',
+  'scripts/gate3-local-powersync-publication.sql'
 ];
 function localSources() {return files.map(path=>readFileSync(path,'utf8'));}
 function main() {
@@ -68,11 +83,12 @@ function main() {
       mutate(2,"membership.status = 'active'","membership.status = 'removed'"),
       mutate(3,'pull_request:','workflow_dispatch:'),
       mutate(4,'infrastructure/supabase/signing_key.json','# key not ignored'),
+      mutate(5,'CREATE PUBLICATION powersync FOR TABLE','CREATE PUBLICATION powersync FOR ALL TABLES'),
     ];
     tests.forEach((input,i)=>{
       if(!inspectLocalPowerSync(...input).length) throw new Error('Unsafe local config accepted: '+(i+1));
     });
-    console.log('PASS: 7 synthetic fail-closed local PowerSync safety checks.');
+    console.log('PASS: 8 synthetic fail-closed local PowerSync safety checks.');
   } else console.log('PASS: local PowerSync config and CI are source-only, synthetic, non-hosted.');
 }
 try {main();} catch(e){console.error('UAF_LOCAL_SYNC_GATE: '+e.message);process.exitCode=1;}
