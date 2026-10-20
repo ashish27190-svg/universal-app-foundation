@@ -41,13 +41,16 @@ jobs:
       - name: Create and ACTIVATE ephemeral ES256 local signing key without logging private material
         run: |
           cd infrastructure
-          if grep -q '^\\[auth\\]' supabase/config.toml; then
+          if grep -Fq '[auth]' supabase/config.toml; then
             echo "::error::Local signing config unexpectedly changed; refuse unsafe override."
             exit 1
           fi
-          printf '\\n[auth]\\nsigning_keys_path = "./signing_key.json"\\n' >> supabase/config.toml
+          cat >> supabase/config.toml <<'UAF_AUTH'
+          [auth]
+          signing_keys_path = "./signing_key.json"
+          UAF_AUTH
           umask 077
-          printf '[]\\n' > supabase/signing_key.json
+          echo '[]' > supabase/signing_key.json
           ../node_modules/.bin/supabase gen signing-key --algorithm ES256 --append 1>/dev/null
           node -e 'const fs=require("node:fs");const keys=JSON.parse(fs.readFileSync("supabase/signing_key.json","utf8"));if(!Array.isArray(keys)||keys.length!==1||keys[0].alg!=="ES256"||!keys[0].d)process.exit(1);console.log("PASS: private ES256 signing key active in local config (contents hidden).")'
       - name: Start isolated LOCAL UAF Supabase and apply migrations
