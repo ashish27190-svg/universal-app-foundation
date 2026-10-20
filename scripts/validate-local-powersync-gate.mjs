@@ -25,10 +25,12 @@ export function inspectLocalPowerSync(compose, service, streams, workflow, gitig
     'PowerSync must verify local Supabase asymmetric JWTs.');
   demand(service.includes('disable_telemetry_sharing: true'),
     'Local telemetry must be disabled.');
-  demand(streams.includes('edition: 3') &&
-    streams.includes('membership.user_id = auth.user_id()') &&
-    streams.includes("membership.status = 'active'"),
-    'Canonical Sync Streams must filter by authenticated active membership.');
+  const streamQueries = streams.split(/\r?\n/).map(line=>line.trim())
+    .filter(line=>line.startsWith('- SELECT'));
+  demand(streams.includes('edition: 3') && streamQueries.length === 6 &&
+    streamQueries.every(line=>line.includes('auth.user_id()') &&
+      line.includes("status = 'active'")),
+    'Every canonical Sync Streams query must filter by authenticated active membership.');
   demand(workflow.includes('pull_request:') &&
     !workflow.includes('environment: staging') &&
     !workflow.includes('secrets.') &&
