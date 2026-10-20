@@ -34,6 +34,10 @@ jobs:
           package-manager-cache: false
       - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
       - run: pnpm install --frozen-lockfile
+      - name: Reject public exposure, remote credentials or invalid local Sync Streams
+        run: |
+          node scripts/validate-local-powersync-gate.mjs
+          node scripts/validate-local-powersync-gate.mjs --self-test
       - name: Create ephemeral asymmetric JWT signing key (never commit)
         run: |
           cd infrastructure
