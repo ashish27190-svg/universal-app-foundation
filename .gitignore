@@ -11,3 +11,7 @@ coverage/
 # Local-only Supabase state (never commit temporary credentials/config)
 infrastructure/supabase/.temp/
 infrastructure/supabase/.branches/
+infrastructure/supabase/signing_key.json
+# Local full-sync tests: no private keys, generated reports or config secrets
+infrastructure/powersync/local/.env
+infrastructure/powersync/local/.env.*
