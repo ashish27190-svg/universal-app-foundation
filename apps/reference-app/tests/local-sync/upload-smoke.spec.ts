@@ -28,7 +28,7 @@ test('a synthetic local asset uploads and returns to Synced', async ({ page, req
   await expect(page.getByRole('heading', { name: 'Your assets' })).toBeVisible({ timeout: 40_000 });
   await expect(page.getByText('Synced', { exact: true })).toBeVisible({ timeout: 30_000 });
 
-  // A harmless authenticated zero-mutation POST isolates browser-to-Edge
+  // A harmless authenticated DENIED-mutation POST isolates browser-to-Edge
   // transport and JWT policy. Do NOT log, attach, or persist the token.
   // The same local synthetic account is used by the UI, but this probe
   // does not mutate data or bypass any authentication.
@@ -50,7 +50,23 @@ test('a synthetic local asset uploads and returns to Synced', async ({ page, req
           Authorization: 'Bearer ' + token,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ protocolVersion: 1, mutations: [] }),
+        // A valid envelope targeting a nonexistent UUID cannot write data.
+        // The server should return an authenticated "rejected" outcome.
+        body: JSON.stringify({
+          protocolVersion: 1,
+          mutations: [{
+            protocolVersion: 1,
+            mutationId: crypto.randomUUID(),
+            clientDatabaseId: 'disposable-browser-check',
+            clientOperationId: 1,
+            workspaceId: crypto.randomUUID(),
+            entityType: 'household_assets',
+            entityId: crypto.randomUUID(),
+            operation: 'create',
+            expectedRevision: null,
+            payload: { name: 'Synthetic inaccessible', category: 'electronics' },
+          }],
+        }),
       });
       return { status: response.status, transportFailure: false };
     } catch {
