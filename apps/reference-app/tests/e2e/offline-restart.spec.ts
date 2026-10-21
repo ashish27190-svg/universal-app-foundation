@@ -43,11 +43,12 @@ test('an offline asset survives browser reload and converges after reconnect', a
     let unblockVerification = () => {};
     const verificationAllowed = new Promise<void>((resolve) => { unblockVerification = resolve; });
     await pageA.route('**/rest/v1/rpc/ensure_personal_workspace', async (route) => {
+      if (route.request().method() !== 'POST') { await route.continue(); return; }
       await verificationAllowed;
       await route.continue();
     });
     const verificationRequest = pageA.waitForRequest(
-      '**/rest/v1/rpc/ensure_personal_workspace',
+      (request) => request.url().includes('/rest/v1/rpc/ensure_personal_workspace') && request.method() === 'POST',
       { timeout: 20_000 },
     );
     // Reconnect triggers a fresh workspace membership check, then reconnects
@@ -94,10 +95,11 @@ test('offline edits without a reload cannot resume upload before membership is r
     let allowCheck = () => {};
     const checkCanComplete = new Promise<void>((resolve) => { allowCheck = resolve; });
     await page.route('**/rest/v1/rpc/ensure_personal_workspace', async (route) => {
+      if (route.request().method() !== 'POST') { await route.continue(); return; }
       await checkCanComplete;
       await route.continue();
     });
-    const request = page.waitForRequest('**/rest/v1/rpc/ensure_personal_workspace', { timeout: 20_000 });
+    const request = page.waitForRequest(request => request.url().includes('/rest/v1/rpc/ensure_personal_workspace') && request.method() === 'POST', { timeout: 20_000 });
     await context.setOffline(false);
     try {
       await request;
