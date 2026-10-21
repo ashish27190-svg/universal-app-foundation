@@ -23,7 +23,8 @@ test('stale offline edit is surfaced instead of silently overwriting the server'
     await waitForSynced(pageB);
 
     await contextA.setOffline(false);
-    await expect(pageA.getByText('Needs attention', { exact: true })).toBeVisible({ timeout: 60_000 });
+    // The status badge and conflict heading can both contain this text.
+    // Assert the semantic heading and actionable controls without an ambiguous locator.
     await expect(pageA.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
     await expect(pageA.getByRole('button', { name: 'Keep server version' })).toBeVisible();
     await expect(pageA.getByRole('button', { name: 'Review reapplication' })).toBeVisible();
