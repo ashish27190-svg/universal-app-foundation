@@ -42,6 +42,30 @@ function database(complete: () => Promise<void>) {
   } as never;
 }
 
+describe('HttpMutationUploader default fetch receiver', () => {
+  it('invokes global fetch with its own receiver, not the uploader instance', async () => {
+    const complete = vi.fn(async () => undefined);
+    const stub = vi.spyOn(globalThis, 'fetch').mockImplementation(function (this: unknown) {
+      if (this !== globalThis) throw new TypeError('Illegal invocation');
+      return Promise.resolve(Response.json({
+        protocolVersion: 1,
+        outcomes: [{ mutationId, status: 'applied' }],
+      }));
+    });
+    try {
+      const uploader = new HttpMutationUploader({
+        endpoint: 'https://example.test/sync',
+        auth: auth(),
+      });
+      await uploader.upload(database(complete));
+      expect(stub).toHaveBeenCalledOnce();
+      expect(complete).toHaveBeenCalledOnce();
+    } finally {
+      stub.mockRestore();
+    }
+  });
+});
+
 describe('HttpMutationUploader failure semantics', () => {
   it('does not complete a CRUD batch when the gateway fails', async () => {
     const complete = vi.fn(async () => undefined);
