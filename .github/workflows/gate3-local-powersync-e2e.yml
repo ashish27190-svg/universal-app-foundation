@@ -108,7 +108,7 @@ jobs:
         id: e2e
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: /tmp/uaf-local-powersync-report.json
-        run: pnpm --filter @uaf/reference-app test:e2e --reporter=dot,json
+        run: pnpm --filter @uaf/reference-app test:e2e --reporter=dot,json --workers=1 --retries=0
       - name: Reject skipped, flaky and missing local sync scenarios
         if: ${{ always() && steps.e2e.outcome != 'skipped' }}
         env:
