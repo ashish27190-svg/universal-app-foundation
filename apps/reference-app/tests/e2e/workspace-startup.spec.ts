@@ -12,11 +12,12 @@ test('online bootstrap holds SQLite lease before verifying workspace or starting
   try {
     await page.goto('/');
     await page.route('**/rest/v1/rpc/ensure_personal_workspace', async (route) => {
+      if (route.request().method() !== 'POST') { await route.continue(); return; }
       await allowVerification;
       await route.continue();
     });
     const verifyRequest = page.waitForRequest(
-      '**/rest/v1/rpc/ensure_personal_workspace',
+      (request) => request.url().includes('/rest/v1/rpc/ensure_personal_workspace') && request.method() === 'POST',
       { timeout: 30_000 },
     );
     await page.getByLabel('Email').fill(e2eEmail!);
