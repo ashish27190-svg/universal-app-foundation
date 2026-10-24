@@ -61,7 +61,7 @@ test('an offline asset survives browser reload and converges after reconnect', a
       await expect(pageA.getByText('Opening your local vault')).toBeVisible();
     } finally {
       unblockVerification();
-      await pageA.unroute('**/rest/v1/rpc/ensure_personal_workspace');
+      await pageA.unrouteAll({ behavior: 'wait' });
     }
     await waitForSynced(pageA);
     await expect(pageA.getByRole('heading', { name: 'Your assets' })).toBeVisible();
@@ -108,7 +108,7 @@ test('offline edits without a reload cannot resume upload before membership is r
       await expect(page.getByText('Opening your local vault')).toBeVisible();
     } finally {
       allowCheck();
-      await page.unroute('**/rest/v1/rpc/ensure_personal_workspace');
+      await page.unrouteAll({ behavior: 'wait' });
     }
     await waitForSynced(page);
     await expect(activeAssetCard(page, assetName)).toBeVisible();
