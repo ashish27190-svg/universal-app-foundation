@@ -12,11 +12,12 @@ test('online bootstrap holds SQLite lease before verifying workspace or starting
   try {
     await page.goto('/');
     await page.route('**/rest/v1/rpc/ensure_personal_workspace', async (route) => {
+      if (route.request().method() !== 'POST') { await route.continue(); return; }
       await allowVerification;
       await route.continue();
     });
     const verifyRequest = page.waitForRequest(
-      '**/rest/v1/rpc/ensure_personal_workspace',
+      (request) => request.url().includes('/rest/v1/rpc/ensure_personal_workspace') && request.method() === 'POST',
       { timeout: 30_000 },
     );
     await page.getByLabel('Email').fill(e2eEmail!);
@@ -37,7 +38,10 @@ test('online bootstrap holds SQLite lease before verifying workspace or starting
     expect(hasLocalLease).toBe(true);
   } finally {
     unblockVerification();
-    await page.unroute('**/rest/v1/rpc/ensure_personal_workspace');
+    // The intercepted request may still be inside its async route callback.
+    // Wait for that callback to finish before removing the handler; otherwise
+    // Playwright can report "Route is already handled" during cleanup.
+    await page.unrouteAll({ behavior: 'wait' });
   }
   try {
     await expect(page.getByRole('heading', { name: 'Your assets' })).toBeVisible({ timeout: 60_000 });

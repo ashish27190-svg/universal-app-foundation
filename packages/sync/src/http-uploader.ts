@@ -19,7 +19,9 @@ export class HttpMutationUploader implements PowerSyncMutationUploader {
   private readonly batchSize: number;
 
   constructor(private readonly options: HttpMutationUploaderOptions) {
-    this.fetchImpl = options.fetchImpl ?? fetch;
+    // Never invoke an extracted WebIDL fetch with the uploader as `this`.
+    // Use the global method through its owning realm (including web workers).
+    this.fetchImpl = options.fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
     this.batchSize = options.batchSize ?? 50;
   }
 

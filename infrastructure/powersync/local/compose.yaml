@@ -1,0 +1,55 @@
+# Disposable LOCAL-ONLY companion to "cd infrastructure && supabase start".
+# Never use on a public host; the Supabase CLI stack is not hardened.
+# Inherits the EXISTING canonical ../sync-config.yaml; no duplicate streams.
+name: uaf-local-powersync
+services:
+  mongo:
+    image: mongo:7.0
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all", "--quiet"]
+    volumes:
+      - mongo-local:/data/db
+    networks: [internal]
+  mongo-rs-init:
+    image: mongo:7.0
+    depends_on:
+      - mongo
+    networks: [internal]
+    restart: on-failure
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - >-
+        mongosh --host mongo:27017 --quiet --eval
+        'try { if (rs.status().ok) quit(0); } catch (e) {}
+        rs.initiate({_id:"rs0",members:[{_id:0,host:"mongo:27017"}]});'
+  powersync:
+    image: journeyapps/powersync-service:1.27.0
+    command: ["start", "-r", "unified"]
+    depends_on:
+      mongo-rs-init:
+        condition: service_completed_successfully
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/service.yaml
+      NODE_OPTIONS: --max-old-space-size=1024
+      # Supabase's disposable local Postgres (NOT a linked project).
+      PS_DATA_SOURCE_URI: postgresql://postgres:postgres@supabase_db_uaf-household-vault-local:5432/postgres
+      PS_MONGO_URI: mongodb://mongo:27017/powersync_uaf?replicaSet=rs0
+      PS_PORT: "8080"
+    volumes:
+      - ./service.yaml:/config/service.yaml:ro
+      - ../sync-config.yaml:/config/sync-config.yaml:ro
+    ports:
+      - "127.0.0.1:54399:8080"
+    networks: [internal, supabase]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/probes/liveness').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+networks:
+  internal:
+    internal: true
+  supabase:
+    external: true
+    name: supabase_network_uaf-household-vault-local
+volumes:
+  mongo-local:

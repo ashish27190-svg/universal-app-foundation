@@ -23,7 +23,8 @@ test('stale offline edit is surfaced instead of silently overwriting the server'
     await waitForSynced(pageB);
 
     await contextA.setOffline(false);
-    await expect(pageA.getByText('Needs attention', { exact: true })).toBeVisible({ timeout: 60_000 });
+    // The status badge and conflict heading can both contain this text.
+    // Assert the semantic heading and actionable controls without an ambiguous locator.
     await expect(pageA.getByRole('heading', { name: 'Needs attention' })).toBeVisible();
     await expect(pageA.getByRole('button', { name: 'Keep server version' })).toBeVisible();
     await expect(pageA.getByRole('button', { name: 'Review reapplication' })).toBeVisible();
@@ -35,6 +36,24 @@ test('stale offline edit is surfaced instead of silently overwriting the server'
     await expect(review.getByText(`${original} online B`)).toBeVisible();
     await expect(review.getByRole('button', { name: 'Confirm reapply my version' })).toBeEnabled();
     await review.getByRole('button', { name: 'Cancel' }).click();
+
+    // A deliberately unresolved conflict keeps the shared synthetic test
+    // workspace in "Needs attention". Clear it after asserting the review UI
+    // so later E2E journeys can truthfully expect a clean Synced state.
+    const resolutionResponse = pageA.waitForResponse(
+      (response) => {
+        const url = new URL(response.url());
+        return url.pathname === '/functions/v1/resolve-conflict' && response.request().method() === 'POST';
+      },
+      { timeout: 30_000 },
+    );
+    await pageA.getByRole('button', { name: 'Keep server version' }).click();
+    // The section heading is always rendered, even with zero conflicts.
+    // Check both the authenticated HTTP result and the actual empty state.
+    expect((await resolutionResponse).status()).toBe(200);
+    await expect(pageA.getByText('No unresolved conflicts.')).toBeVisible({ timeout: 30_000 });
+    await waitForSynced(pageA);
+    await expect(activeAssetCard(pageA, `${original} online B`)).toBeVisible();
   } finally {
     await Promise.all([contextA.close(), contextB.close()]);
   }

@@ -1,0 +1,122 @@
+name: Gate 3 Local PowerSync E2E (No Hosted Staging)
+
+# Genuine LOCAL Postgres -> PowerSync -> SQLite -> Edge upload proof.
+# All services use disposable GitHub runner Docker; NO hosted credentials,
+# staging environment, worker deployment, Supabase link or paid account.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/gate3-local-powersync-e2e.yml'
+      - 'infrastructure/powersync/**'
+      - 'infrastructure/supabase/**'
+      - 'scripts/gate3-seed-local-auth.mjs'
+      - 'scripts/validate-connected-e2e-results.mjs'
+      - 'apps/reference-app/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  local-full-sync:
+    name: Disposable real PowerSync and nine connected browser journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+      E2E_BASE_URL: http://127.0.0.1:4173
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Reject public exposure, remote credentials or invalid local Sync Streams
+        run: |
+          node scripts/validate-local-powersync-gate.mjs
+          node scripts/validate-local-powersync-gate.mjs --self-test
+      - name: Create and ACTIVATE ephemeral ES256 local signing key without logging private material
+        run: |
+          cd infrastructure
+          if grep -Fq '[auth]' supabase/config.toml; then
+            echo "::error::Local signing config unexpectedly changed; refuse unsafe override."
+            exit 1
+          fi
+          cat >> supabase/config.toml <<'UAF_AUTH'
+          [auth]
+          signing_keys_path = "./signing_key.json"
+          UAF_AUTH
+          umask 077
+          echo '[]' > supabase/signing_key.json
+          ../node_modules/.bin/supabase gen signing-key --algorithm ES256 --append 1>/dev/null
+          node -e 'const fs=require("node:fs");const keys=JSON.parse(fs.readFileSync("supabase/signing_key.json","utf8"));if(!Array.isArray(keys)||keys.length!==1||keys[0].alg!=="ES256"||!keys[0].d)process.exit(1);console.log("PASS: private ES256 signing key active in local config (contents hidden).")'
+      - name: Start isolated LOCAL UAF Supabase and apply migrations
+        run: |
+          cd infrastructure
+          ../node_modules/.bin/supabase start --exclude studio,imgproxy,mailpit,realtime,storage-api,logflare,vector,supavisor
+          ../node_modules/.bin/supabase db reset --local --no-seed
+          docker network inspect supabase_network_uaf-household-vault-local >/dev/null
+      - name: Configure six-table replication publication in disposable LOCAL database
+        run: |
+          docker exec -i supabase_db_uaf-household-vault-local \
+            psql -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            < scripts/gate3-local-powersync-publication.sql
+          echo "PASS: only the six synthetic UAF domain tables are published for local sync."
+      - name: Confirm local Supabase publishes ES256 JWKS (never print key material)
+        run: |
+          node --input-type=module -e 'const u="http://127.0.0.1:54321/auth/v1/.well-known/jwks.json";const r=await fetch(u,{signal:AbortSignal.timeout(15000)});if(!r.ok)throw new Error("Local JWKS HTTP "+r.status);const j=await r.json();if(!Array.isArray(j.keys)||!j.keys.some(k=>k.alg==="ES256"&&k.kty==="EC"&&!k.d))throw new Error("Local ES256 public key unavailable");console.log("PASS: JWKS advertises local-only ES256 public key.");'
+      - name: Validate and start localhost-only PowerSync with isolated Mongo
+        run: |
+          docker compose -f infrastructure/powersync/local/compose.yaml config --quiet
+          docker compose -f infrastructure/powersync/local/compose.yaml up -d --wait --wait-timeout 180
+          curl --fail --silent --show-error http://127.0.0.1:54399/probes/liveness >/dev/null
+          echo "PASS: local PowerSync live at loopback only."
+      - name: Create two unique LOCAL synthetic Auth accounts
+        run: node scripts/gate3-seed-local-auth.mjs
+      - name: Build Household Vault with local endpoints only
+        run: pnpm build
+      - name: Install test browser
+        run: pnpm --filter @uaf/reference-app exec playwright install --with-deps chromium
+      - name: Verify no-skip/no-retry E2E evidence rules
+        run: node scripts/validate-connected-e2e-results.mjs --self-test
+      - name: Start only local Vite preview
+        run: |
+          pnpm --filter @uaf/reference-app exec vite preview --host 127.0.0.1 --port 4173 > /tmp/uaf-local-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4173/; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::Local-only Vite preview could not start."
+          exit 1
+      - name: Inspect local PowerSync readiness code (no credentialed call)
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:54399/probes/readiness || true)
+          echo "LOCAL_POWERSYNC_READINESS_HTTP_STATUS=$status"
+      - name: Verify localhost browser CORS preflight for both authenticated Edge gateways
+        run: node scripts/validate-local-edge-preflight.mjs
+      - name: Prove local PowerSync handshake and authenticated upload before longer journeys
+        id: handshake
+        run: pnpm --filter @uaf/reference-app exec playwright test --config playwright.local-sync.config.ts --reporter=line --workers=1 --retries=0
+      - name: Classify LOCAL PowerSync service errors without exposing credentials
+        if: ${{ failure() && steps.handshake.outcome == 'failure' }}
+        run: |
+          docker compose -f infrastructure/powersync/local/compose.yaml logs --no-color --tail=500 powersync 2>&1 | node scripts/classify-local-powersync-logs.mjs
+      - name: Run nine full LOCAL Supabase + PowerSync browser journeys
+        id: e2e
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: /tmp/uaf-local-powersync-report.json
+        run: pnpm --filter @uaf/reference-app test:e2e --reporter=dot,json --workers=1 --retries=0
+      - name: Reject skipped, flaky and missing local sync scenarios
+        if: ${{ always() && steps.e2e.outcome != 'skipped' }}
+        env:
+          UAF_E2E_JSON_REPORT: /tmp/uaf-local-powersync-report.json
+        run: node scripts/validate-connected-e2e-results.mjs
+      - name: Destroy local-only Mongo, PowerSync and Supabase
+        if: always()
+        run: |
+          docker compose -f infrastructure/powersync/local/compose.yaml down --volumes --remove-orphans || true
+          cd infrastructure
+          ../node_modules/.bin/supabase stop --no-backup || true

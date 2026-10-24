@@ -1,0 +1,24 @@
+# UAF DEV-ONLY PowerSync Open Edition. No cloud API tokens.
+# Use exclusively with disposable, local Supabase's ES256 signing key.
+telemetry:
+  disable_telemetry_sharing: true
+
+replication:
+  connections:
+    - type: postgresql
+      uri: !env PS_DATA_SOURCE_URI
+      sslmode: disable
+
+storage:
+  type: mongodb
+  uri: !env PS_MONGO_URI
+
+port: !env PS_PORT
+
+sync_config:
+  path: sync-config.yaml
+
+client_auth:
+  supabase: true
+  jwks_uri: http://kong:8000/auth/v1/.well-known/jwks.json
+  audience: ["authenticated"]
