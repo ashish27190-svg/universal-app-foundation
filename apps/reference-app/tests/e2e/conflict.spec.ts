@@ -40,8 +40,18 @@ test('stale offline edit is surfaced instead of silently overwriting the server'
     // A deliberately unresolved conflict keeps the shared synthetic test
     // workspace in "Needs attention". Clear it after asserting the review UI
     // so later E2E journeys can truthfully expect a clean Synced state.
+    const resolutionResponse = pageA.waitForResponse(
+      (response) => {
+        const url = new URL(response.url());
+        return url.pathname === '/functions/v1/resolve-conflict' && response.request().method() === 'POST';
+      },
+      { timeout: 30_000 },
+    );
     await pageA.getByRole('button', { name: 'Keep server version' }).click();
-    await expect(pageA.getByRole('heading', { name: 'Needs attention' })).toHaveCount(0);
+    // The section heading is always rendered, even with zero conflicts.
+    // Check both the authenticated HTTP result and the actual empty state.
+    expect((await resolutionResponse).status()).toBe(200);
+    await expect(pageA.getByText('No unresolved conflicts.')).toBeVisible({ timeout: 30_000 });
     await waitForSynced(pageA);
     await expect(activeAssetCard(pageA, `${original} online B`)).toBeVisible();
   } finally {
