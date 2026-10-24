@@ -36,6 +36,14 @@ test('stale offline edit is surfaced instead of silently overwriting the server'
     await expect(review.getByText(`${original} online B`)).toBeVisible();
     await expect(review.getByRole('button', { name: 'Confirm reapply my version' })).toBeEnabled();
     await review.getByRole('button', { name: 'Cancel' }).click();
+
+    // A deliberately unresolved conflict keeps the shared synthetic test
+    // workspace in "Needs attention". Clear it after asserting the review UI
+    // so later E2E journeys can truthfully expect a clean Synced state.
+    await pageA.getByRole('button', { name: 'Keep server version' }).click();
+    await expect(pageA.getByRole('heading', { name: 'Needs attention' })).toHaveCount(0);
+    await waitForSynced(pageA);
+    await expect(activeAssetCard(pageA, `${original} online B`)).toBeVisible();
   } finally {
     await Promise.all([contextA.close(), contextB.close()]);
   }
