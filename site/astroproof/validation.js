@@ -207,7 +207,7 @@
     const s=stats(),ev=s.ev;
     return '<div class="apv-warning"><b>Evidence status:</b> '+s.completed+' of '+s.gs.length+
       ' workflow gates documented. This bar measures recorded review work—not astrology accuracy, objective proof, or a prediction success rate. Browser storage is editable; no external audit or truly blind experiment is claimed.</div>'+
-      '<h3 class="apv-section-title">Verified workflow progress: '+s.percent+'%</h3>'+
+      '<h3 class="apv-section-title">Evidence-recorded workflow progress: '+s.percent+'%</h3>'+
       '<div class="apv-progress" role="progressbar" aria-valuenow="'+s.percent+'" aria-valuemin="0" aria-valuemax="100" aria-label="Evidence-backed workflow progress"><div style="width:'+s.percent+'%"></div></div>'+
       '<div class="apv-checks">'+s.gs.map(g=>'<div>'+status(g.done?'Evidence recorded':'Pending')+' '+escapeHTML(g.name)+'</div>').join('')+'</div>'+
       '<div class="apv-quick">'+[
@@ -409,12 +409,23 @@
   }
   function formData(form){return Object.fromEntries(new FormData(form).entries())}
   function createEvent(f){
-    const start=f.event_start,end=f.event_end||start;
+    const reportedDate=f.event_start,precision=f.date_precision||'exact';
+    let start=f.event_start,end=f.event_end||start;
+    if(isoDate(start)&&precision==='month'){
+      start=start.slice(0,7)+'-01';
+      const finishDate=isoDate(end)?end:start;
+      end=new Date(Date.UTC(Number(finishDate.slice(0,4)),Number(finishDate.slice(5,7)),0)).toISOString().slice(0,10);
+    }
+    if(isoDate(start)&&precision==='year'){
+      start=start.slice(0,4)+'-01-01';
+      const finishDate=isoDate(end)?end:start;
+      end=finishDate.slice(0,4)+'-12-31';
+    }
     if(!validRange(start,end))return fail('Enter a real date range: start on or before end.');
     if(start>day()||end>day())return fail('Life Event Archive is for events that already happened. A future event belongs in a prediction draft.');
     if(!TYPES[f.event_type]||!AREAS.includes(f.life_area))return fail('Choose a valid type and life area.');
     const e={event_id:uid('evt'),person_id:'self',event_type:f.event_type,life_area:f.life_area,event_start:start,event_end:end,
-      event_date:start,date_precision:f.date_precision||'exact',purpose:f.purpose,used_for_rectification:f.purpose==='rectification',
+      event_date:start,reported_date:reportedDate,date_precision:precision,purpose:f.purpose,used_for_rectification:f.purpose==='rectification',
       note:clean(f.note),source_ref:clean(f.source_ref),source_kind:f.source_kind||'unknown',
       assumptions:clean(f.assumptions),competing_interpretations:clean(f.competing_interpretations),
       source_status:'unreviewed',evidence_review:null,recorded_at:now(),revealed_at:null,confidence:f.confidence||'unknown'};
@@ -470,6 +481,7 @@
     const p=getPred(f.prediction_id);if(!predictionReady(p))return fail('Select a valid frozen prediction.');
     if(db.cases.some(c=>c.prediction_id===p.prediction_id))return fail('A case already exists for this prediction. Review it instead of duplicating the outcome.');
     const e=f.event_id?getEvt(f.event_id):null;
+    if(f.event_id&&!e)return fail('Selected event does not exist.');
     const safety=caseSafety(p,e);
     if(!safety.allowed)return fail(safety.reason);
     const obs=clean(f.observation);
