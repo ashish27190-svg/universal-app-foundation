@@ -224,7 +224,8 @@
       '<p class="apv-muted">Evaluator v1.0: leakage checks, locked date ranges, reviewed matched/missed outcomes, and per-rule sample counts. No shuffled-date control or cohort-level recall is claimed in the browser.</p></div>'+
       '<div class="apv-actions">'+action('download-report','','Download validation report (.txt)')+
       action('download-json','','Download structured results (.json)')+action('download-csv','','Download case table (.csv)')+
-      action('download-backup','','Backup all validation records')+'</div>';
+      action('download-backup','','Backup all validation records')+
+      '<label class="ghost" style="cursor:pointer">Restore validation backup<input type="file" id="apv-import-backup" accept=".json,application/json" hidden></label></div>';
   }
   function eventsView(){
     const items=db.events.slice().sort((a,b)=>String(b.event_start).localeCompare(String(a.event_start)));
@@ -643,6 +644,45 @@
       if(confirm('Export ALL local validation data, including sensitive life event notes and evidence references? Keep this file private.'))
         download('astroproof-validation-backup-'+day()+'.json',JSON.stringify(db,null,2),'application/json');
     }
+  });
+  root.addEventListener('change',async e=>{
+    if(e.target.id!=='apv-import-backup')return;
+    const file=e.target.files?.[0];e.target.value='';
+    if(!file)return;
+    const original=db;
+    try{
+      if(file.size>5000000)throw new Error('Backup exceeds 5MB import limit. No data were changed.');
+      const payload=JSON.parse(await file.text());
+      const fields=['events','hypotheses','predictions','cases','advice','sensitivity_snapshots','decisions'];
+      if(!payload||typeof payload!=='object'||payload.person_id!=='self'||fields.some(k=>!Array.isArray(payload[k])))
+        throw new Error('Not a complete AstroProof validation backup.');
+      const all=fields.reduce((sum,k)=>sum+payload[k].length,0);
+      if(all>50000)throw new Error('Too many records to safely import.');
+      const unique=(arr,k)=>new Set(arr.map(x=>x?.[k])).size===arr.length&&arr.every(x=>typeof x?.[k]==='string'&&x[k]);
+      if(!unique(payload.events,'event_id')||!unique(payload.predictions,'prediction_id')||
+         !unique(payload.cases,'case_id')||!unique(payload.hypotheses,'hypothesis_id')||
+         !unique(payload.decisions,'decision_id'))throw new Error('Missing or duplicate identifiers.');
+      if(payload.events.some(x=>!validRange(x.event_start,x.event_end)||
+         !['validation_holdout','rectification'].includes(x.purpose)||
+         x.used_for_rectification!==(x.purpose==='rectification')))
+         throw new Error('Life-event dates or purpose flags are inconsistent.');
+      if(payload.predictions.some(p=>!validRange(p.window_start,p.window_end)||
+        !['draft','frozen'].includes(p.status)||
+        (p.status==='frozen'&&!predictionReady(p))))
+         throw new Error('Invalid prediction dates or frozen record.');
+      db=payload;
+      for(const cc of db.cases){
+        const p=getPred(cc.prediction_id),ev=cc.event_id?getEvt(cc.event_id):null;
+        if(!p||!predictionReady(p)||cc.event_id&&!ev||!caseSafety(p,ev).allowed)
+          throw new Error('One imported validation case violates the freeze or leakage firewall.');
+        if(cc.review_status==='reviewed_documented'&&(!reviewedCase(cc)||checkCaseReview(cc,p,ev)))
+          throw new Error('One imported reviewed case is missing its evidence chain.');
+      }
+      if(!confirm('Restore '+payload.events.length+' events, '+payload.predictions.length+
+        ' predictions and '+payload.cases.length+' cases? This replaces this browser’s current Validation Workspace. Export a backup of existing data first.')){db=original;render();return}
+      log('backup_restored_operator_supplied','workspace','all','Imported local JSON backup; reviewer identities and source references are not independently authenticated.');
+      save();notice='Validation backup restored. Source evidence remains operator-entered and must not be treated as externally authenticated.';render();
+    }catch(err){db=original;notice='Backup not imported: '+err.message;render();}
   });
   root.addEventListener('submit',e=>{
     const f=e.target;if(!f.matches('form[id^="apv-"]'))return;
