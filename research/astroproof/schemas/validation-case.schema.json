@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AstroProof Validation Case v1.0",
+  "type": "object",
+  "required": [
+    "case_id",
+    "prediction_id",
+    "person_id",
+    "outcome_kind",
+    "observation",
+    "evaluation_mode",
+    "reported_at",
+    "review_status"
+  ],
+  "properties": {
+    "case_id": {
+      "type": "string"
+    },
+    "prediction_id": {
+      "type": "string"
+    },
+    "person_id": {
+      "type": "string"
+    },
+    "event_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "outcome_kind": {
+      "enum": [
+        "event",
+        "no_event"
+      ]
+    },
+    "observation": {
+      "type": "string"
+    },
+    "follow_up_coverage": {
+      "type": "string"
+    },
+    "outcome_evidence_ref": {
+      "type": "string"
+    },
+    "date_overlap": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "evaluation_mode": {
+      "enum": [
+        "prospective",
+        "retrospective_exploratory"
+      ]
+    },
+    "reported_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "safety_explanation": {
+      "type": "string"
+    },
+    "review_status": {
+      "enum": [
+        "pending_review",
+        "reviewed_documented"
+      ]
+    },
+    "review": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "decision": {
+          "enum": [
+            "match",
+            "miss",
+            "indeterminate"
+          ]
+        },
+        "reviewer": {
+          "type": "string"
+        },
+        "evidence_ref": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "reviewed_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "authentication": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "review_status": {
+            "const": "reviewed_documented"
+          }
+        },
+        "required": [
+          "review_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "review": {
+            "type": "object",
+            "required": [
+              "decision",
+              "reviewer",
+              "evidence_ref",
+              "note",
+              "reviewed_at"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}
