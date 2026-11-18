@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AstroProof Birth-Time Hypothesis v1.0",
+  "type": "object",
+  "required": [
+    "hypothesis_id",
+    "person_id",
+    "offset_min",
+    "rationale",
+    "assumptions",
+    "rectification_event_ids",
+    "status",
+    "recorded_at"
+  ],
+  "properties": {
+    "hypothesis_id": {
+      "type": "string"
+    },
+    "person_id": {
+      "type": "string"
+    },
+    "offset_min": {
+      "type": "integer",
+      "minimum": -30,
+      "maximum": 30
+    },
+    "rationale": {
+      "type": "string"
+    },
+    "assumptions": {
+      "type": "string"
+    },
+    "competing_interpretations": {
+      "type": "string"
+    },
+    "rectification_event_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sensitivity_snapshot": {
+      "type": "object"
+    },
+    "calculation_version": {
+      "type": "string"
+    },
+    "status": {
+      "const": "tentative"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "review": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "Retain, reject, or inconclusive only. No automatic solved birth time."
+    }
+  },
+  "additionalProperties": true
+}
