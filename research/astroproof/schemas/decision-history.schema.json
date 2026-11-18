@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AstroProof Local Decision History v1.0",
+  "type": "object",
+  "required": [
+    "decision_id",
+    "action",
+    "object_type",
+    "object_id",
+    "recorded_at",
+    "actor"
+  ],
+  "properties": {
+    "decision_id": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string"
+    },
+    "object_type": {
+      "type": "string"
+    },
+    "object_id": {
+      "type": "string"
+    },
+    "detail": {
+      "type": "string"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "actor": {
+      "type": "string"
+    }
+  },
+  "description": "Local append-only workflow ledger only. Browser storage is NOT tamper-proof.",
+  "additionalProperties": true
+}
