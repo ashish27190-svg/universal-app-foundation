@@ -98,6 +98,20 @@
           "type": "string"
         }
       }
+    },
+    "confidence": {
+      "enum": [
+        "unknown",
+        "tentative",
+        "medium",
+        "high"
+      ]
+    },
+    "assumptions": {
+      "type": "string"
+    },
+    "competing_interpretations": {
+      "type": "string"
     }
   },
   "allOf": [
