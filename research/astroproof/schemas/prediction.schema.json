@@ -1,28 +1,188 @@
 {
-  "$schema":"https://json-schema.org/draft/2020-12/schema",
-  "title":"AstroProof Prediction Object",
-  "type":"object",
-  "required":["prediction_id","person_id","life_area","claim","window_start","window_end","supporting_rule_ids","calculation_version","frozen_at"],
-  "properties":{
-    "prediction_id":{"type":"string"},
-    "person_id":{"type":"string"},
-    "life_area":{"enum":["overview","career","money","relationships","family","wellbeing","learning","travel","other","any"]},
-    "claim":{"type":"string"},
-    "specificity_class":{"enum":["broad","moderate","specific"]},
-    "window_start":{"type":"string","format":"date"},
-    "window_end":{"type":"string","format":"date"},
-    "peak_dates":{"type":"array","items":{"type":"string","format":"date-time"}},
-    "supporting_rule_ids":{"type":"array","items":{"type":"string"}},
-    "contradicting_rule_ids":{"type":"array","items":{"type":"string"}},
-    "supporting_techniques":{"type":"array","items":{"type":"string"}},
-    "contradicting_techniques":{"type":"array","items":{"type":"string"}},
-    "birth_time_sensitivity":{"type":["string","object","null"]},
-    "convention_sensitivity":{"type":["string","object","null"]},
-    "calculation_version":{"type":"string"},
-    "rank_score":{"type":["number","null"]},
-    "calibration_event_ids":{"type":"array","items":{"type":"string"}},
-    "frozen_at":{"type":"string","format":"date-time"},
-    "reality_check_eligible":{"type":"boolean"}
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AstroProof Prediction v1.0",
+  "description": "A frozen prediction is a recorded claim, not an evaluated or verified result. Freeze snapshot protects the normal UI workflow, not underlying browser storage.",
+  "type": "object",
+  "required": [
+    "prediction_id",
+    "person_id",
+    "life_area",
+    "claim",
+    "pass_fail_criteria",
+    "window_start",
+    "window_end",
+    "calculation_version",
+    "created_at",
+    "status",
+    "frozen_at"
+  ],
+  "properties": {
+    "prediction_id": {
+      "type": "string"
+    },
+    "person_id": {
+      "type": "string"
+    },
+    "life_area": {
+      "enum": [
+        "overview",
+        "career",
+        "money",
+        "relationships",
+        "family",
+        "wellbeing",
+        "learning",
+        "travel",
+        "other",
+        "any"
+      ]
+    },
+    "claim": {
+      "type": "string",
+      "minLength": 1
+    },
+    "pass_fail_criteria": {
+      "type": "string",
+      "minLength": 1
+    },
+    "specificity_class": {
+      "enum": [
+        "broad",
+        "moderate",
+        "specific"
+      ]
+    },
+    "window_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "window_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "peak_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "peak_dates": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "date-time"
+      }
+    },
+    "timing_precision": {
+      "type": "string"
+    },
+    "calculation_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_ref": {
+      "type": "string"
+    },
+    "rule_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "supporting_rule_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "contradicting_rule_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "calibration_event_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "assumptions": {
+      "type": "string"
+    },
+    "competing_interpretations": {
+      "type": "string"
+    },
+    "independent_support": {
+      "type": "string"
+    },
+    "confidence": {
+      "enum": [
+        "unknown",
+        "tentative",
+        "medium",
+        "high"
+      ]
+    },
+    "rank_score": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "frozen"
+      ]
+    },
+    "frozen_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "freeze_snapshot": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
   },
-  "additionalProperties":true
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "frozen"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "required": [
+          "frozen_at",
+          "freeze_snapshot"
+        ],
+        "properties": {
+          "frozen_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "freeze_snapshot": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
 }
