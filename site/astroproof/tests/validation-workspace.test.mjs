@@ -140,6 +140,25 @@ later.submit('apv-new-case', {
   observation: 'Documented historical event', outcome_evidence_ref: 'synthetic-history'
 });
 const historicalCase = later.data().cases.at(-1);
+later.submit('apv-review-case', {
+  case_id: historicalCase.case_id, decision: 'match', reviewer: 'Synthetic reviewer',
+  evidence_ref: 'synthetic-history', review_note: 'Attempting match without reviewed event source'
+});
+check('Unreviewed event source blocks even an apparently matching case', () => {
+  assert.equal(later.data().cases.at(-1).review, null);
+});
+later.submit('apv-review-source', {
+  event_id: historicalId, decision: 'source_accepted', reviewer: 'Synthetic reviewer',
+  evidence_ref: 'synthetic-history', review_note: 'Source record inspected'
+});
+later.submit('apv-review-case', {
+  case_id: historicalCase.case_id, decision: 'match', reviewer: 'Synthetic reviewer',
+  evidence_ref: 'synthetic-history', review_note: 'Retrospective overlap only'
+});
+check('Evidence-reviewed retrospective match never counts as prospective', () => {
+  assert.equal(later.data().cases.at(-1).review.decision, 'match');
+  assert.equal(later.summary().prospective_matches, 0);
+});
 check('Backdated frozen claims are not relabeled prospective', () => {
   assert.equal(historicalCase.evaluation_mode, 'retrospective_exploratory');
   assert.equal(later.summary().prospective_matches, 0);
