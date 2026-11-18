@@ -1,21 +1,180 @@
 {
-  "$schema":"https://json-schema.org/draft/2020-12/schema",
-  "title":"AstroProof Life Event",
-  "type":"object",
-  "required":["event_id","person_id","event_type","life_area","event_date","date_precision","purpose"],
-  "properties":{
-    "event_id":{"type":"string"},
-    "person_id":{"type":"string"},
-    "event_type":{"enum":["career_change","promotion","job_loss","business_start","income_change","education","relationship_start","marriage","separation","child_birth","relocation","property","family_event","health_event","travel","other"]},
-    "life_area":{"enum":["career","money","relationships","family","wellbeing","learning","travel","other"]},
-    "event_date":{"type":"string","format":"date"},
-    "event_end":{"type":["string","null"],"format":"date"},
-    "date_precision":{"enum":["exact","month","year"]},
-    "purpose":{"enum":["validation_holdout","rectification"]},
-    "used_for_rectification":{"type":"boolean"},
-    "source_quality":{"type":["string","null"]},
-    "note":{"type":"string","maxLength":300},
-    "revealed_at":{"type":["string","null"],"format":"date-time"}
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AstroProof Life Event v1.0",
+  "description": "Canonical browser record, aligned to research evaluator. The event purpose is immutable after creation. Source pointer is not external proof.",
+  "type": "object",
+  "required": [
+    "event_id",
+    "person_id",
+    "event_type",
+    "life_area",
+    "event_start",
+    "event_end",
+    "date_precision",
+    "purpose",
+    "used_for_rectification",
+    "recorded_at"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "person_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event_type": {
+      "enum": [
+        "career_change",
+        "promotion",
+        "job_loss",
+        "business_start",
+        "income_change",
+        "education",
+        "relationship_start",
+        "marriage",
+        "separation",
+        "child_birth",
+        "relocation",
+        "property",
+        "family_event",
+        "health_event",
+        "travel",
+        "other"
+      ]
+    },
+    "life_area": {
+      "enum": [
+        "overview",
+        "career",
+        "money",
+        "relationships",
+        "family",
+        "wellbeing",
+        "learning",
+        "travel",
+        "other"
+      ]
+    },
+    "event_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "event_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "event_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "reported_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "date_precision": {
+      "enum": [
+        "exact",
+        "month",
+        "year"
+      ]
+    },
+    "purpose": {
+      "enum": [
+        "validation_holdout",
+        "rectification"
+      ]
+    },
+    "used_for_rectification": {
+      "type": "boolean"
+    },
+    "note": {
+      "type": "string"
+    },
+    "source_ref": {
+      "type": "string"
+    },
+    "source_kind": {
+      "type": "string"
+    },
+    "source_status": {
+      "type": "string"
+    },
+    "evidence_review": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "assumptions": {
+      "type": "string"
+    },
+    "competing_interpretations": {
+      "type": "string"
+    },
+    "confidence": {
+      "enum": [
+        "unknown",
+        "tentative",
+        "medium",
+        "high"
+      ]
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "revealed_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "legacy_id": {
+      "type": "string"
+    }
   },
-  "additionalProperties":true
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "purpose": {
+            "const": "rectification"
+          }
+        },
+        "required": [
+          "purpose"
+        ]
+      },
+      "then": {
+        "properties": {
+          "used_for_rectification": {
+            "const": true
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "purpose": {
+            "const": "validation_holdout"
+          }
+        },
+        "required": [
+          "purpose"
+        ]
+      },
+      "then": {
+        "properties": {
+          "used_for_rectification": {
+            "const": false
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
 }
