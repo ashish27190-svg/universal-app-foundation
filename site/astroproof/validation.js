@@ -274,7 +274,7 @@
       submit('Save tentative hypothesis')+'</form>'+
       (h.length?h.map(x=>'<div class="apv-card"><h3>Offset '+(x.offset_min>0?'+':'')+x.offset_min+' min '+status(x.review?.decision||'Tentative')+'</h3>'+
       pair('Reason',x.rationale)+pair('Calibration event IDs',(x.rectification_event_ids||[]).join(', ')||'None')+
-      pair('Recorded',x.recorded_at)+pair('Assumptions',x.assumptions)+
+      pair('Recorded',x.recorded_at)+pair('Assumptions',x.assumptions)+ (x.candidate_comparison?.available?'<div class="apv-card"><b>Side-by-side calculation, not a rectification verdict</b>'+pair('Baseline Asc / D9 / D10',[x.candidate_comparison.baseline.ascendant,x.candidate_comparison.baseline.d9_ascendant,x.candidate_comparison.baseline.d10_ascendant].join(' / '))+pair('Candidate Asc / D9 / D10',[x.candidate_comparison.candidate.ascendant,x.candidate_comparison.candidate.d9_ascendant,x.candidate_comparison.candidate.d10_ascendant].join(' / '))+pair('Baseline event timing',(x.candidate_comparison.baseline.at_event||[]).map(a=>a.date+': '+a.mahadasha+'–'+a.antardasha+'–'+a.pratyantar).join('; ')||'No calibration event')+pair('Candidate event timing',(x.candidate_comparison.candidate.at_event||[]).map(a=>a.date+': '+a.mahadasha+'–'+a.antardasha+'–'+a.pratyantar).join('; ')||'No calibration event')+'</div>':hint(x.candidate_comparison?.reason||'No side-by-side computation available'))+
       '<p class="apv-muted">This is a candidate, not a rectified birth time. Do not score linked calibration events as holdout outcomes.</p>'+
       '</div>').join(''):empty('No birth-time hypotheses. An unknown or uncertain birth time stays unresolved until evidence supports a change.'));
   }
@@ -439,9 +439,10 @@
     if(!clean(f.rationale)||!clean(f.assumptions))return fail('Reason and assumptions are required.');
     const e=f.rectification_event_id?getEvt(f.rectification_event_id):null;
     if(e&&e.purpose!=='rectification')return fail('Only calibration events may support rectification.');
+    const candidateComparison=bridge()?.getCandidateComparison?.(offset,e?.event_start||null,e?.event_end||null)||{available:false,reason:'Calculator comparison unavailable'};
     const h={hypothesis_id:uid('hyp'),person_id:'self',offset_min:offset,rationale:clean(f.rationale),
       assumptions:clean(f.assumptions),competing_interpretations:clean(f.competing_interpretations),
-      rectification_event_ids:e?[e.event_id]:[],sensitivity_snapshot:s||{available:false,reason:'not calculated'},
+      rectification_event_ids:e?[e.event_id]:[],candidate_comparison:candidateComparison,sensitivity_snapshot:s||{available:false,reason:'not calculated'},
       calculation_version:'astroproof-hosted-provisional-1.0',recorded_at:now(),review:null,status:'tentative'};
     db.hypotheses.push(h);
     persist('rectification_candidate_recorded','hypothesis',h.hypothesis_id,'Not a resolved birth time; offset '+offset+' minutes');
