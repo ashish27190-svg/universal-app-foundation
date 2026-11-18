@@ -607,6 +607,36 @@ window.AstroProofBridge={
   getProfile:()=>state.profile?JSON.parse(JSON.stringify(state.profile)):null,
   getChartSummary:()=>chart?{engine:chart.meta?.engine,calculated_birth_utc:chart.meta?.utc,ayanamsa_deg:chart.meta?.ayanamsa_deg,ascendant:chart.vedic?.ascendant?.sign,moon_nakshatra:chart.vedic?.moon_nakshatra}:null,
   getBirthSensitivity:()=>state.profile?birthTimeSensitivity(state.profile):{available:false,reason:'Birth profile not entered'},
+  getCandidateComparison:(delta,eventStart,eventEnd)=>{
+    if(!state.profile||state.profile.timeunknown||!chart)return {available:false,reason:'Birth time is unknown or no chart is available.'};
+    if(!Number.isInteger(delta)||Math.abs(delta)>30)return {available:false,reason:'Offset must be an integer within ±30 minutes.'};
+    const shifted=shiftedProfile(state.profile,delta);
+    if(!shifted)return {available:false,reason:'Cannot compute shifted birth time.'};
+    const candidate=calculateChart(shifted,{skipDynamic:true});
+    const info=ch=>({
+      ascendant:ch.vedic.ascendant?.sign||null,
+      d9_ascendant:ch.vedic.divisional.D9.Ascendant||null,
+      d10_ascendant:ch.vedic.divisional.D10.Ascendant||null,
+      moon_house:ch.vedic.planets.Moon.house||null,
+      saturn_house:ch.vedic.planets.Saturn.house||null
+    });
+    const eventPeriods=(ch)=>{
+      if(!eventStart)return [];
+      const dates=[eventStart,eventEnd].filter(Boolean);
+      return [...new Set(dates)].map(dateString=>{
+        const d=new Date(dateString+'T12:00:00Z');
+        if(!Number.isFinite(d.getTime()))return {date:dateString,error:'Invalid event date'};
+        const p=vimshottari(new Date(ch.meta.utc),ch.vedic.planets.Moon.longitude,d).active;
+        return {date:dateString,mahadasha:p?.mahadasha||null,antardasha:p?.antardasha||null,pratyantar:p?.pratyantar||null};
+      });
+    };
+    return {
+      available:true,offset_min:delta,calculation_version:'astroproof-hosted-provisional-1.0',
+      baseline:{...info(chart),at_event:eventPeriods(chart)},
+      candidate:{...info(candidate),at_event:eventPeriods(candidate)},
+      warning:'Comparison only: changed chart features are not evidence of a corrected birth time. Dasha timing is approximate and dates may vary with year-length conventions.'
+    };
+  },
   getForecastCandidates:()=>chart?rankForecasts(transitForecast(365,1)).slice(0,14).map(x=>({life_area:x.topic,signal:x.mover+' '+x.aspect+' '+x.target,window_start:x.window_start,window_end:x.window_end,peak_at:x.peak_at,orb:x.orb,timing_precision:x.timing_precision,rank_score:x.score,calculation_version:'astroproof-hosted-provisional-1.0'})):[],
   getLegacyEvents:()=>JSON.parse(JSON.stringify(state.lifeEvents||[]))
 };
