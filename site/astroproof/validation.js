@@ -117,7 +117,7 @@
       for(const r of p.rule_ids||[]){
         if(!byRule[r])byRule[r]={rule:r,reviewed:0,prospective:0,match:0,miss:0,indeterminate:0};
         const row=byRule[r];row.reviewed++;
-        if(c.evaluation_mode==='prospective')row.prospective++;
+        if(c.evaluation_mode==='prospective'){row.prospective++;if(c.review.decision==='match')row.prospective_matches=(row.prospective_matches||0)+1;if(c.review.decision==='miss')row.prospective_misses=(row.prospective_misses||0)+1;}
         row[c.review.decision]=(row[c.review.decision]||0)+1;
       }
     }
@@ -238,6 +238,7 @@
       '<label>Date precision<select name="date_precision"><option value="exact">Exact</option><option value="month">Approximate month</option><option value="year">Approximate year</option></select></label></div>'+
       '<div class="apv-2"><label>Use for<select name="purpose"><option value="validation_holdout">Holdout / validation only</option><option value="rectification">Birth-time calibration only</option></select></label>'+
       '<label>Evidence type<select name="source_kind"><option value="unknown">Unknown / not supplied</option><option value="document">Dated document</option><option value="dated_message">Dated correspondence</option><option value="record">Official or transaction record</option><option value="personal_recollection">Personal recollection</option></select></label></div>'+
+      '<label>Event confidence (your estimate; not a probability)<select name="confidence"><option value="unknown">Unknown</option><option value="tentative">Tentative</option><option value="medium">Medium</option><option value="high">High</option></select></label>'+ 
       formField('source_ref','Evidence reference / where it can be checked (optional)','text',false,' maxlength="400" placeholder="e.g. offer-letter-2019, not a sensitive account number"')+
       textarea('note','Factual description','', 'Describe what happened without astrological interpretation.')+
       textarea('assumptions','Uncertainty / assumptions',false,'What is unknown about the exact date or event?')+
@@ -246,7 +247,7 @@
       '<h3 class="apv-section-title">Recorded events ('+items.length+')</h3>'+
       (items.length?items.map(e=>'<div class="apv-card"><h3>'+escapeHTML(TYPES[e.event_type]||e.event_type)+' '+status(e.purpose==='rectification'?'Calibration only':'Holdout')+'</h3>'+
       pair('When',e.event_start+(e.event_end!==e.event_start?' to '+e.event_end:''))+
-      pair('Date precision',e.date_precision)+pair('Life area',e.life_area)+pair('Source reference',e.source_ref||'Missing')+
+      pair('Date precision',e.date_precision)+pair('Life area',e.life_area)+pair('Event confidence',e.confidence||'unknown')+pair('Evidence type',e.source_kind||'unknown')+pair('Source reference',e.source_ref||'Missing')+
       pair('Evidence review',evidenceReviewed(e)?'Source accepted in local review log':'Not accepted / pending')+
       '<p class="apv-muted">'+escapeHTML(e.note||'No description')+'</p>'+
       '<details class="apv-details"><summary>Assumptions and competing explanations</summary><p>'+escapeHTML(e.assumptions||'Unknown')+'</p><p>'+escapeHTML(e.competing_interpretations||'Not assessed')+'</p></details></div>').join(''):empty('No events recorded. Keep the first entry factual; do not guess the date.'))+
@@ -371,7 +372,7 @@
     (all.length?'<div class="apv-tablewrap"><table class="apv-table"><thead><tr><th>Record</th><th>ID</th><th>Gap</th></tr></thead><tbody>'+
       all.map(x=>'<tr><td>'+escapeHTML(x.type)+'</td><td>'+escapeHTML(x.id)+'</td><td>'+escapeHTML(x.text)+'</td></tr>').join('')+'</tbody></table></div>':empty('No field-level gaps detected for current records. This does not prove any forecasts accurate or externally verified.'))+
     '<div class="apv-card"><h3>Rule performance — observed local cases only</h3>'+
-    (ev.byRule.length?'<div class="apv-tablewrap"><table class="apv-table"><thead><tr><th>Rule</th><th>Reviewed</th><th>Prospective</th><th>Matches</th><th>Misses</th><th>Unclear</th></tr></thead><tbody>'+
+    (ev.byRule.length?'<div class="apv-tablewrap"><table class="apv-table"><thead><tr><th>Rule</th><th>Reviewed total</th><th>Prospective reviewed</th><th>Prospective matches</th><th>Prospective misses</th><th>All indeterminate</th></tr></thead><tbody>'+
       ev.byRule.map(r=>'<tr><td>'+escapeHTML(r.rule)+'</td><td>'+r.reviewed+'</td><td>'+r.prospective+'</td><td>'+r.match+'</td><td>'+r.miss+'</td><td>'+r.indeterminate+'</td></tr>').join('')+
       '</tbody></table></div>':'<p class="apv-muted">No rule has enough reviewed cases to evaluate. Rule reliability is unknown.</p>')+
       '<p class="apv-muted">Do not compare raw counts across rules as accuracy rates. No random baseline, independence audit, complete outcome surveillance or external replication has been conducted.</p></div>';
@@ -410,12 +411,13 @@
   function createEvent(f){
     const start=f.event_start,end=f.event_end||start;
     if(!validRange(start,end))return fail('Enter a real date range: start on or before end.');
+    if(start>day()||end>day())return fail('Life Event Archive is for events that already happened. A future event belongs in a prediction draft.');
     if(!TYPES[f.event_type]||!AREAS.includes(f.life_area))return fail('Choose a valid type and life area.');
     const e={event_id:uid('evt'),person_id:'self',event_type:f.event_type,life_area:f.life_area,event_start:start,event_end:end,
       event_date:start,date_precision:f.date_precision||'exact',purpose:f.purpose,used_for_rectification:f.purpose==='rectification',
       note:clean(f.note),source_ref:clean(f.source_ref),source_kind:f.source_kind||'unknown',
       assumptions:clean(f.assumptions),competing_interpretations:clean(f.competing_interpretations),
-      source_status:'unreviewed',evidence_review:null,recorded_at:now(),revealed_at:null,confidence:'unknown'};
+      source_status:'unreviewed',evidence_review:null,recorded_at:now(),revealed_at:null,confidence:f.confidence||'unknown'};
     if(!['validation_holdout','rectification'].includes(e.purpose))return fail('Invalid purpose.');
     db.events.push(e);
     persist('event_recorded_unverified','life_event',e.event_id,'purpose='+e.purpose+'; dates='+start+'..'+end);
@@ -496,6 +498,7 @@
     const problem=checkCaseReview(c,p,e);
     if(problem)return fail(problem);
     if(!clean(f.reviewer)||!clean(f.evidence_ref)||!clean(f.review_note))return fail('Reviewer identity, evidence and reasoning must be recorded.');
+    if(f.decision==='miss'&&p.window_end>=day())return fail('A miss cannot be confirmed before the full prediction window ends.');
     if(f.decision==='match'){
       if(!e)return fail('A match requires a documented matching event, not merely absence of information.');
       if(!c.date_overlap)return fail('An event outside the frozen date window cannot be marked a match.');
@@ -580,7 +583,7 @@
     lines.push('','GAPS');
     for(const g of gaps())lines.push(g.type+' | '+g.id+' | '+g.text);
     lines.push('','RULE PERFORMANCE');
-    for(const r of ev.byRule)lines.push(r.rule+' | reviewed '+r.reviewed+' | prospective '+r.prospective+' | match '+r.match+' | miss '+r.miss+' | unclear '+r.indeterminate);
+    for(const r of ev.byRule)lines.push(r.rule+' | reviewed '+r.reviewed+' | prospective '+r.prospective+' | prospective match '+(r.prospective_matches||0)+' | prospective miss '+(r.prospective_misses||0)+' | unclear '+r.indeterminate);
     lines.push('','DECISION HISTORY');
     for(const d of db.decisions)lines.push(d.recorded_at+' | '+d.action+' | '+d.object_id+' | '+d.detail);
     lines.push('','Conclusions: no unreviewed/rectification cases are claimed as successful validations. Predictive scientific validity is unestablished.');
