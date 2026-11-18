@@ -325,6 +325,9 @@
       optionsFrom(holdouts,'event_id',e=>e.event_start+' — '+(TYPES[e.event_type]||e.event_type),'',false)+'</select></label>'+
       formField('outcome_evidence_ref','Outcome evidence reference (can be completed before formal review)','text',false,' maxlength="400" placeholder="Contemporaneous record, dated correspondence or source ID"')+
       textarea('observation','What was actually observed?',true,'Describe the outcome without retrofitting the frozen claim')+
+      '<label>Outcome confidence (not a probability)<select name="confidence"><option value="unknown">Unknown</option><option value="tentative">Tentative</option><option value="medium">Medium</option><option value="high">High</option></select></label>'+ 
+      textarea('assumptions','Outcome interpretation assumptions',false,'What remains uncertain about this comparison?')+
+      textarea('competing_interpretations','Competing non-astrological explanations',false,'Other reasons this might have happened')+
       textarea('follow_up_coverage','If no event: how was the full window checked?',false,'Required to confirm a miss when no event is recorded')+
       submit('Create case as pending review')+'</form>'+
       '<h3 class="apv-section-title">Validation cases ('+db.cases.length+')</h3>'+
@@ -334,7 +337,8 @@
            pair('Case type',elig==='prospective'?'Prospective timing eligible — not blinded': 'Retrospective / exploratory')+
            pair('Outcome',e?(TYPES[e.event_type]||e.event_type)+' · '+e.event_start:'No event reported')+
            pair('Comparison',c.date_overlap===null?'Unknown':c.date_overlap?'Date ranges overlap':'Date ranges do not overlap')+
-           pair('Evidence reference',c.outcome_evidence_ref||'Missing')+
+           pair('Evidence reference',c.outcome_evidence_ref||'Missing')+pair('Confidence',c.confidence||'unknown')+
+           pair('Assumptions',c.assumptions||'Unstated')+pair('Competing explanations',c.competing_interpretations||'Not assessed')+
            pair('Reviewer',c.review?.reviewer||'Pending')+
            '<p class="apv-muted">'+escapeHTML(c.observation||'No observation')+'</p></div>';
        }).join(''):empty('No cases. Freeze a prediction first, then record and review its outcome.'))+
@@ -490,7 +494,7 @@
     if(!obs)return fail('Record what was observed, even if the result is unknown.');
     const evaluation_mode=e?(safety.prospective?'prospective':'retrospective_exploratory'):(isFutureAtFreeze(p)?'prospective':'retrospective_exploratory');
     const c={case_id:uid('case'),prediction_id:p.prediction_id,person_id:'self',
-      event_id:e?.event_id||null,outcome_kind:e?'event':'no_event',observation:obs,
+      event_id:e?.event_id||null,outcome_kind:e?'event':'no_event',observation:obs,confidence:f.confidence||'unknown',assumptions:clean(f.assumptions),competing_interpretations:clean(f.competing_interpretations),
       follow_up_coverage:clean(f.follow_up_coverage),outcome_evidence_ref:clean(f.outcome_evidence_ref),
       date_overlap:e?safety.overlap:null,evaluation_mode,reported_at:now(),
       reviewer_notes:'',review:null,review_status:'pending_review',
