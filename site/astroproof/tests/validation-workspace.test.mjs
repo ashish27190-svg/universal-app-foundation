@@ -1,0 +1,149 @@
+// AstroProof Validation Workspace — synthetic-only deployment smoke tests.
+// Run with: node site/astroproof/tests/validation-workspace.test.mjs
+// Never use real birth details or private life events in these fixtures.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+
+const code = fs.readFileSync(new URL('../validation.js', import.meta.url), 'utf8');
+new vm.Script(code, { filename: 'validation.js' });
+const local = new Map();
+let sequence = 0;
+const report = [];
+const check = (name, fn) => {
+  fn();
+  report.push(name);
+};
+function boot(at) {
+  const root = { innerHTML: '', className: '', listeners: {}, addEventListener(type, callback) { this.listeners[type] = callback; } };
+  const document = { getElementById(id) { return id === 'apv-root' ? root : null; } };
+  const localStorage = { getItem(key) { return local.get(key) || null; }, setItem(key, value) { local.set(key, value); } };
+  const window = { AstroProofBridge: {
+    getProfile() { return null; },
+    getBirthSensitivity() { return { available: false, reason: 'Synthetic fixture: birth time unknown' }; },
+    getChartSummary() { return null; },
+    getForecastCandidates() { return []; },
+    getLegacyEvents() { return []; }
+  } };
+  const FixedDate = class extends Date {
+    constructor(...args) { super(...(args.length ? args : [at])); }
+    static now() { return new Date(at).getTime(); }
+  };
+  class FormData { constructor(form) { this.form = form; } entries() { return Object.entries(this.form.fields); } }
+  const sandbox = {
+    window, document, localStorage, crypto: { randomUUID() { return 'synthetic-' + String(++sequence).padStart(6, '0'); } },
+    confirm() { return true; }, setTimeout() {}, FormData, Date: FixedDate,
+    Blob: class {}, URL: { createObjectURL() { return 'blob:test'; }, revokeObjectURL() {} }
+  };
+  vm.runInNewContext(code, sandbox, { filename: 'validation.js' });
+  const submit = (id, fields) => {
+    const form = { id, fields, matches() { return true; } };
+    root.listeners.submit({ target: form, preventDefault() {} });
+  };
+  const action = (kind, id = '') => {
+    const button = { dataset: { apvAction: kind, id } };
+    root.listeners.click({ target: { closest(selector) { return selector === '[data-apv-action]' ? button : null; } } });
+  };
+  const data = () => JSON.parse(local.get('astroproof.validation.v1') || 'null');
+  const summary = () => window.AstroProofValidation.getSummary();
+  return { submit, action, data, summary, root, window };
+}
+
+const first = boot('2026-11-18T10:00:00Z');
+check('Empty store remains 0% progress', () => assert.equal(first.summary().progress_percent, 0));
+check('Rectification leakage guard works', () => assert.equal(first.window.AstroProofValidation.testGuards().rectificationBlocked, true));
+const rect = {
+  event_type: 'career_change', life_area: 'career',
+  event_start: '2024-06-17', event_end: '', date_precision: 'month',
+  purpose: 'rectification', source_kind: 'document', source_ref: 'synthetic-document-1',
+  confidence: 'tentative', note: 'Fictional role', assumptions: 'Approximate month',
+  competing_interpretations: 'Other explanation'
+};
+first.submit('apv-new-event', rect);
+check('Approximate month is expanded, not treated as exact', () => {
+  const e = first.data().events[0];
+  assert.equal(e.event_start, '2024-06-01');
+  assert.equal(e.event_end, '2024-06-30');
+  assert.equal(e.used_for_rectification, true);
+});
+const count = first.data().events.length;
+first.submit('apv-new-event', { ...rect, event_start: '2027-01-01' });
+check('Future events cannot masquerade as history', () => assert.equal(first.data().events.length, count));
+first.submit('apv-new-prediction', {
+  life_area: 'career', specificity_class: 'specific', claim: 'Synthetic signed offer',
+  pass_fail_criteria: 'Signed offer dated inside the defined window',
+  window_start: '2026-11-25', window_end: '2026-11-30', peak_at: '2026-11-27T10:00',
+  calculation_version: 'synthetic-fixture-v1', source_ref: 'synthetic-rule-source',
+  rule_ids: 'FICTIONAL-RULE-01', calibration_event_ids: first.data().events[0].event_id,
+  confidence: 'tentative', assumptions: 'Fictional fixture', competing_interpretations: 'Coincidence'
+});
+const predId = first.data().predictions[0].prediction_id;
+check('Draft is not an evaluated forecast', () => {
+  assert.equal(first.data().predictions[0].status, 'draft');
+  assert.equal(first.summary().prospective_matches, 0);
+});
+first.action('freeze', predId);
+check('Freezing records an immutable normal-UI snapshot', () => {
+  assert.ok(first.data().predictions[0].frozen_at);
+  assert.ok(first.data().predictions[0].freeze_snapshot);
+});
+first.submit('apv-new-case', {
+  prediction_id: predId, event_id: first.data().events[0].event_id,
+  observation: 'Attempt to leak calibration', outcome_evidence_ref: 'synthetic-document-1'
+});
+check('Calibration event cannot be scored as holdout', () => assert.equal(first.data().cases.length, 0));
+first.submit('apv-new-case', {
+  prediction_id: predId, event_id: '',
+  observation: 'No event yet', outcome_evidence_ref: 'synthetic-followup',
+  follow_up_coverage: 'Full-window check intended'
+});
+const caseId = first.data().cases[0].case_id;
+first.submit('apv-review-case', {
+  case_id: caseId, decision: 'miss', reviewer: 'Synthetic reviewer',
+  evidence_ref: 'synthetic-followup', review_note: 'Too early'
+});
+check('Miss cannot be confirmed before forecast deadline', () => assert.equal(first.data().cases[0].review, null));
+const later = boot('2026-12-02T10:00:00Z');
+later.submit('apv-review-case', {
+  case_id: caseId, decision: 'miss', reviewer: 'Synthetic reviewer',
+  evidence_ref: 'synthetic-followup', review_note: 'Complete dated surveillance recorded'
+});
+check('Documented closed-window miss is reviewable', () => {
+  assert.equal(later.data().cases[0].review.decision, 'miss');
+  assert.equal(later.summary().prospective_misses, 1);
+});
+later.submit('apv-new-case', {
+  prediction_id: predId, event_id: '',
+  observation: 'Duplicate case attempt', outcome_evidence_ref: 'synthetic-followup',
+  follow_up_coverage: 'none'
+});
+check('Duplicate outcomes do not inflate scores', () => assert.equal(later.data().cases.length, 1));
+later.submit('apv-new-event', {
+  event_type: 'promotion', life_area: 'career', event_start: '2025-05-20',
+  event_end: '', date_precision: 'exact', purpose: 'validation_holdout',
+  source_kind: 'document', source_ref: 'synthetic-history',
+  note: 'Fictional earlier promotion', confidence: 'tentative'
+});
+const historicalId = later.data().events.at(-1).event_id;
+later.submit('apv-new-prediction', {
+  life_area: 'career', claim: 'Synthetic past event hypothesis',
+  pass_fail_criteria: 'Historical promotion', specificity_class: 'specific',
+  window_start: '2025-05-01', window_end: '2025-06-01',
+  calculation_version: 'synthetic-fixture-v1', source_ref: 'synthetic-rule-source',
+  rule_ids: 'FICTIONAL-RULE-02', calibration_event_ids: '',
+  assumptions: 'Retrospective only', competing_interpretations: 'Base rates'
+});
+const historicalPredictionId = later.data().predictions.at(-1).prediction_id;
+later.action('freeze', historicalPredictionId);
+later.submit('apv-new-case', {
+  prediction_id: historicalPredictionId, event_id: historicalId,
+  observation: 'Documented historical event', outcome_evidence_ref: 'synthetic-history'
+});
+const historicalCase = later.data().cases.at(-1);
+check('Backdated frozen claims are not relabeled prospective', () => {
+  assert.equal(historicalCase.evaluation_mode, 'retrospective_exploratory');
+  assert.equal(later.summary().prospective_matches, 0);
+});
+check('Progress never implies all gates passed from one fixture', () => assert.ok(later.summary().progress_percent < 100));
+console.log('PASS: ' + report.length + ' synthetic AstroProof validation workflow checks');
+for (const name of report) console.log('  ✓ ' + name);
