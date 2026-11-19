@@ -46,3 +46,13 @@ node --test research/astroproof/tests/admission-pack.test.mjs
 The research-branch CI runs these tests for each update.
 
 **Interpretation limits:** source metadata is not independent authentication, browser timestamps are editable, the local site is not truly blinded, selected reviewed cases are not a complete population outcome census, and no chance-adjusted skill can be asserted from this pack. This is an **admission-consistency audit**, not proof of predictive validity.
+
+## Post-deadline negative evidence rule (19 November 2026)
+
+The read-only admission evaluator now rejects a case recorded as **miss** unless the exported packet includes the frozen window, post-deadline observation and documented full-window negative surveillance. An unrelated in-window event is not proof that the specific forecast succeeded, but it also cannot substitute for a complete negative follow-up.
+
+The website now supports dated evidence addenda and late links from pending monitoring cases to eligible observed holdout events. The original note is retained.
+
+These are consistency and provenance controls for operator-entered records. They do not independently authenticate observation notes, event timestamps, reviewer identities or astrological predictive validity.
+
+The research suite contains **9 synthetic tests** and passed at this checkpoint.
