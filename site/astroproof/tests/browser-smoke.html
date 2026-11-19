@@ -83,9 +83,14 @@ async function run(){
   root.querySelector('[data-apv-tab="review"]').click();
   let evidenceForm=root.querySelector('#apv-add-case-evidence');
   assert(!!evidenceForm,'Pending case evidence addendum form is available');
+  const caseChoice=evidenceForm.elements.namedItem('case_id');
+  assert(caseChoice?.options.length>1,'Pending case is selectable for evidence addendum');
+  fill(evidenceForm,'case_id',caseChoice.options[1].value);
   fill(evidenceForm,'evidence_ref','synthetic-evidence-pointer');
   fill(evidenceForm,'note','Synthetic dated addendum, no real evidence verified');
   evidenceForm.requestSubmit();
+  const savedArchive=JSON.parse(w.localStorage.getItem('astroproof.validation.v1'));
+  assert(savedArchive.cases[0].evidence_addenda.length===1,'Evidence addendum is actually persisted');
   assert(w.AstroProofValidation.getSummary().prospective_matches===0 &&
     w.AstroProofValidation.getSummary().prospective_misses===0,
     'Appending an evidence pointer never automatically verifies a prediction');
