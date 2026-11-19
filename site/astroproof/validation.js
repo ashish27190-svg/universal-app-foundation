@@ -127,10 +127,23 @@
     const p=getPred(c.prediction_id),e=c.event_id?getEvt(c.event_id):null;
     return reviewedCase(c)&&!checkCaseReview(c,p,e);
   }
+  function admittedProspectiveCase(c){
+    const p=getPred(c.prediction_id),e=c.event_id?getEvt(c.event_id):null;
+    if(!auditedCase(c)||c.evaluation_mode!=='prospective'||!isFutureAtFreeze(p))return false;
+    if(e){
+      const safe=caseSafety(p,e);
+      if(!safe.allowed||!safe.prospective)return false;
+      if(c.review.reviewed_at<e.event_start)return false;
+    }else{
+      if(c.outcome_kind!=='no_event'||!clean(c.follow_up_coverage)||p.window_end>=day())return false;
+      if(c.review.reviewed_at.slice(0,10)<=p.window_end)return false;
+    }
+    return true;
+  }
   function sourceEvidenceCount(){return db.events.filter(e=>evidenceReviewed(e)).length}
   function auditedCases(){return db.cases.filter(auditedCase)}
   function evaluation(){
-    const reviewed=auditedCases(),eligible=reviewed.filter(c=>c.evaluation_mode==='prospective'),exploratory=reviewed.filter(c=>c.evaluation_mode!=='prospective');
+    const reviewed=auditedCases(),eligible=reviewed.filter(admittedProspectiveCase),exploratory=reviewed.filter(c=>!admittedProspectiveCase(c));
     const decided=eligible.filter(c=>['match','miss'].includes(c.review.decision));
     const matched=decided.filter(c=>c.review.decision==='match').length,missed=decided.filter(c=>c.review.decision==='miss').length;
     const byRule={};
@@ -139,7 +152,7 @@
       for(const r of p.rule_ids||[]){
         if(!byRule[r])byRule[r]={rule:r,reviewed:0,prospective:0,match:0,miss:0,indeterminate:0};
         const row=byRule[r];row.reviewed++;
-        if(c.evaluation_mode==='prospective'){row.prospective++;if(c.review.decision==='match')row.prospective_matches=(row.prospective_matches||0)+1;if(c.review.decision==='miss')row.prospective_misses=(row.prospective_misses||0)+1;}
+        if(admittedProspectiveCase(c)){row.prospective++;if(c.review.decision==='match')row.prospective_matches=(row.prospective_matches||0)+1;if(c.review.decision==='miss')row.prospective_misses=(row.prospective_misses||0)+1;}
         row[c.review.decision]=(row[c.review.decision]||0)+1;
       }
     }
