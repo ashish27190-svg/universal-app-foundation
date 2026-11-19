@@ -99,6 +99,13 @@
     const prospective=isFutureAtFreeze(pred)&&event.recorded_at>pred.frozen_at&&event.event_start>=pred.frozen_at.slice(0,10);
     return {allowed:true,overlap,prospective,reason:prospective?'Prospective timing eligibility only; not a cryptographically blinded trial.':'Retrospective/exploratory: not eligible for prospective accuracy claims.'};
   }
+  function fullWindowCovered(c,p){
+    // A pre-deadline promise to check later cannot certify that the entire window was observed.
+    if(!c||!p||!clean(c.follow_up_coverage))return false;
+    const submittedAfter=typeof c.reported_at==='string'&&c.reported_at.slice(0,10)>p.window_end;
+    const subsequent=(c.evidence_addenda||[]).some(a=>a.recorded_at?.slice(0,10)>p.window_end&&clean(a.follow_up_coverage));
+    return submittedAfter||subsequent;
+  }
   function checkCaseReview(c,p,e){
     if(!c||!p)return 'Missing prediction or case.';
     if(!predictionReady(p))return 'Prediction was not frozen.';
@@ -107,8 +114,8 @@
     if(c.event_id&&!evidenceReviewed(e))return 'Event source has not been explicitly reviewed.';
     if(!clean(c.outcome_evidence_ref))return 'Case outcome evidence reference is missing.';
     if(c.outcome_kind==='no_event'&&p.window_end>=day())return 'Cannot review an absence of event before the entire prediction window closes.';
-    if(c.outcome_kind==='no_event'&&!clean(c.follow_up_coverage))return 'Explain how absence of the event was checked throughout the window.';
-    if(c.review?.decision==='miss'&&!clean(c.follow_up_coverage))return 'Miss cannot be admitted without a documented full-window follow-up check.';
+    if(c.outcome_kind==='no_event'&&!fullWindowCovered(c,p))return 'A missing event requires a post-deadline, dated observation covering the entire window.';
+    if(c.review?.decision==='miss'&&!fullWindowCovered(c,p))return 'Miss cannot be admitted without a post-deadline full-window observation.';
     return '';
   }
   function criterionReview(c){
@@ -452,7 +459,7 @@
            pair('Evidence reference',c.outcome_evidence_ref||'Missing')+pair('Confidence',c.confidence||'unknown')+
            pair('Assumptions',c.assumptions||'Unstated')+pair('Competing explanations',c.competing_interpretations||'Not assessed')+
            pair('Exact criterion satisfied',criterionReview(c)?.criterion_assessment||'Needs criterion audit')+pair('Criterion-specific evidence',criterionReview(c)?.criterion_observation||'Missing')+
-           pair('Reviewer',c.review?.reviewer||'Pending')+
+           pair('Reviewer',c.review?.reviewer||'Pending')+pair('Evidence addenda',(c.evidence_addenda||[]).length)+
            '<p class="apv-muted">'+escapeHTML(c.observation||'No observation')+'</p><details class="apv-details"><summary>Original frozen claim and test criteria</summary><p><b>Claim:</b> '+escapeHTML(p?.claim||'Missing')+'</p><p><b>Criterion:</b> '+escapeHTML(p?.pass_fail_criteria||'Missing')+'</p></details></div>';
        }).join(''):empty('No cases. Freeze a prediction first, then record and review its outcome.'))+
       '<div class="apv-actions">'+action('tab','review','Review pending cases')+'</div>';
@@ -469,6 +476,14 @@
       formField('evidence_ref','Actual source that was examined','text',true,' maxlength="400"')+
       textarea('review_note','Reviewer notes and limitations',true,'What was checked? What remains uncertain?')+
       submit('Record source review')+'</form>'+
+      '<form id="apv-add-case-evidence" class="apv-form apv-card"><h3>Add evidence to a pending outcome case</h3>'+
+      '<p class="apv-muted">This appends a dated evidence note without deleting the original observation. For a miss, document the actual full-window check AFTER the prediction deadline.</p>'+
+      '<label>Pending case<select name="case_id" required>'+optionsFrom(cases,'case_id',c=>c.case_id+' — '+(getPred(c.prediction_id)?.claim||'missing').slice(0,70),'')+'</select></label>'+
+      formField('evidence_ref','New evidence/source reference (optional)','text',false,' maxlength="400"')+
+      textarea('follow_up_coverage','Actual follow-up covering the prediction window (if applicable)',false,
+        'Record dated checks and how you established the absence of the precise frozen event, not merely a promise to check.')+
+      textarea('note','What does this addendum establish?',true,'Describe the dated new evidence and any remaining unknowns.')+
+      submit('Append dated evidence; keep original submission')+'</form>'+
       '<form id="apv-review-case" class="apv-form apv-card"><h3>Decide an outcome case</h3>'+
       '<label>Pending case or legacy review needing a criterion audit<select name="case_id" required>'+optionsFrom(cases,'case_id',c=>c.case_id+' — '+(getPred(c.prediction_id)?.claim||'missing').slice(0,70)+(c.review_status==='reviewed_documented'?' [existing decision: '+c.review?.decision+']':''),'')+'</select></label>'+
       '<label>Decision<select name="decision"><option value="indeterminate">Indeterminate / cannot verify</option><option value="match">Documented match</option><option value="miss">Documented miss</option></select></label>'+
@@ -611,11 +626,27 @@
     const c={case_id:uid('case'),prediction_id:p.prediction_id,person_id:'self',
       event_id:e?.event_id||null,outcome_kind:e?'event':'no_event',observation:obs,confidence:f.confidence||'unknown',assumptions:clean(f.assumptions),competing_interpretations:clean(f.competing_interpretations),
       follow_up_coverage:clean(f.follow_up_coverage),outcome_evidence_ref:clean(f.outcome_evidence_ref),
-      date_overlap:e?safety.overlap:null,evaluation_mode,reported_at:now(),
+      date_overlap:e?safety.overlap:null,evaluation_mode,reported_at:now(),evidence_addenda:[],
       reviewer_notes:'',review:null,review_status:'pending_review',
       safety_explanation:safety.reason};
     db.cases.push(c);
     persist('outcome_case_submitted_pending_review','validation_case',c.case_id,safety.reason);
+  }
+  function appendCaseEvidence(f){
+    const c=getCase(f.case_id);
+    if(!c)return fail('Select an existing case.');
+    if(reviewedCase(c)||c.criterion_audit||c.review_status==='reviewed_documented')
+      return fail('A completed decision cannot be silently amended. Record a separate documented correction.');
+    const note=clean(f.note),ref=clean(f.evidence_ref),coverage=clean(f.follow_up_coverage);
+    if(!note||(!ref&&!coverage))return fail('Provide a dated note and either a new evidence reference or an actual follow-up observation.');
+    const addition={addendum_id:uid('case-evidence'),recorded_at:now(),source_ref:ref,
+      follow_up_coverage:coverage,note,actor:'local operator — unverified'};
+    if(!Array.isArray(c.evidence_addenda))c.evidence_addenda=[];
+    c.evidence_addenda.push(addition);
+    if(ref)c.outcome_evidence_ref=c.outcome_evidence_ref?(c.outcome_evidence_ref+'; '+ref):ref;
+    if(coverage)c.follow_up_coverage=c.follow_up_coverage?(c.follow_up_coverage+'\n'+coverage):coverage;
+    persist('pending_case_evidence_appended','validation_case',c.case_id,
+      'Dated addendum '+addition.addendum_id+'; source '+(ref||'not supplied')+'; post-window coverage still requires review');
   }
   function reviewSource(f){
     const e=getEvt(f.event_id);if(!e)return fail('Select a valid event.');
@@ -644,7 +675,7 @@
       if(!c.date_overlap)return fail('An event outside the frozen date window cannot be marked a match.');
     }else if(f.decision==='miss'){
       if(assessment!=='no')return fail('A miss requires an explicit NO that the ORIGINAL frozen criterion was satisfied.');
-      if(!clean(c.follow_up_coverage))return fail('A miss requires evidence of follow-up covering the entire frozen window, even if an unrelated or partial event occurred.');
+      if(!fullWindowCovered(c,p))return fail('A miss requires a dated post-deadline observation covering the entire frozen window; a pre-deadline intention is insufficient.');
       if(p.window_end>=day())return fail('A miss cannot be confirmed before the full prediction window ends.');
     }else if(f.decision==='indeterminate'){
       if(assessment!=='unknown')return fail('An indeterminate decision must keep the frozen criterion unresolved.');
@@ -752,6 +783,7 @@
           observation:caseRecord.observation,
           outcome_evidence_ref:caseRecord.outcome_evidence_ref,
           follow_up_coverage:caseRecord.follow_up_coverage||null,
+          evidence_addenda:caseRecord.evidence_addenda||[],
           review:caseRecord.review||null,
           criterion_audit:caseRecord.criterion_audit||null,
           reported_at:caseRecord.reported_at
@@ -998,6 +1030,7 @@
       const actions={
         'apv-new-event':createEvent,'apv-new-hypothesis':createHypothesis,
         'apv-new-prediction':createPrediction,'apv-new-case':createCase,
+        'apv-add-case-evidence':appendCaseEvidence,
         'apv-review-source':reviewSource,'apv-review-case':reviewCase,
         'apv-review-hypothesis':reviewHypothesis,'apv-new-advice':createAdvice
       };
