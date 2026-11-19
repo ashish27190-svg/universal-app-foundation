@@ -99,3 +99,41 @@ No real personal birth dates or life events appear in those fixtures.
 - Cloud sync and account identity, if ever authorized.
 
 **No retrospective self-report (including a reported 3/3 historical fit) should be imported as a validated prediction result without independent source and protocol review.**
+
+## Follow-up checkpoint — 19 November 2026
+
+### Additional completed safeguards
+
+- A documented match is no longer awarded merely because an event date and life area overlap. Outcome reviewers must explicitly say whether the **original frozen pass/fail criterion** was met and cite the observation supporting their answer.
+- A reviewed miss can include an in-window thematic event **if the precise frozen criterion failed** and the complete prediction window has ended.
+- New reviews cannot silently overwrite existing decisions.
+- Pre-existing reviews without the new criterion fields remain intact. They are quarantined from scoring until a separately logged **supplemental criterion audit** is recorded.
+- Frozen claim, window, rule/source and assumption fields are checked against the stored freeze snapshot before scoring. This detects accidental edits to only one copy; browser data remains **not cryptographically tamper-proof**.
+- Prospective eligibility is independently re-evaluated from dates, freeze and observed-event data instead of trusting a stored `prospective` label.
+
+### New evaluator admission pack
+
+The public browser workspace now offers **Download evaluator admission pack (.json)**.
+
+The exported inventory contains **all draft/frozen predictions**, not only apparent hits, and every row includes explicit admission/exclusion reasons. It preserves the original claim and test criteria, reviewed outcome, timing, source pointers and reviewer notes. Because it contains sensitive information, export requires user confirmation.
+
+The separate research branch contains `research/astroproof/evaluate-admission-pack.mjs`, a **read-only, fail-closed audit** which independently reconstructs admission eligibility and reports disagreements between the browser labels and the evaluator. Run:
+
+```bash
+node research/astroproof/evaluate-admission-pack.mjs ./astroproof-admission-pack.json --strict
+```
+
+This analysis reports inventory counts, accepted prospective matches/misses, excluded records, and per-rule sample sizes. It does **not** claim scientific astrology accuracy, chance-adjusted skill, cohort recall or independent evidence authentication.
+
+### Verified software QA
+
+- **24 synthetic Node workflow assertions** run in the GitHub Pages deployment gate.
+- **15 headless Chromium browser assertions** test actual page navigation, fictional event entry, fictional prediction freezing, zero-evidence behavior and mobile-sized layout.
+- **8 independent research evaluator tests** cover a fictional qualifying match, frozen-data tampering, rectification leakage, broad date overlap without criterion evidence, backdating, negative surveillance, duplicate IDs, and unreviewed source evidence.
+- Both the hosted Pages deployment and the research-branch evaluator workflow completed successfully.
+
+### Outstanding production gates
+
+Reviewer identities, uploaded source content, historical data isolation, sealed prediction timestamps, independent witnesses and prospective denominators are still **unverified**. No personal historical case has been counted as scientifically validated.
+
+Do not present the workflow-completion percentage or the admitted-case hit fraction as a probability that future predictions will come true.
