@@ -1032,8 +1032,16 @@
         const p=getPred(cc.prediction_id),ev=cc.event_id?getEvt(cc.event_id):null;
         if(!p||!predictionReady(p)||cc.event_id&&!ev||!caseSafety(p,ev).allowed)
           throw new Error('One imported validation case violates the freeze or leakage firewall.');
-        if(cc.review_status==='reviewed_documented'&&(!reviewedCase(cc)||checkCaseReview(cc,p,ev)))
-          throw new Error('One imported reviewed case is missing its evidence chain.');
+        if(cc.review_status==='reviewed_documented'){
+          const review=cc.review;
+          if(!review||!['match','miss','indeterminate'].includes(review.decision)||
+             !clean(review.reviewer)||!clean(review.evidence_ref)||!clean(review.note))
+            throw new Error('One imported case claims a review without an identifiable original decision and reviewer evidence.');
+          // Preserve legacy decisions with missing NEW criterion fields; these are excluded from scoring
+          // until a separately documented supplemental criterion audit completes the record.
+          if(reviewedCase(cc)&&checkCaseReview(cc,p,ev))
+            throw new Error('One imported completed criterion audit contradicts the required source or freeze safeguards.');
+        }
       }
       if(!confirm('Restore '+payload.events.length+' events, '+payload.predictions.length+
         ' predictions and '+payload.cases.length+' cases? This replaces this browser’s current Validation Workspace. Export a backup of existing data first.')){db=original;render();return}
