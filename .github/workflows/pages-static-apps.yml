@@ -67,10 +67,12 @@ jobs:
             --window-size=800,960 --dump-dom \
             http://127.0.0.1:8765/astroproof/tests/browser-smoke.html \
             >/tmp/astroproof-browser-dom.html 2>/tmp/astroproof-browser-errors.log
-          if ! grep -q "APV_BROWSER_PASS" /tmp/astroproof-browser-dom.html; then
-            echo "Browser QA failed:"
-            grep -E "APV_BROWSER_FAIL|APV_BROWSER_PENDING" /tmp/astroproof-browser-dom.html | head -n 5 || true
-            tail -n 20 /tmp/astroproof-browser-errors.log || true
+          # Verify a RUN-TIME attribute on the rendered result element.
+          # Searching for success text alone is unsafe: JavaScript source can contain it.
+          if ! grep -Eq '<pre[^>]*id="result"[^>]*data-qa-state="pass"[^>]*data-qa-count="[1-9][0-9]*"' /tmp/astroproof-browser-dom.html; then
+            echo "Browser QA did not reach a rendered pass state:"
+            grep -o '<pre id="result"[^>]*>[^<]*' /tmp/astroproof-browser-dom.html | head -n 3 || true
+            tail -n 30 /tmp/astroproof-browser-errors.log || true
             exit 1
           fi
           grep -o 'APV_BROWSER_PASS[^<]*' /tmp/astroproof-browser-dom.html | head -n 1
