@@ -334,7 +334,9 @@
       '<div class="apv-actions">'+action('download-research-pack','','Download evaluator admission pack (.json)')+action('download-report','','Download validation report (.txt)')+
       action('download-json','','Download structured results (.json)')+action('download-csv','','Download case table (.csv)')+
       action('download-backup','','Backup all validation records')+
-      '<label class="ghost" style="cursor:pointer">Restore validation backup<input type="file" id="apv-import-backup" accept=".json,application/json" hidden></label></div>';
+      '<label class="ghost" style="cursor:pointer">Restore validation backup<input type="file" id="apv-import-backup" accept=".json,application/json" hidden></label></div>'+'<div class="apv-card"><h3>Local archive integrity receipt</h3><p class="apv-muted">Save a SHA-256 digest outside this browser. Later compare it to detect any change in the archived records. This is not a digital signature, independent timestamp or certified original evidence.</p>'+
+      '<div class="apv-actions">'+action('download-integrity','','Download SHA-256 receipt')+
+      '<label class="ghost" style="cursor:pointer">Compare saved receipt<input type="file" id="apv-verify-receipt" accept=".json,application/json" hidden></label></div></div>';
   }
   function eventsView(){
     const items=db.events.slice().sort((a,b)=>String(b.event_start).localeCompare(String(a.event_start)));
@@ -788,6 +790,67 @@
     return result;
   }
 
+
+  // Portable SHA-256 receipts compare local archive contents with a previously retained digest.
+  // This is NOT a signature, authoritative timestamp or independent verification.
+  function stableSerialize(value){
+    if(Array.isArray(value))return '['+value.map(stableSerialize).join(',')+']';
+    if(value&&typeof value==='object')
+      return '{'+Object.keys(value).filter(k=>value[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+stableSerialize(value[k])).join(',')+'}';
+    const text=JSON.stringify(value);
+    return text===undefined?'null':text;
+  }
+  async function archiveDigest(){
+    if(typeof crypto==='undefined'||!crypto.subtle||typeof TextEncoder==='undefined')
+      throw new Error('Secure browser SHA-256 is unavailable. Use HTTPS or localhost; no weak fallback is used.');
+    const encoded=new TextEncoder().encode(stableSerialize(db));
+    const bytes=new Uint8Array(await crypto.subtle.digest('SHA-256',encoded));
+    return [...bytes].map(x=>x.toString(16).padStart(2,'0')).join('');
+  }
+  function integrityReceipt(digest){
+    return {
+      format:'astroproof-local-integrity-receipt-v1',
+      algorithm:'SHA-256',
+      archive_sha256:digest,
+      snapshot_created_at:now(),
+      schema_version:db.version,
+      counts:{events:db.events.length,hypotheses:db.hypotheses.length,predictions:db.predictions.length,
+        cases:db.cases.length,decisions:db.decisions.length},
+      scope:'Canonical sorted-key JSON of the entire local AstroProof Validation Workspace record',
+      limitations:[
+        'The digest only detects a change relative to a previously saved receipt.',
+        'The browser clock and localStorage may be altered; creation date is not independently authenticated.',
+        'No document content was uploaded or verified. An authentic document cannot be inferred from a matching digest.',
+        'Save the receipt OUTSIDE this browser to compare it later.'
+      ]
+    };
+  }
+  async function downloadIntegrityReceipt(){
+    try{
+      const checksum=await archiveDigest();
+      if(!confirm('Save a SHA-256 fingerprint receipt for the CURRENT local validation archive? Keep it outside the browser; this is not an authenticated timestamp or proof of source accuracy.'))return;
+      download('astroproof-archive-integrity-'+day()+'.json',JSON.stringify(integrityReceipt(checksum),null,2),'application/json');
+      notice='Local SHA-256 receipt downloaded. Keep it separately. Later data edits will produce a different digest; this does not certify authentic evidence.';render();
+    }catch(err){fail('Unable to create integrity receipt: '+err.message)}
+  }
+  async function verifyIntegrityReceipt(file){
+    if(!file)return;
+    try{
+      if(file.size>100000)throw new Error('Receipt exceeds 100KB.');
+      const receipt=JSON.parse(await file.text());
+      if(receipt?.format!=='astroproof-local-integrity-receipt-v1'||receipt.algorithm!=='SHA-256'||
+         !/^[0-9a-f]{64}$/.test(receipt.archive_sha256))
+         throw new Error('Not a supported SHA-256 archive receipt.');
+      const current=await archiveDigest();
+      if(current===receipt.archive_sha256){
+        notice='SHA-256 MATCH — current local archive is byte-consistent with the saved canonical receipt. Source authenticity and timestamp remain unverified.';
+      }else{
+        notice='SHA-256 MISMATCH — local archive differs from the saved receipt. This may be a legitimate addition/edit, a restoration, or an alteration. No record has been changed.';
+      }
+      render();
+    }catch(err){fail('Receipt could not be verified: '+err.message)}
+  }
+
   function makeReport(){
     const s=stats(),ev=s.ev;
     const lines=[
@@ -854,6 +917,7 @@
       if(selector)selector.value=id;
     }
     if(kind==='download-followups')download('astroproof-followups-'+day()+'.csv',followupCSV(),'text/csv');
+    if(kind==='download-integrity')void downloadIntegrityReceipt();
     if(kind==='snapshot')snapshot();
     if(kind==='legacy-import')importLegacy();
     if(kind==='load-candidates'){
@@ -883,6 +947,10 @@
     }
   });
   root.addEventListener('change',async e=>{
+    if(e.target.id==='apv-verify-receipt'){
+      const receiptFile=e.target.files?.[0];e.target.value='';
+      await verifyIntegrityReceipt(receiptFile);return;
+    }
     if(e.target.id!=='apv-import-backup')return;
     const file=e.target.files?.[0];e.target.value='';
     if(!file)return;
