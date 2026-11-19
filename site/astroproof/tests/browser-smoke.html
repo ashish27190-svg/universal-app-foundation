@@ -28,6 +28,8 @@ async function run(){
   let root=doc.querySelector('#apv-root');
   assert(!!root.querySelector('[data-apv-tab="events"]'),'Event archive tab exists');
   assert(w.AstroProofValidation.getSummary().progress_percent===0,'Empty browser starts with 0% evidence progress');
+  const initialDigest=await w.AstroProofValidation.getIntegrityDigest();
+  assert(/^[0-9a-f]{64}$/.test(initialDigest),'Secure SHA-256 checksum generated for local archive');
   root.querySelector('[data-apv-tab="events"]').click();
   let form=root.querySelector('#apv-new-event');
   assert(!!form,'Event entry form opens');
@@ -41,6 +43,8 @@ async function run(){
   form.requestSubmit();
   assert(w.AstroProofValidation.getSummary().events===1,'Fictional event records locally');
   assert(w.AstroProofValidation.getSummary().progress_percent===0,'Unreviewed event cannot advance evidence progress');
+  const eventDigest=await w.AstroProofValidation.getIntegrityDigest();
+  assert(eventDigest!==initialDigest,'Adding a factual event changes the archive integrity digest');
   root.querySelector('[data-apv-tab="predictions"]').click();
   form=root.querySelector('#apv-new-prediction');
   assert(!!form,'Prediction draft form opens');
@@ -61,6 +65,12 @@ async function run(){
   assert(!!freeze,'Freeze action is visible');
   freeze.click();
   assert(root.textContent.includes('Frozen · not validated'),'Prediction visibly frozen without validation');
+  const frozenDigest=await w.AstroProofValidation.getIntegrityDigest();
+  assert(frozenDigest!==eventDigest,'Freezing a forecast changes the archived snapshot digest');
+  const followup=w.AstroProofValidation.getFollowupSummary();
+  assert(followup.counts.future===1,'Future forecast is tracked without outcome status');
+  root.querySelector('[data-apv-tab="followups"]').click();
+  assert(root.textContent.includes('Forecast follow-up queue'),'A new user can open the follow-up worklist');
   const m=doc.documentElement.scrollWidth;
   const frameWidth=frame.clientWidth;
   assert(m<=frameWidth+25,'Mobile-sized layout has no major horizontal overflow: '+m+'px vs '+frameWidth+'px');
