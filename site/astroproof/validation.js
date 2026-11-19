@@ -257,7 +257,7 @@
       (ev.decided.length?'<p>Reviewed prospective-case hit fraction: <b>'+ev.matched+'/'+ev.decided.length+'</b>. Only explicitly reviewed cases are in the denominator. This is not predictive accuracy, recall, or a p-value.</p>':
        '<p class="apv-muted">No eligible, evidence-reviewed prospective outcomes yet. Accuracy and rule effectiveness remain unknown.</p>')+
       '<p class="apv-muted">Evaluator v1.0: leakage checks, locked date ranges, reviewed matched/missed outcomes, and per-rule sample counts. No shuffled-date control or cohort-level recall is claimed in the browser.</p></div>'+
-      '<div class="apv-actions">'+action('download-report','','Download validation report (.txt)')+
+      '<div class="apv-actions">'+action('download-research-pack','','Download evaluator admission pack (.json)')+action('download-report','','Download validation report (.txt)')+
       action('download-json','','Download structured results (.json)')+action('download-csv','','Download case table (.csv)')+
       action('download-backup','','Backup all validation records')+
       '<label class="ghost" style="cursor:pointer">Restore validation backup<input type="file" id="apv-import-backup" accept=".json,application/json" hidden></label></div>';
@@ -629,6 +629,89 @@
     }
     persist('legacy_events_imported_unverified','life_event','batch','Imported '+count+' old events; no evidence approvals assumed');
   }
+
+  function admissionPack(){
+    // Every draft and frozen prediction is inventoried. Selecting only apparent hits
+    // would produce a misleading success fraction.
+    const rows=db.predictions.map(p=>{
+      const caseRecord=db.cases.find(x=>x.prediction_id===p.prediction_id)||null;
+      const event=caseRecord?.event_id?getEvt(caseRecord.event_id):null;
+      const reasons=[];
+      if(p.status!=='frozen')reasons.push('draft_not_frozen');
+      if(!predictionReady(p))reasons.push('frozen_fields_not_admissible_or_snapshot_mismatch');
+      if(!(p.rule_ids||[]).length)reasons.push('rule_ids_missing');
+      if(!clean(p.source_ref))reasons.push('calculation_source_missing');
+      if(!caseRecord)reasons.push('outcome_case_missing');
+      else{
+        if(!reviewedCase(caseRecord))reasons.push('review_or_frozen_criterion_audit_missing');
+        if(checkCaseReview(caseRecord,p,event))reasons.push('review_evidence_incomplete');
+        if(!admittedProspectiveCase(caseRecord))reasons.push('not_eligible_as_prospective');
+        if(caseRecord.review?.decision==='indeterminate')reasons.push('indeterminate_outcome_not_binary');
+      }
+      const admitted=reasons.length===0;
+      const info={
+        prediction_id:p.prediction_id,
+        status:p.status,
+        frozen_at:p.frozen_at||null,
+        life_area:p.life_area,claim:p.claim,
+        window_start:p.window_start,window_end:p.window_end,peak_at:p.peak_at,
+        pass_fail_criteria:p.pass_fail_criteria,calculation_version:p.calculation_version,
+        supporting_rule_ids:p.rule_ids||[],calibration_event_ids:p.calibration_event_ids||[],
+        source_ref:p.source_ref||null,freeze_snapshot:p.freeze_snapshot||null,
+        case:caseRecord?{
+          case_id:caseRecord.case_id,
+          evaluation_mode:caseRecord.evaluation_mode,
+          outcome_kind:caseRecord.outcome_kind,
+          observed_event:event?{
+            event_id:event.event_id,event_type:event.event_type,life_area:event.life_area,
+            event_start:event.event_start,event_end:event.event_end,date_precision:event.date_precision,
+            purpose:event.purpose,used_for_rectification:event.used_for_rectification,
+            recorded_at:event.recorded_at,source_ref:event.source_ref||null,
+            source_review:event.evidence_review||null
+          }:null,
+          observation:caseRecord.observation,
+          outcome_evidence_ref:caseRecord.outcome_evidence_ref,
+          follow_up_coverage:caseRecord.follow_up_coverage||null,
+          review:caseRecord.review||null,
+          criterion_audit:caseRecord.criterion_audit||null,
+          reported_at:caseRecord.reported_at
+        }:null,
+        admission:{admitted_binary_prospective:admitted,reasons,
+          status:admitted?'admitted_for_descriptive_scoring':
+            p.status!=='frozen'?'draft_or_not_frozen':
+            !caseRecord?'awaiting_outcome':'excluded_or_pending'}
+      };
+      return info;
+    });
+    const admitted=rows.filter(x=>x.admission.admitted_binary_prospective);
+    const tally={};
+    for(const row of rows)for(const reason of row.admission.reasons)tally[reason]=(tally[reason]||0)+1;
+    const matches=admitted.filter(x=>x.case.review.decision==='match').length;
+    const misses=admitted.filter(x=>x.case.review.decision==='miss').length;
+    const result={
+      format:'astroproof-evidence-admission-pack-v1',
+      generated_at:now(),operator_research_only:true,
+      caveats:[
+        'Contains potentially sensitive dates, sources and reviewer notes. Store privately.',
+        'Browser-local records are operator-entered, editable and not independently authenticated or cryptographically sealed.',
+        'Prospective eligibility is reconstructed from stored dates and source checks; this is not a blinded experiment.',
+        'Descriptive hit fractions from selected cases do not estimate predictive validity or chance-adjusted skill.',
+        'Cohort recall, random controls, p-values and scientifically validated accuracy cannot be claimed from these records.'
+      ],
+      totals:{
+        inventoried_predictions:rows.length,
+        frozen_predictions:rows.filter(x=>x.status==='frozen').length,
+        admitted_binary_prospective:admitted.length,
+        admitted_matches:matches,admitted_misses:misses,
+        not_admitted:rows.length-admitted.length,
+        admission_reasons:tally,
+        observed_hit_fraction:admitted.length?matches/admitted.length:null
+      },
+      records:rows
+    };
+    return result;
+  }
+
   function makeReport(){
     const s=stats(),ev=s.ev;
     const lines=[
@@ -646,6 +729,7 @@
       'Validation cases: '+db.cases.length+'; reviewed: '+ev.reviewed.length,
       'Prospective matched: '+ev.matched+'; prospective missed: '+ev.missed,
       'Retrospective/exploratory reviewed: '+ev.exploratory.length,
+      'Evaluator admission: '+admissionPack().totals.admitted_binary_prospective+' of '+admissionPack().totals.inventoried_predictions+' inventoried predictions; remaining items excluded/pending.',
       'Evidence gaps: '+gaps().length,
       '',
       'PREDICTIONS'
@@ -697,6 +781,10 @@
       form.elements.namedItem('source_ref').value='Hosted transit candidate: '+h.signal+'; peak '+(h.peak_at||'unknown');
       form.elements.namedItem('assumptions').value='Provisional browser engine; event not predicted by transit alone; birth time sensitivity and independent ephemeris parity not certified.';
       form.elements.namedItem('claim').focus();notice='Timing prefills copied to draft. You must author an observable event claim and pass/fail criteria.';
+    }
+    if(kind==='download-research-pack'){
+      if(confirm('Export a PRIVATE evaluator research pack containing dates, prediction claims, source references, reviewer notes and actual outcome descriptions? This does not upload data; do not share it publicly.'))
+        download('astroproof-admission-pack-'+day()+'.json',JSON.stringify(admissionPack(),null,2),'application/json');
     }
     if(kind==='download-report')download('astroproof-validation-report-'+day()+'.txt',makeReport(),'text/plain');
     if(kind==='download-json')download('astroproof-validation-results-'+day()+'.json',JSON.stringify({generated_at:now(),protocol:VERSION,progress:stats(),evaluator:evaluation(),gaps:gaps()},null,2),'application/json');
@@ -760,6 +848,7 @@
   });
   window.AstroProofValidation={
     render:()=>{render()},
+    getAdmissionSummary:()=>admissionPack().totals,
     getSummary:()=>{const s=stats();return {progress_percent:s.percent,evidence_gates:s.completed,total_gates:s.gs.length,
        events:db.events.length,predictions:db.predictions.length,cases:db.cases.length,reviewed_cases:evaluation().reviewed.length,
        prospective_matches:evaluation().matched,prospective_misses:evaluation().missed}},
