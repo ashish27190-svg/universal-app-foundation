@@ -1004,6 +1004,7 @@
   });
   window.AstroProofValidation={
     render:()=>{render()},
+    getIntegrityDigest:()=>archiveDigest(),
     getAdmissionSummary:()=>admissionPack().totals,
     getFollowupSummary:()=>{const q=followups();return {today:q.today,total:q.items.length,counts:q.counts,items:q.items}},
     getSummary:()=>{const s=stats();return {progress_percent:s.percent,evidence_gates:s.completed,total_gates:s.gs.length,
