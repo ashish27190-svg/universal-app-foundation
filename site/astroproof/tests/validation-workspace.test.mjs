@@ -293,5 +293,34 @@ check('Research pack admits criterion-specific misses and excludes retrospective
   assert.ok(a.not_admitted>=1);
 });
 
+
+// Follow-up status must depend on date, not claims of success.
+const freshQ = boot('2026-11-21T08:00:00Z');
+freshQ.submit('apv-new-prediction', {
+  life_area: 'learning', specificity_class: 'specific', claim: 'Fictional certificate earned in December',
+  pass_fail_criteria: 'Dated certificate signed between December 1 and December 10',
+  window_start: '2026-12-01', window_end: '2026-12-10',
+  calculation_version: 'synthetic-fixture-v1', source_ref: 'fictional-rule',
+  rule_ids: 'FICTIONAL-FOLLOWUP', calibration_event_ids: '', assumptions: 'Fictional only',
+  competing_interpretations: 'Not evidence of real-world prediction'
+});
+const queueId = freshQ.data().predictions.at(-1).prediction_id;
+freshQ.action('freeze',queueId);
+check('Future forecast appears in follow-up queue but not in outcomes', () => {
+  const q = freshQ.window.AstroProofValidation.getFollowupSummary();
+  assert.equal(q.items.find(p=>p.prediction_id===queueId).state,'future');
+  assert.equal(freshQ.summary().prospective_matches,0);
+});
+const activeQ=boot('2026-12-04T08:00:00Z');
+check('Active forecast window remains unscored', () => {
+  assert.equal(activeQ.window.AstroProofValidation.getFollowupSummary().items
+    .find(p=>p.prediction_id===queueId).state,'active_window');
+});
+const overdueQ=boot('2026-12-12T08:00:00Z');
+check('Overdue forecast without a case remains UNREPORTED, not a miss', () => {
+  assert.equal(overdueQ.window.AstroProofValidation.getFollowupSummary().items
+    .find(p=>p.prediction_id===queueId).state,'overdue_unreported');
+  assert.equal(overdueQ.window.AstroProofValidation.getAdmissionSummary().admitted_misses,2);
+});
 console.log('PASS: ' + report.length + ' synthetic AstroProof validation workflow checks');
 for (const name of report) console.log('  ✓ ' + name);
