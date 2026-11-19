@@ -137,3 +137,27 @@ This analysis reports inventory counts, accepted prospective matches/misses, exc
 Reviewer identities, uploaded source content, historical data isolation, sealed prediction timestamps, independent witnesses and prospective denominators are still **unverified**. No personal historical case has been counted as scientifically validated.
 
 Do not present the workflow-completion percentage or the admitted-case hit fraction as a probability that future predictions will come true.
+
+## Second continuation checkpoint — 19 November 2026
+
+**Deployment:** GitHub Pages on `hosted-static-apps`; latest workflow passed **33 synthetic workflow tests plus 27 executed headless Chromium browser assertions**. Browser QA now requires a success attribute on the *rendered result element*, not success text embedded in script source. The previous text-only check was a false-positive risk and is no longer used.
+
+### Newly delivered functionality
+- **Follow-up Queue:** puts frozen forecasts into upcoming, active, overdue-unreported, evidence-review-pending, reviewed-retrospective, reviewed-prospective, and integrity-blocked categories. It uses the browser's local calendar date. Overdue and unreported is not automatically a miss.
+- **Follow-up CSV:** exports all frozen predictions with their current state and original pass/fail criteria.
+- **Local archive SHA-256 receipts:** the user can export a digest of the canonical full validation archive and later compare a saved receipt against current local records. This detects differences relative to a previously retained checksum; it is not a digital signature, authenticated timestamp, independently held witness, original-document verification, or safeguard against an attacker rewriting both archive and receipt.
+- **Pending-case dated evidence addenda:** missing references and follow-up notes can be added later without erasing the original submission. Cases originally created without an observed event may link a subsequently recorded eligible holdout event, with a dated link history and calibration leakage checking.
+- **Stricter miss rule:** any miss requires an actual post-deadline full-window observation; a pre-window promise to check later or a related in-window event alone is insufficient.
+- **Legacy backup compatibility:** older documented case reviews without criterion-specific fields can be restored but remain excluded from scoring until a supplemental criterion audit is recorded. Their original verdict is preserved.
+
+### Quality assurance and research
+- Hosted branch: 33 fictional synthetic workflow checks, including follow-up date transitions, missing evidence, calibration-event leakage, recording later observed events, case addenda, and incomplete misses.
+- Hosted branch: **27** actual Chromium browser assertions, including event and prediction entry, pending case and evidence-addendum storage, narrow-screen layout, local SHA-256 digest stability/change detection, and proper QA completion signaling.
+- Research branch: **9** synthetic independent evaluator tests, now requiring dated post-deadline surveillance for reported misses. CI passed.
+- These tests validate local software behavior. **No real user's predictive accuracy has been established.**
+
+### Remaining evidence and privacy gates
+- A truly independent source evidence store, document authenticity checks, trusted timestamps, user identity and reviewer authentication, and external archival witnesses are not implemented.
+- Browser-local data can be edited or lost. Local receipts should be retained elsewhere; no cloud sync is provided.
+- A user-entered follow-up note is not proof of no event; independently audited complete-window surveillance is still a research requirement.
+- Do not claim scientific validation, chance-adjusted prediction success, or blind historical testing from these features.
