@@ -105,6 +105,17 @@ first.submit('apv-review-case', {
 });
 check('Miss cannot be confirmed before forecast deadline', () => assert.equal(first.data().cases[0].review, null));
 const later = boot('2026-12-02T10:00:00Z');
+later.submit('apv-add-case-evidence', {
+  case_id: caseId, evidence_ref: 'synthetic-post-window-surveillance',
+  follow_up_coverage: 'Synthetic full-window documented review completed on 2 Dec',
+  note: 'Explicit check recorded after the frozen deadline'
+});
+check('Post-deadline evidence can be appended without altering original case submission',()=>{
+  const c=later.data().cases.find(x=>x.case_id===caseId);
+  assert.equal(c.evidence_addenda.length,1);
+  assert.equal(c.outcome_kind,'no_event');
+});
+
 later.submit('apv-review-case', {
   case_id: caseId, decision: 'miss', reviewer: 'Synthetic reviewer',
   evidence_ref: 'synthetic-followup', criterion_assessment: 'no',
@@ -273,6 +284,20 @@ afterWindow.submit('apv-new-case', {
   outcome_evidence_ref: 'synthetic-interview-message'
 });
 const criterionCaseId = afterWindow.data().cases.at(-1).case_id;
+afterWindow.submit('apv-review-case', {
+  case_id: criterionCaseId, decision: 'miss', criterion_assessment: 'no',
+  criterion_observation: 'No signed written offer even though related career event occurred in window',
+  reviewer: 'Synthetic reviewer', evidence_ref: 'synthetic-interview-message',
+  review_note: 'Date and life area overlap; frozen criterion failed'
+});
+check('A thematic in-window event cannot be scored a miss without post-deadline surveillance', () => {
+  assert.equal(afterWindow.data().cases.find(x=>x.case_id===criterionCaseId).review,null);
+});
+afterWindow.submit('apv-add-case-evidence',{
+  case_id:criterionCaseId, evidence_ref:'synthetic-no-signed-offer-record',
+  follow_up_coverage:'Synthetic registry checked after window: no written offer recorded between Nov 25 and 30',
+  note:'Follow-up confirms no signed written offer; interview does not count'
+});
 afterWindow.submit('apv-review-case', {
   case_id: criterionCaseId, decision: 'miss', criterion_assessment: 'no',
   criterion_observation: 'No signed written offer even though related career event occurred in window',
