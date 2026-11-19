@@ -1,7 +1,7 @@
 'use strict';
 (function(){
   const STORAGE='astroproof.validation.v1';
-  const VERSION='1.0.0';
+  const VERSION='1.1.0';
   const AREAS=['overview','career','money','relationships','family','wellbeing','learning','travel','other'];
   const TYPES={
     career_change:'Career / role change',promotion:'Promotion / greater responsibility',job_loss:'Job loss',
@@ -73,8 +73,14 @@
     return !!(e&&e.evidence_review&&e.evidence_review.decision==='source_accepted'&&
       clean(e.evidence_review.reviewer)&&clean(e.evidence_review.note)&&clean(e.evidence_review.source_ref));
   }
+  const FROZEN_FIELDS=['claim','pass_fail_criteria','life_area','window_start','window_end','peak_at','rule_ids','source_ref','calibration_event_ids','assumptions','competing_interpretations','calculation_version'];
+  function freezeSnapshotAgrees(p){
+    if(!p||!p.freeze_snapshot||typeof p.freeze_snapshot!=='object')return false;
+    return FROZEN_FIELDS.every(key=>JSON.stringify(p[key])===JSON.stringify(p.freeze_snapshot[key]));
+  }
   function predictionReady(p){
-    return !!(p&&p.frozen_at&&clean(p.claim)&&clean(p.pass_fail_criteria)&&validRange(p.window_start,p.window_end)&&clean(p.calculation_version));
+    return !!(p&&p.status==='frozen'&&p.frozen_at&&clean(p.claim)&&clean(p.pass_fail_criteria)&&
+      validRange(p.window_start,p.window_end)&&clean(p.calculation_version)&&freezeSnapshotAgrees(p));
   }
   function isFutureAtFreeze(p){
     return !!(p&&p.frozen_at&&p.window_start>p.frozen_at.slice(0,10));
@@ -100,13 +106,22 @@
     if(c.outcome_kind==='no_event'&&!clean(c.follow_up_coverage))return 'Explain how absence of the event was checked throughout the window.';
     return '';
   }
+  function criterionReview(c){
+    if(c?.review?.criterion_assessment)return c.review;
+    return c?.criterion_audit||null;
+  }
   function reviewedCase(c){
-    const r=c&&c.review;
+    const r=c&&c.review,criterion=criterionReview(c);
     if(!r||!['match','miss','indeterminate'].includes(r.decision))return false;
-    if(!clean(r.reviewer)||!clean(r.note)||!clean(r.evidence_ref)||!clean(r.criterion_observation))return false;
-    if(r.decision==='match')return r.criterion_assessment==='yes';
-    if(r.decision==='miss')return r.criterion_assessment==='no';
-    return r.criterion_assessment==='unknown';
+    if(!clean(r.reviewer)||!clean(r.note)||!clean(r.evidence_ref))return false;
+    if(!criterion||!clean(criterion.criterion_observation))return false;
+    if(c.criterion_audit&&criterion===c.criterion_audit){
+      if(c.criterion_audit.original_decision!==r.decision||!clean(criterion.reviewer)||
+        !clean(criterion.evidence_ref)||!clean(criterion.note))return false;
+    }
+    if(r.decision==='match')return criterion.criterion_assessment==='yes';
+    if(r.decision==='miss')return criterion.criterion_assessment==='no';
+    return criterion.criterion_assessment==='unknown';
   }
   function auditedCase(c){
     const p=getPred(c.prediction_id),e=c.event_id?getEvt(c.event_id):null;
@@ -346,7 +361,7 @@
            pair('Comparison',c.date_overlap===null?'Unknown':c.date_overlap?'Date ranges overlap':'Date ranges do not overlap')+
            pair('Evidence reference',c.outcome_evidence_ref||'Missing')+pair('Confidence',c.confidence||'unknown')+
            pair('Assumptions',c.assumptions||'Unstated')+pair('Competing explanations',c.competing_interpretations||'Not assessed')+
-           pair('Exact criterion satisfied',c.review?.criterion_assessment||'Unreviewed')+pair('Criterion-specific evidence',c.review?.criterion_observation||'Missing')+
+           pair('Exact criterion satisfied',criterionReview(c)?.criterion_assessment||'Needs criterion audit')+pair('Criterion-specific evidence',criterionReview(c)?.criterion_observation||'Missing')+
            pair('Reviewer',c.review?.reviewer||'Pending')+
            '<p class="apv-muted">'+escapeHTML(c.observation||'No observation')+'</p><details class="apv-details"><summary>Original frozen claim and test criteria</summary><p><b>Claim:</b> '+escapeHTML(p?.claim||'Missing')+'</p><p><b>Criterion:</b> '+escapeHTML(p?.pass_fail_criteria||'Missing')+'</p></details></div>';
        }).join(''):empty('No cases. Freeze a prediction first, then record and review its outcome.'))+
@@ -365,7 +380,7 @@
       textarea('review_note','Reviewer notes and limitations',true,'What was checked? What remains uncertain?')+
       submit('Record source review')+'</form>'+
       '<form id="apv-review-case" class="apv-form apv-card"><h3>Decide an outcome case</h3>'+
-      '<label>Pending case<select name="case_id" required>'+optionsFrom(cases,'case_id',c=>c.case_id+' — '+(getPred(c.prediction_id)?.claim||'missing').slice(0,70),'')+'</select></label>'+
+      '<label>Pending case or legacy review needing a criterion audit<select name="case_id" required>'+optionsFrom(cases,'case_id',c=>c.case_id+' — '+(getPred(c.prediction_id)?.claim||'missing').slice(0,70)+(c.review_status==='reviewed_documented'?' [existing decision: '+c.review?.decision+']':''),'')+'</select></label>'+
       '<label>Decision<select name="decision"><option value="indeterminate">Indeterminate / cannot verify</option><option value="match">Documented match</option><option value="miss">Documented miss</option></select></label>'+
       '<label>Was the EXACT frozen pass/fail criterion met?<select name="criterion_assessment" required><option value="unknown">Cannot establish / unknown</option><option value="yes">Yes — criterion met</option><option value="no">No — criterion not met</option></select></label>'+
       formField('reviewer','Reviewer name or initials','text',true,' maxlength="120"')+
@@ -525,7 +540,10 @@
     const p=getPred(c.prediction_id),e=c.event_id?getEvt(c.event_id):null;
     const problem=checkCaseReview(c,p,e);
     if(problem)return fail(problem);
-    if(reviewedCase(c)||c.review_status==='reviewed_documented')return fail('This case already has a recorded decision. Export and create a documented correction record rather than overwriting the review.');
+    if(reviewedCase(c)||c.criterion_audit)return fail('This case already has a complete recorded decision. Never overwrite it in place.');
+    const oldReview=!!(c.review_status==='reviewed_documented'&&c.review);
+    if(oldReview&&f.decision!==c.review.decision)
+      return fail('Legacy review decision must be preserved. A supplementary audit cannot silently change the original verdict.');
     if(!clean(f.reviewer)||!clean(f.evidence_ref)||!clean(f.review_note)||!clean(f.criterion_observation))
       return fail('Reviewer, evidence, criterion-specific observation and reasoning are required.');
     const assessment=clean(f.criterion_assessment)||'unknown';
@@ -540,12 +558,19 @@
     }else if(f.decision==='indeterminate'){
       if(assessment!=='unknown')return fail('An indeterminate decision must keep the frozen criterion unresolved.');
     }else return fail('Invalid review decision.');
-    c.review={decision:f.decision,criterion_assessment:assessment,criterion_observation:clean(f.criterion_observation),
+    const details={criterion_assessment:assessment,criterion_observation:clean(f.criterion_observation),
       reviewer:clean(f.reviewer),evidence_ref:clean(f.evidence_ref),
       note:clean(f.review_note),reviewed_at:now(),authentication:'operator-entered; not independently authenticated'};
-    c.review_status='reviewed_documented';
-    persist('validation_case_review_recorded','validation_case',c.case_id,
-      'Decision='+f.decision+'; mode='+c.evaluation_mode+'; reviewer='+f.reviewer+'; reference='+f.evidence_ref);
+    if(oldReview){
+      c.criterion_audit={...details,original_decision:c.review.decision};
+      persist('supplemental_legacy_criterion_audit','validation_case',c.case_id,
+        'Original decision retained: '+c.review.decision+'; criterion audit independently recorded by '+f.reviewer);
+    }else{
+      c.review={decision:f.decision,...details};
+      c.review_status='reviewed_documented';
+      persist('validation_case_review_recorded','validation_case',c.case_id,
+        'Decision='+f.decision+'; mode='+c.evaluation_mode+'; reviewer='+f.reviewer+'; reference='+f.evidence_ref);
+    }
   }
   function reviewHypothesis(f){
     const h=pick(f.hypothesis_id,db.hypotheses,'hypothesis_id');
