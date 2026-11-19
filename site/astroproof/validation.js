@@ -100,7 +100,14 @@
     if(c.outcome_kind==='no_event'&&!clean(c.follow_up_coverage))return 'Explain how absence of the event was checked throughout the window.';
     return '';
   }
-  function reviewedCase(c){return c.review&&['match','miss','indeterminate'].includes(c.review.decision)&&clean(c.review.reviewer)&&clean(c.review.note)&&clean(c.review.evidence_ref)}
+  function reviewedCase(c){
+    const r=c&&c.review;
+    if(!r||!['match','miss','indeterminate'].includes(r.decision))return false;
+    if(!clean(r.reviewer)||!clean(r.note)||!clean(r.evidence_ref)||!clean(r.criterion_observation))return false;
+    if(r.decision==='match')return r.criterion_assessment==='yes';
+    if(r.decision==='miss')return r.criterion_assessment==='no';
+    return r.criterion_assessment==='unknown';
+  }
   function auditedCase(c){
     const p=getPred(c.prediction_id),e=c.event_id?getEvt(c.event_id):null;
     return reviewedCase(c)&&!checkCaseReview(c,p,e);
@@ -339,8 +346,9 @@
            pair('Comparison',c.date_overlap===null?'Unknown':c.date_overlap?'Date ranges overlap':'Date ranges do not overlap')+
            pair('Evidence reference',c.outcome_evidence_ref||'Missing')+pair('Confidence',c.confidence||'unknown')+
            pair('Assumptions',c.assumptions||'Unstated')+pair('Competing explanations',c.competing_interpretations||'Not assessed')+
+           pair('Exact criterion satisfied',c.review?.criterion_assessment||'Unreviewed')+pair('Criterion-specific evidence',c.review?.criterion_observation||'Missing')+
            pair('Reviewer',c.review?.reviewer||'Pending')+
-           '<p class="apv-muted">'+escapeHTML(c.observation||'No observation')+'</p></div>';
+           '<p class="apv-muted">'+escapeHTML(c.observation||'No observation')+'</p><details class="apv-details"><summary>Original frozen claim and test criteria</summary><p><b>Claim:</b> '+escapeHTML(p?.claim||'Missing')+'</p><p><b>Criterion:</b> '+escapeHTML(p?.pass_fail_criteria||'Missing')+'</p></details></div>';
        }).join(''):empty('No cases. Freeze a prediction first, then record and review its outcome.'))+
       '<div class="apv-actions">'+action('tab','review','Review pending cases')+'</div>';
   }
@@ -359,9 +367,11 @@
       '<form id="apv-review-case" class="apv-form apv-card"><h3>Decide an outcome case</h3>'+
       '<label>Pending case<select name="case_id" required>'+optionsFrom(cases,'case_id',c=>c.case_id+' — '+(getPred(c.prediction_id)?.claim||'missing').slice(0,70),'')+'</select></label>'+
       '<label>Decision<select name="decision"><option value="indeterminate">Indeterminate / cannot verify</option><option value="match">Documented match</option><option value="miss">Documented miss</option></select></label>'+
+      '<label>Was the EXACT frozen pass/fail criterion met?<select name="criterion_assessment" required><option value="unknown">Cannot establish / unknown</option><option value="yes">Yes — criterion met</option><option value="no">No — criterion not met</option></select></label>'+
       formField('reviewer','Reviewer name or initials','text',true,' maxlength="120"')+
       formField('evidence_ref','Evidence actually checked for the case','text',true,' maxlength="400"')+
-      textarea('review_note','Decision reasoning and caveats',true,'Why does the frozen criterion pass or fail?')+
+      textarea('criterion_observation','Exact criterion comparison — what fact proves or fails the frozen claim?',true,'Quote or summarize the specific observable criterion and the evidence supporting your conclusion.')+
+      textarea('review_note','Decision reasoning and caveats',true,'Why does the original frozen criterion pass or fail? Note uncertainties or alternative explanations.')+
       submit('Record case decision; apply safeguards')+'</form>'+
       '<form id="apv-review-hypothesis" class="apv-form apv-card"><h3>Review a tentative birth-time hypothesis</h3>'+
       '<label>Hypothesis<select name="hypothesis_id" required>'+optionsFrom(hs,'hypothesis_id',h=>h.hypothesis_id+' ('+h.offset_min+' min)','')+'</select></label>'+
@@ -515,14 +525,23 @@
     const p=getPred(c.prediction_id),e=c.event_id?getEvt(c.event_id):null;
     const problem=checkCaseReview(c,p,e);
     if(problem)return fail(problem);
-    if(!clean(f.reviewer)||!clean(f.evidence_ref)||!clean(f.review_note))return fail('Reviewer identity, evidence and reasoning must be recorded.');
-    if(f.decision==='miss'&&p.window_end>=day())return fail('A miss cannot be confirmed before the full prediction window ends.');
+    if(reviewedCase(c)||c.review_status==='reviewed_documented')return fail('This case already has a recorded decision. Export and create a documented correction record rather than overwriting the review.');
+    if(!clean(f.reviewer)||!clean(f.evidence_ref)||!clean(f.review_note)||!clean(f.criterion_observation))
+      return fail('Reviewer, evidence, criterion-specific observation and reasoning are required.');
+    const assessment=clean(f.criterion_assessment)||'unknown';
+    if(!['yes','no','unknown'].includes(assessment))return fail('Invalid criterion assessment.');
     if(f.decision==='match'){
+      if(assessment!=='yes')return fail('A match requires an explicit YES that the ORIGINAL frozen criterion was satisfied.');
       if(!e)return fail('A match requires a documented matching event, not merely absence of information.');
       if(!c.date_overlap)return fail('An event outside the frozen date window cannot be marked a match.');
-    }
-    if(f.decision==='miss'&&c.outcome_kind==='event'&&c.date_overlap)return fail('An overlapping event needs a criteria-based review; use indeterminate if the event does not satisfy the claim. Do not silently turn a date overlap into a miss.');
-    c.review={decision:f.decision,reviewer:clean(f.reviewer),evidence_ref:clean(f.evidence_ref),
+    }else if(f.decision==='miss'){
+      if(assessment!=='no')return fail('A miss requires an explicit NO that the ORIGINAL frozen criterion was satisfied.');
+      if(p.window_end>=day())return fail('A miss cannot be confirmed before the full prediction window ends.');
+    }else if(f.decision==='indeterminate'){
+      if(assessment!=='unknown')return fail('An indeterminate decision must keep the frozen criterion unresolved.');
+    }else return fail('Invalid review decision.');
+    c.review={decision:f.decision,criterion_assessment:assessment,criterion_observation:clean(f.criterion_observation),
+      reviewer:clean(f.reviewer),evidence_ref:clean(f.evidence_ref),
       note:clean(f.review_note),reviewed_at:now(),authentication:'operator-entered; not independently authenticated'};
     c.review_status='reviewed_documented';
     persist('validation_case_review_recorded','validation_case',c.case_id,
