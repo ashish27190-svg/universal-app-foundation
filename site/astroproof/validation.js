@@ -1,7 +1,7 @@
 'use strict';
 (function(){
   const STORAGE='astroproof.validation.v1';
-  const VERSION='1.1.0';
+  const VERSION='1.2.0';
   const AREAS=['overview','career','money','relationships','family','wellbeing','learning','travel','other'];
   const TYPES={
     career_change:'Career / role change',promotion:'Promotion / greater responsibility',job_loss:'Job loss',
@@ -17,14 +17,18 @@
     health_event:'wellbeing',relocation:'travel',travel:'travel',other:'other'
   };
   const TABS=[
-    ['summary','Overview'],['events','Life Events'],['hypotheses','Rectification'],
+    ['summary','Overview'],['followups','Follow-up Queue'],['events','Life Events'],['hypotheses','Rectification'],
     ['predictions','Predictions'],['cases','Validation Cases'],['review','Pending Review'],
     ['gaps','Evidence Gaps'],['advice','Advice'],['decisions','Decision History']
   ];
   const root=document.getElementById('apv-root');
   if(!root)return;
   const now=()=>new Date().toISOString();
-  const day=()=>now().slice(0,10);
+  const day=()=>{
+    // Event date boundaries are local-calendar dates, not UTC instant boundaries.
+    const d=new Date(),pad=n=>String(n).padStart(2,'0');
+    return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  };
   const uid=p=>p+'-'+(typeof crypto!=='undefined'&&crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random().toString(36).slice(2));
   const escapeHTML=v=>String(v==null?'':v).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
   const escapeAttr=escapeHTML;
@@ -238,6 +242,71 @@
        db.hypotheses.filter(h=>!h.review||h.review.decision==='unresolved').length;
     return {ev,gs,completed,percent,pendingReview};
   }
+  function followups(){
+    // Include EVERY frozen prediction; an unreported outcome is never a recorded miss.
+    const today=day(),items=db.predictions.filter(p=>p.status==='frozen').map(p=>{
+      const cases=db.cases.filter(c=>c.prediction_id===p.prediction_id);
+      const accepted=cases.some(c=>auditedCase(c));
+      const prospectivelyAdmitted=cases.some(c=>admittedProspectiveCase(c));
+      let state='future';
+      if(!predictionReady(p))state='integrity_blocked';
+      else if(accepted)state=prospectivelyAdmitted?'reviewed_prospective':'reviewed_exploratory';
+      else if(cases.length)state='pending_evidence_review';
+      else if(p.window_end<today)state='overdue_unreported';
+      else if(p.window_start<=today)state='active_window';
+      const priority={integrity_blocked:0,overdue_unreported:1,pending_evidence_review:2,active_window:3,
+        future:4,reviewed_exploratory:5,reviewed_prospective:6}[state];
+      return {prediction_id:p.prediction_id,claim:p.claim,life_area:p.life_area,
+        window_start:p.window_start,window_end:p.window_end,peak_at:p.peak_at,
+        frozen_at:p.frozen_at,state,priority,review_count:cases.length,
+        source_ref:p.source_ref||'',test_criteria:p.pass_fail_criteria};
+    }).sort((a,b)=>a.priority-b.priority||a.window_start.localeCompare(b.window_start));
+    const counts={};
+    for(const p of items)counts[p.state]=(counts[p.state]||0)+1;
+    return {items,counts,today};
+  }
+  function followupView(){
+    const q=followups();
+    const names={
+      future:'Upcoming — no outcome due yet',
+      active_window:'Window active — observe, do not declare a result',
+      overdue_unreported:'Window ended — outcome not reported',
+      pending_evidence_review:'Outcome recorded — evidence review pending',
+      reviewed_exploratory:'Reviewed, but not prospective',
+      reviewed_prospective:'Reviewed prospective case (operator-entered)',
+      integrity_blocked:'Frozen record needs integrity review'
+    };
+    const cards=q.items.map(p=>{
+      const why=p.state==='overdue_unreported'?'No outcome has been recorded. Absence of a report is NOT evidence of a miss.':
+      p.state==='active_window'?'Record only what actually happens; a final miss cannot be judged until the full window has ended.':
+      p.state==='integrity_blocked'?'This freeze is inconsistent or missing required fields. No score can be admitted.':
+      p.state==='future'?'Forecast is frozen; outcome monitoring has not started.':
+      p.state==='pending_evidence_review'?'Source or criterion-specific review is incomplete; no verified outcome is inferred.':
+      p.state==='reviewed_exploratory'?'A retrospective review must not be counted as a prospective success.':
+      'A reviewed case is recorded, but evidence authenticity and predictive validity are not independently established.';
+      const next=p.state==='pending_evidence_review'?action('tab','review','Review submitted evidence'):
+        ['overdue_unreported','active_window'].includes(p.state)?action('open-case',p.prediction_id,'Record an actual outcome'):
+        p.state==='integrity_blocked'?action('tab','gaps','Inspect missing evidence'):
+        action('tab','predictions','Inspect prediction');
+      return '<div class="apv-card"><h3>'+escapeHTML(p.claim)+' '+status(names[p.state])+'</h3>'+
+        pair('Window',p.window_start+' → '+p.window_end)+pair('Life area',p.life_area)+
+        pair('Frozen test criterion',p.test_criteria)+pair('Source pointer',p.source_ref||'Unknown')+
+        '<p class="apv-muted">'+escapeHTML(why)+'</p><div class="apv-actions">'+next+'</div></div>';
+    }).join('');
+    return '<h3 class="apv-section-title">Forecast follow-up queue</h3>'+
+      '<p class="apv-muted">Local date: '+escapeHTML(q.today)+
+      '. This is an on-screen worklist, not a scheduled reminder or continuous monitor. Refresh the site to update date-based status.</p>'+
+      '<div class="apv-quick">'+[
+        ['Past deadline / no report',q.counts.overdue_unreported||0],
+        ['Active windows',q.counts.active_window||0],
+        ['Evidence review pending',q.counts.pending_evidence_review||0],
+        ['Upcoming',q.counts.future||0]
+      ].map(x=>'<div class="apv-kpi"><span>'+x[0]+'</span><b>'+x[1]+'</b></div>').join('')+'</div>'+
+      '<div class="apv-warning">Unreported outcomes and absent events stay <b>unknown</b>. The system does not automatically score an overdue prediction as a miss or a date overlap as a match.</div>'+
+      (cards||empty('No frozen forecasts yet. Create a specific prediction, define the pass/fail rule, and freeze it before you expect an outcome.'))+
+      '<div class="apv-actions">'+action('download-followups','','Download follow-up queue (.csv)')+
+      action('tab','predictions','Draft a prediction')+'</div>';
+  }
   function overview(){
     const s=stats(),ev=s.ev;
     return '<div class="apv-warning"><b>Evidence status:</b> '+s.completed+' of '+s.gs.length+
@@ -245,6 +314,11 @@
       '<h3 class="apv-section-title">Evidence-recorded workflow progress: '+s.percent+'%</h3>'+
       '<div class="apv-progress" role="progressbar" aria-valuenow="'+s.percent+'" aria-valuemin="0" aria-valuemax="100" aria-label="Evidence-backed workflow progress"><div style="width:'+s.percent+'%"></div></div>'+
       '<div class="apv-checks">'+s.gs.map(g=>'<div>'+status(g.done?'Evidence recorded':'Pending')+' '+escapeHTML(g.name)+'</div>').join('')+'</div>'+
+      '<div class="apv-card"><h3>Forecast follow-up</h3><p>Closed windows without an outcome report: <b>'+ (followups().counts.overdue_unreported||0) +
+      '</b> · Active windows: <b>'+(followups().counts.active_window||0)+
+      '</b> · Pending evidence review: <b>'+(followups().counts.pending_evidence_review||0)+
+      '</b></p><p class="apv-muted">Do not count an overdue unreported claim as a miss. Review the original frozen criterion.</p>'+
+      action('tab','followups','Open follow-up queue')+'</div>'+
       '<div class="apv-quick">'+[
         ['Life events',db.events.length],['Frozen predictions',ev.frozen.length],['Reviewed cases',ev.reviewed.length],['Pending review',s.pendingReview]
       ].map(x=>'<div class="apv-kpi"><span>'+x[0]+'</span><b>'+x[1]+'</b></div>').join('')+'</div>'+
@@ -442,7 +516,7 @@
   }
   function render(){
     const t=tab;
-    const map={summary:overview,events:eventsView,hypotheses:hypothesisView,predictions:predictionsView,cases:casesView,review:reviewView,gaps:gapView,advice:adviceView,decisions:decisionsView};
+    const map={summary:overview,followups:followupView,events:eventsView,hypotheses:hypothesisView,predictions:predictionsView,cases:casesView,review:reviewView,gaps:gapView,advice:adviceView,decisions:decisionsView};
     root.className='apv-root';
     root.innerHTML='<div class="apv-tabs" role="tablist" aria-label="AstroProof evidence workspace">'+
       TABS.map(x=>'<button type="button" role="tab" aria-selected="'+(t===x[0])+'" data-apv-tab="'+x[0]+'">'+x[1]+'</button>').join('')+'</div>'+
@@ -754,6 +828,12 @@
     const blob=new Blob([body],{type:mime||'text/plain'}),url=URL.createObjectURL(blob),a=document.createElement('a');
     a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
   }
+  function followupCSV(){
+    const rows=[['prediction_id','life_area','claim','window_start','window_end','frozen_at','status','original_test_criterion']];
+    for(const p of followups().items)rows.push([p.prediction_id,p.life_area,p.claim,p.window_start,p.window_end,
+      p.frozen_at,p.state,p.test_criteria]);
+    return rows.map(row=>row.map(v=>'"'+String(v==null?'':v).replaceAll('"','""')+'"').join(',')).join('\n');
+  }
   function exportCSV(){
     const rows=[['case_id','prediction_id','frozen_at','window_start','window_end','life_area','case_mode','event_id','observed_overlap','review_decision','reviewer','evidence_ref','reviewed_at']];
     for(const c of db.cases){
@@ -768,6 +848,12 @@
     const kind=button.dataset.apvAction,id=button.dataset.id;
     if(kind==='tab'){tab=id;notice='';render()}
     if(kind==='freeze')freezePrediction(id);
+    if(kind==='open-case'){
+      tab='cases';notice='Select the frozen prediction and record the observed outcome. Do not infer a miss from a missing report.';render();
+      const selector=root.querySelector('#apv-new-case select[name="prediction_id"]');
+      if(selector)selector.value=id;
+    }
+    if(kind==='download-followups')download('astroproof-followups-'+day()+'.csv',followupCSV(),'text/csv');
     if(kind==='snapshot')snapshot();
     if(kind==='legacy-import')importLegacy();
     if(kind==='load-candidates'){
@@ -851,6 +937,7 @@
   window.AstroProofValidation={
     render:()=>{render()},
     getAdmissionSummary:()=>admissionPack().totals,
+    getFollowupSummary:()=>{const q=followups();return {today:q.today,total:q.items.length,counts:q.counts,items:q.items}},
     getSummary:()=>{const s=stats();return {progress_percent:s.percent,evidence_gates:s.completed,total_gates:s.gs.length,
        events:db.events.length,predictions:db.predictions.length,cases:db.cases.length,reviewed_cases:evaluation().reviewed.length,
        prospective_matches:evaluation().matched,prospective_misses:evaluation().missed}},
