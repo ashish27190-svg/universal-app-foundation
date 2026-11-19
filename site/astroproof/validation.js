@@ -656,7 +656,9 @@
         life_area:p.life_area,claim:p.claim,
         window_start:p.window_start,window_end:p.window_end,peak_at:p.peak_at,
         pass_fail_criteria:p.pass_fail_criteria,calculation_version:p.calculation_version,
-        supporting_rule_ids:p.rule_ids||[],calibration_event_ids:p.calibration_event_ids||[],
+        rule_ids:p.rule_ids||[],supporting_rule_ids:p.rule_ids||[],
+        assumptions:p.assumptions||'',competing_interpretations:p.competing_interpretations||'',
+        calibration_event_ids:p.calibration_event_ids||[],
         source_ref:p.source_ref||null,freeze_snapshot:p.freeze_snapshot||null,
         case:caseRecord?{
           case_id:caseRecord.case_id,
