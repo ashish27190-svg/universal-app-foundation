@@ -74,6 +74,9 @@ async function run(){
   root.querySelector('[data-apv-tab="cases"]').click();
   let caseForm=root.querySelector('#apv-new-case');
   assert(!!caseForm,'Outcome comparison form is accessible');
+  const choice=caseForm.elements.namedItem('prediction_id');
+  assert(choice?.options.length>1,'Frozen prediction appears in case selection');
+  fill(caseForm,'prediction_id',choice.options[1].value);
   fill(caseForm,'observation','Synthetic pending outcome, not a real event');
   caseForm.requestSubmit();
   assert(w.AstroProofValidation.getSummary().cases===1,'Incomplete outcome case is stored as pending');
