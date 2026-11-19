@@ -479,6 +479,9 @@
       '<form id="apv-add-case-evidence" class="apv-form apv-card"><h3>Add evidence to a pending outcome case</h3>'+
       '<p class="apv-muted">This appends a dated evidence note without deleting the original observation. For a miss, document the actual full-window check AFTER the prediction deadline.</p>'+
       '<label>Pending case<select name="case_id" required>'+optionsFrom(cases,'case_id',c=>c.case_id+' — '+(getPred(c.prediction_id)?.claim||'missing').slice(0,70),'')+'</select></label>'+
+      '<label>Newly observed actual event (optional — only for cases not yet linked)<select name="observed_event_id"><option value="">No new event to link</option>'+
+      optionsFrom(db.events.filter(e=>e.purpose==='validation_holdout'&&!e.used_for_rectification),'event_id',
+        e=>e.event_start+' — '+(TYPES[e.event_type]||e.event_type),'',false)+'</select></label>'+
       formField('evidence_ref','New evidence/source reference (optional)','text',false,' maxlength="400"')+
       textarea('follow_up_coverage','Actual follow-up covering the prediction window (if applicable)',false,
         'Record dated checks and how you established the absence of the precise frozen event, not merely a promise to check.')+
@@ -638,15 +641,30 @@
     if(reviewedCase(c)||c.criterion_audit||c.review_status==='reviewed_documented')
       return fail('A completed decision cannot be silently amended. Record a separate documented correction.');
     const note=clean(f.note),ref=clean(f.evidence_ref),coverage=clean(f.follow_up_coverage);
-    if(!note||(!ref&&!coverage))return fail('Provide a dated note and either a new evidence reference or an actual follow-up observation.');
+    const eventId=clean(f.observed_event_id);
+    const linkedEvent=eventId?getEvt(eventId):null;
+    if(eventId&&!linkedEvent)return fail('Selected event was not found.');
+    if(eventId&&c.event_id&&c.event_id!==eventId)
+      return fail('An already linked event cannot be replaced silently. Preserve the old case and record a documented correction.');
+    const p=getPred(c.prediction_id);
+    const safety=linkedEvent?caseSafety(p,linkedEvent):null;
+    if(linkedEvent&&!safety.allowed)return fail('Cannot attach event: '+safety.reason);
+    if(!note||(!ref&&!coverage&&!linkedEvent))
+      return fail('Provide a dated note plus a new source reference, a follow-up observation or a valid actual event.');
     const addition={addendum_id:uid('case-evidence'),recorded_at:now(),source_ref:ref,
+      linked_event_id:linkedEvent?.event_id||null,previous_outcome_kind:c.outcome_kind,
       follow_up_coverage:coverage,note,actor:'local operator — unverified'};
     if(!Array.isArray(c.evidence_addenda))c.evidence_addenda=[];
     c.evidence_addenda.push(addition);
+    if(linkedEvent){
+      c.event_id=linkedEvent.event_id;c.outcome_kind='event';c.date_overlap=safety.overlap;
+      c.evaluation_mode=safety.prospective?'prospective':'retrospective_exploratory';
+    }
     if(ref)c.outcome_evidence_ref=c.outcome_evidence_ref?(c.outcome_evidence_ref+'; '+ref):ref;
     if(coverage)c.follow_up_coverage=c.follow_up_coverage?(c.follow_up_coverage+'\n'+coverage):coverage;
     persist('pending_case_evidence_appended','validation_case',c.case_id,
-      'Dated addendum '+addition.addendum_id+'; source '+(ref||'not supplied')+'; post-window coverage still requires review');
+      'Dated addendum '+addition.addendum_id+'; linked event '+(eventId||'none')+
+      '; source '+(ref||'not supplied')+'; no validation decision implied');
   }
   function reviewSource(f){
     const e=getEvt(f.event_id);if(!e)return fail('Select a valid event.');
