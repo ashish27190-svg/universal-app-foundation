@@ -76,8 +76,14 @@ function assess(row,generatedAt){
        add('negative_window_not_completed_or_reviewed');
     if(c.review?.decision==='match')add('cannot_call_absence_a_match');
   }else add('unknown_outcome_kind');
-  if(c.review?.decision==='miss'&&(!date(p.window_end)||p.window_end>=today))
-    add('miss_before_window_end');
+  if(c.review?.decision==='miss'){
+    const submittedAfter=instant(c.reported_at)&&date(p.window_end)&&c.reported_at.slice(0,10)>p.window_end;
+    const appendedAfter=Array.isArray(c.evidence_addenda)&&c.evidence_addenda.some(a=>
+      instant(a.recorded_at)&&date(p.window_end)&&a.recorded_at.slice(0,10)>p.window_end&&nonempty(a.follow_up_coverage));
+    if(!nonempty(c.follow_up_coverage)||!(submittedAfter||appendedAfter))
+      add('full_window_negative_followup_missing_or_premature');
+    if(!date(p.window_end)||p.window_end>=today)add('miss_before_window_end');
+  }
   if(c.review?.decision==='indeterminate')add('indeterminate_not_binary');
   return {admitted:reasons.length===0,reasons};
 }
