@@ -98,3 +98,23 @@ test('unreviewed source fails even if event is in the correct window',()=>{
   assert.equal(r.summary.matches,0);
   assert.ok(r.summary.excluded_by_reason.event_source_not_reviewed);
 });
+
+
+test('related in-window event is not a miss until full-window negative surveillance is recorded after deadline',()=>{
+  const p=fixture(),x=p.records[0];
+  x.case.review.decision='miss';
+  x.case.review.criterion_assessment='no';
+  x.case.review.criterion_observation='Only an interview occurred; the frozen signed-offer criterion failed';
+  x.case.follow_up_coverage='';
+  let r=evaluateAdmissionPack(p);
+  assert.equal(r.summary.admitted_binary_prospective,0);
+  assert.ok(r.summary.excluded_by_reason.full_window_negative_followup_missing_or_premature);
+  x.case.follow_up_coverage='Reviewed fictional dated records through the full November window';
+  x.case.evidence_addenda=[{
+    recorded_at:'2026-12-01T11:00:00.000Z',source_ref:'fictional-no-offer-register',
+    follow_up_coverage:'Complete dated review after November 30'
+  }];
+  r=evaluateAdmissionPack(p);
+  assert.equal(r.summary.misses,1);
+  assert.equal(r.summary.admitted_binary_prospective,1);
+});
