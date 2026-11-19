@@ -71,6 +71,21 @@ async function run(){
   assert(followup.counts.future===1,'Future forecast is tracked without outcome status');
   root.querySelector('[data-apv-tab="followups"]').click();
   assert(root.textContent.includes('Forecast follow-up queue'),'A new user can open the follow-up worklist');
+  root.querySelector('[data-apv-tab="cases"]').click();
+  let caseForm=root.querySelector('#apv-new-case');
+  assert(!!caseForm,'Outcome comparison form is accessible');
+  fill(caseForm,'observation','Synthetic pending outcome, not a real event');
+  caseForm.requestSubmit();
+  assert(w.AstroProofValidation.getSummary().cases===1,'Incomplete outcome case is stored as pending');
+  root.querySelector('[data-apv-tab="review"]').click();
+  let evidenceForm=root.querySelector('#apv-add-case-evidence');
+  assert(!!evidenceForm,'Pending case evidence addendum form is available');
+  fill(evidenceForm,'evidence_ref','synthetic-evidence-pointer');
+  fill(evidenceForm,'note','Synthetic dated addendum, no real evidence verified');
+  evidenceForm.requestSubmit();
+  assert(w.AstroProofValidation.getSummary().prospective_matches===0 &&
+    w.AstroProofValidation.getSummary().prospective_misses===0,
+    'Appending an evidence pointer never automatically verifies a prediction');
   const m=doc.documentElement.scrollWidth;
   const frameWidth=frame.clientWidth;
   assert(m<=frameWidth+25,'Mobile-sized layout has no major horizontal overflow: '+m+'px vs '+frameWidth+'px');
