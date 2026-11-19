@@ -92,11 +92,14 @@ async function run(){
   const summary=w.AstroProofValidation.getSummary();
   assert(summary.prospective_matches===0&&summary.prospective_misses===0,'No match or miss fabricated by UI');
   w.localStorage.removeItem('astroproof.validation.v1');
-  status.textContent='APV_BROWSER_PASS — '+checks.length+' browser assertions\n'+checks.join('\n');
+  status.setAttribute('data-qa-state','pass');
+  status.setAttribute('data-qa-count',String(checks.length));
+  status.textContent='APV_'+'BROWSER_PASS — '+checks.length+' browser assertions\n'+checks.join('\n');
 }
 window.addEventListener('load',()=>{
   Promise.resolve().then(run).catch(e=>{
-    status.textContent='APV_BROWSER_FAIL — '+String(e.stack||e);
+    status.setAttribute('data-qa-state','fail');
+    status.textContent='APV_'+'BROWSER_FAIL — '+String(e.stack||e);
   });
 });
 </script></body></html>
