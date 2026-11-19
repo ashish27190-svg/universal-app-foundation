@@ -108,6 +108,7 @@
     if(!clean(c.outcome_evidence_ref))return 'Case outcome evidence reference is missing.';
     if(c.outcome_kind==='no_event'&&p.window_end>=day())return 'Cannot review an absence of event before the entire prediction window closes.';
     if(c.outcome_kind==='no_event'&&!clean(c.follow_up_coverage))return 'Explain how absence of the event was checked throughout the window.';
+    if(c.review?.decision==='miss'&&!clean(c.follow_up_coverage))return 'Miss cannot be admitted without a documented full-window follow-up check.';
     return '';
   }
   function criterionReview(c){
@@ -439,7 +440,7 @@
       '<label>Outcome confidence (not a probability)<select name="confidence"><option value="unknown">Unknown</option><option value="tentative">Tentative</option><option value="medium">Medium</option><option value="high">High</option></select></label>'+ 
       textarea('assumptions','Outcome interpretation assumptions',false,'What remains uncertain about this comparison?')+
       textarea('competing_interpretations','Competing non-astrological explanations',false,'Other reasons this might have happened')+
-      textarea('follow_up_coverage','If no event: how was the full window checked?',false,'Required to confirm a miss when no event is recorded')+
+      textarea('follow_up_coverage','If a miss is possible: how did you check the ENTIRE window?',false,'Required before recording any miss, including when a related event occurred without satisfying the frozen claim.')+
       submit('Create case as pending review')+'</form>'+
       '<h3 class="apv-section-title">Validation cases ('+db.cases.length+')</h3>'+
       (db.cases.length?db.cases.slice().reverse().map(c=>{
@@ -643,6 +644,7 @@
       if(!c.date_overlap)return fail('An event outside the frozen date window cannot be marked a match.');
     }else if(f.decision==='miss'){
       if(assessment!=='no')return fail('A miss requires an explicit NO that the ORIGINAL frozen criterion was satisfied.');
+      if(!clean(c.follow_up_coverage))return fail('A miss requires evidence of follow-up covering the entire frozen window, even if an unrelated or partial event occurred.');
       if(p.window_end>=day())return fail('A miss cannot be confirmed before the full prediction window ends.');
     }else if(f.decision==='indeterminate'){
       if(assessment!=='unknown')return fail('An indeterminate decision must keep the frozen criterion unresolved.');
