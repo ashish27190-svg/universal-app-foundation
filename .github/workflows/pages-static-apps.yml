@@ -48,6 +48,33 @@ jobs:
           node --check site/astroproof/validation.js
           node site/astroproof/tests/validation-workspace.test.mjs
 
+      - name: Browser QA — AstroProof evidence workflow
+        run: |
+          set -euo pipefail
+          if command -v google-chrome >/dev/null 2>&1; then
+            CHROME=google-chrome
+          elif command -v chromium >/dev/null 2>&1; then
+            CHROME=chromium
+          else
+            echo "No Chrome/Chromium browser available on runner"; exit 1
+          fi
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory site >/tmp/astroproof-qa-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" >/dev/null 2>&1 || true' EXIT
+          sleep 2
+          "$CHROME" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
+            --hide-scrollbars --virtual-time-budget=7000 \
+            --window-size=800,960 --dump-dom \
+            http://127.0.0.1:8765/astroproof/tests/browser-smoke.html \
+            >/tmp/astroproof-browser-dom.html 2>/tmp/astroproof-browser-errors.log
+          if ! grep -q "APV_BROWSER_PASS" /tmp/astroproof-browser-dom.html; then
+            echo "Browser QA failed:"
+            grep -E "APV_BROWSER_FAIL|APV_BROWSER_PENDING" /tmp/astroproof-browser-dom.html | head -n 5 || true
+            tail -n 20 /tmp/astroproof-browser-errors.log || true
+            exit 1
+          fi
+          grep -o 'APV_BROWSER_PASS[^<]*' /tmp/astroproof-browser-dom.html | head -n 1
+
       - uses: actions/configure-pages@v5
 
       - uses: actions/upload-pages-artifact@v4
