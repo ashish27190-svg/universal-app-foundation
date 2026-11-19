@@ -347,5 +347,66 @@ check('Overdue forecast without a case remains UNREPORTED, not a miss', () => {
     .find(p=>p.prediction_id===queueId).state,'overdue_unreported');
   assert.equal(overdueQ.window.AstroProofValidation.getAdmissionSummary().admitted_misses,2);
 });
+
+// A monitoring case created before a forecast resolves can receive a later real event,
+// without silently replacing the initial observation or counting a success.
+const monitor=boot('2026-11-20T09:00:00Z');
+monitor.submit('apv-new-prediction',{
+  life_area:'career',claim:'Synthetic signed offer by Nov 30',
+  pass_fail_criteria:'Written and signed offer by Nov 30',specificity_class:'specific',
+  window_start:'2026-11-25',window_end:'2026-11-30',
+  calculation_version:'synthetic-fixture-v1',source_ref:'synthetic-source',
+  rule_ids:'FIXTURE-MONITOR',calibration_event_ids:'',assumptions:'Synthetic only',
+  competing_interpretations:'Independent decisions'
+});
+const monitoringPrediction=monitor.data().predictions.at(-1).prediction_id;
+monitor.action('freeze',monitoringPrediction);
+monitor.submit('apv-new-case',{
+  prediction_id:monitoringPrediction,event_id:'',observation:'Window not yet completed',
+  outcome_evidence_ref:'',follow_up_coverage:''
+});
+const monitoringCase=monitor.data().cases.at(-1).case_id;
+check('Early monitoring entry is pending without being called a miss',()=>{
+  const cc=monitor.data().cases.find(c=>c.case_id===monitoringCase);
+  assert.equal(cc.outcome_kind,'no_event');
+  assert.equal(cc.review,null);
+});
+const monitorLater=boot('2026-12-02T08:00:00Z');
+monitorLater.submit('apv-add-case-evidence',{
+  case_id:monitoringCase,observed_event_id:first.data().events[0].event_id,
+  evidence_ref:'synthetic-leak-test',note:'Attempt to add calibration evidence'
+});
+check('An event used for rectification cannot be attached later through an addendum',()=>{
+  const cc=monitorLater.data().cases.find(c=>c.case_id===monitoringCase);
+  assert.equal(cc.event_id,null);
+  assert.equal(cc.evidence_addenda.length,0);
+});
+monitorLater.submit('apv-new-event',{
+  event_type:'career_change',life_area:'career',event_start:'2026-11-27',
+  date_precision:'exact',purpose:'validation_holdout',source_kind:'dated_message',
+  source_ref:'synthetic-signed-letter',note:'Synthetic letter only',
+  confidence:'tentative'
+});
+const newlyRecordedEventId=monitorLater.data().events.at(-1).event_id;
+monitorLater.submit('apv-add-case-evidence',{
+  case_id:monitoringCase,observed_event_id:newlyRecordedEventId,
+  evidence_ref:'synthetic-signed-letter',
+  follow_up_coverage:'Outcome recorded after the full window',
+  note:'Link actual observed event without deleting earlier pending note'
+});
+check('Pending case can link later observed event with dated append-only history',()=>{
+  const cc=monitorLater.data().cases.find(c=>c.case_id===monitoringCase);
+  assert.equal(cc.event_id,newlyRecordedEventId);
+  assert.equal(cc.outcome_kind,'event');
+  assert.equal(cc.evidence_addenda.length,1);
+  assert.equal(cc.evidence_addenda[0].previous_outcome_kind,'no_event');
+  assert.equal(cc.evaluation_mode,'prospective');
+  assert.equal(cc.review,null);
+  assert.equal(monitorLater.data().cases.filter(c=>c.prediction_id===monitoringPrediction).length,1);
+});
+check('Linking an event never automatically counts a validation match',()=>{
+  const admitted=monitorLater.window.AstroProofValidation.getAdmissionSummary();
+  assert.equal(admitted.admitted_matches,0);
+});
 console.log('PASS: ' + report.length + ' synthetic AstroProof validation workflow checks');
 for (const name of report) console.log('  ✓ ' + name);
