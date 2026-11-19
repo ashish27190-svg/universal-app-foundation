@@ -186,6 +186,14 @@ check('Backdated frozen claims are not relabeled prospective', () => {
   assert.equal(later.summary().prospective_matches, 0);
 });
 check('Progress never implies all gates passed from one fixture', () => assert.ok(later.summary().progress_percent < 100));
+check('Research admission reports full denominator, not only matching cases', () => {
+  const a=later.window.AstroProofValidation.getAdmissionSummary();
+  assert.equal(a.inventoried_predictions,2);
+  assert.equal(a.admitted_binary_prospective,1);
+  assert.equal(a.admitted_misses,1);
+  assert.equal(a.admitted_matches,0);
+  assert.equal(a.not_admitted,1);
+});
 
 // Test legacy review back-compat: preserve old verdict and append a criterion audit.
 const legacyData = JSON.parse(local.get('astroproof.validation.v1'));
@@ -219,6 +227,11 @@ const blocked = boot('2026-12-04T10:00:00Z');
 check('Modified frozen claim invalidates the prediction and its score', () => {
   assert.equal(blocked.summary().prospective_misses, 0);
   assert.equal(blocked.data().predictions.find(p => p.prediction_id === predId).status, 'frozen');
+});
+check('Research admission pack records frozen snapshot tampering as exclusion', () => {
+  const a=blocked.window.AstroProofValidation.getAdmissionSummary();
+  assert.equal(a.admitted_binary_prospective,0);
+  assert.ok(a.admission_reasons.frozen_fields_not_admissible_or_snapshot_mismatch>0);
 });
 local.set('astroproof.validation.v1', JSON.stringify(baseline));
 const recovered = boot('2026-12-04T10:00:00Z');
@@ -271,6 +284,13 @@ check('Overlapping real-world theme can still be documented as prediction MISS',
   assert.equal(cc.date_overlap, true);
   assert.equal(cc.review.decision, 'miss');
   assert.ok(afterWindow.summary().prospective_misses >= 2);
+});
+check('Research pack admits criterion-specific misses and excludes retrospective matches', () => {
+  const a=afterWindow.window.AstroProofValidation.getAdmissionSummary();
+  assert.equal(a.admitted_binary_prospective,2);
+  assert.equal(a.admitted_misses,2);
+  assert.equal(a.admitted_matches,0);
+  assert.ok(a.not_admitted>=1);
 });
 
 console.log('PASS: ' + report.length + ' synthetic AstroProof validation workflow checks');
