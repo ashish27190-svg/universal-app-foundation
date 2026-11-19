@@ -186,5 +186,92 @@ check('Backdated frozen claims are not relabeled prospective', () => {
   assert.equal(later.summary().prospective_matches, 0);
 });
 check('Progress never implies all gates passed from one fixture', () => assert.ok(later.summary().progress_percent < 100));
+
+// Test legacy review back-compat: preserve old verdict and append a criterion audit.
+const legacyData = JSON.parse(local.get('astroproof.validation.v1'));
+const oldCase = legacyData.cases.find(c => c.case_id === historicalCase.case_id);
+delete oldCase.review.criterion_assessment;
+delete oldCase.review.criterion_observation;
+local.set('astroproof.validation.v1', JSON.stringify(legacyData));
+const oldMode = boot('2026-12-03T10:00:00Z');
+check('Older reviews without criterion evidence are quarantined from scoring', () => {
+  assert.equal(oldMode.summary().reviewed_cases, 1);
+  assert.equal(oldMode.data().cases.find(c => c.case_id === historicalCase.case_id).review_status, 'reviewed_documented');
+});
+oldMode.submit('apv-review-case', {
+  case_id: historicalCase.case_id, decision: 'match',
+  criterion_assessment: 'yes', criterion_observation: 'Verified original frozen promotion criterion',
+  reviewer: 'Supplemental reviewer', evidence_ref: 'synthetic-history',
+  review_note: 'Supplemental audit; original decision retained unmodified'
+});
+check('Supplemental criterion audit restores review without altering legacy decision', () => {
+  const audited = oldMode.data().cases.find(c => c.case_id === historicalCase.case_id);
+  assert.equal(audited.review.criterion_assessment, undefined);
+  assert.equal(audited.criterion_audit.criterion_assessment, 'yes');
+  assert.equal(audited.criterion_audit.original_decision, 'match');
+  assert.equal(oldMode.summary().reviewed_cases, 2);
+});
+const baseline = JSON.parse(local.get('astroproof.validation.v1'));
+const tampered = structuredClone(baseline);
+tampered.predictions.find(p => p.prediction_id === predId).claim = 'Changed outcome statement after freeze';
+local.set('astroproof.validation.v1', JSON.stringify(tampered));
+const blocked = boot('2026-12-04T10:00:00Z');
+check('Modified frozen claim invalidates the prediction and its score', () => {
+  assert.equal(blocked.summary().prospective_misses, 0);
+  assert.equal(blocked.data().predictions.find(p => p.prediction_id === predId).status, 'frozen');
+});
+local.set('astroproof.validation.v1', JSON.stringify(baseline));
+const recovered = boot('2026-12-04T10:00:00Z');
+check('Restoring untampered snapshot restores the admitted review', () => {
+  assert.equal(recovered.summary().prospective_misses, 1);
+});
+
+// A correctly dated event can still FAIL the original claim.
+const startWindow = boot('2026-11-19T09:00:00Z');
+startWindow.submit('apv-new-prediction', {
+  life_area: 'career', claim: 'Fictional SIGNED offer from employer',
+  pass_fail_criteria: 'Written offer signed by the employer (conversation alone is insufficient)',
+  specificity_class: 'specific', window_start: '2026-11-25', window_end: '2026-11-30',
+  peak_at: '2026-11-27T10:00', calculation_version: 'synthetic-fixture-v1',
+  source_ref: 'synthetic-rule-source', rule_ids: 'FICTIONAL-RULE-03',
+  calibration_event_ids: '', assumptions: 'Synthetic only',
+  competing_interpretations: 'Nothing guaranteed'
+});
+const criterionPredictionId = startWindow.data().predictions.at(-1).prediction_id;
+startWindow.action('freeze', criterionPredictionId);
+const afterWindow = boot('2026-12-06T09:00:00Z');
+afterWindow.submit('apv-new-event', {
+  event_type: 'career_change', life_area: 'career',
+  event_start: '2026-11-28', event_end: '', date_precision: 'exact',
+  purpose: 'validation_holdout', source_kind: 'dated_message',
+  source_ref: 'synthetic-interview-message',
+  confidence: 'tentative', note: 'Interview only; no signed offer',
+  assumptions: 'The subject is fictional'
+});
+const inWindowEventId = afterWindow.data().events.at(-1).event_id;
+afterWindow.submit('apv-review-source', {
+  event_id: inWindowEventId, decision: 'source_accepted',
+  reviewer: 'Synthetic reviewer', evidence_ref: 'synthetic-interview-message',
+  review_note: 'Record shows an interview but no signed offer'
+});
+afterWindow.submit('apv-new-case', {
+  prediction_id: criterionPredictionId, event_id: inWindowEventId,
+  observation: 'Interview took place, but no signed offer',
+  outcome_evidence_ref: 'synthetic-interview-message'
+});
+const criterionCaseId = afterWindow.data().cases.at(-1).case_id;
+afterWindow.submit('apv-review-case', {
+  case_id: criterionCaseId, decision: 'miss', criterion_assessment: 'no',
+  criterion_observation: 'No signed written offer even though related career event occurred in window',
+  reviewer: 'Synthetic reviewer', evidence_ref: 'synthetic-interview-message',
+  review_note: 'Date and life area overlap; frozen criterion failed'
+});
+check('Overlapping real-world theme can still be documented as prediction MISS', () => {
+  const cc = afterWindow.data().cases.find(c => c.case_id === criterionCaseId);
+  assert.equal(cc.date_overlap, true);
+  assert.equal(cc.review.decision, 'miss');
+  assert.ok(afterWindow.summary().prospective_misses >= 2);
+});
+
 console.log('PASS: ' + report.length + ' synthetic AstroProof validation workflow checks');
 for (const name of report) console.log('  ✓ ' + name);
