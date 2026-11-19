@@ -100,13 +100,15 @@ first.submit('apv-new-case', {
 const caseId = first.data().cases[0].case_id;
 first.submit('apv-review-case', {
   case_id: caseId, decision: 'miss', reviewer: 'Synthetic reviewer',
-  evidence_ref: 'synthetic-followup', review_note: 'Too early'
+  evidence_ref: 'synthetic-followup', criterion_assessment: 'no',
+  criterion_observation: 'Synthetic surveillance found no signed offer', review_note: 'Too early'
 });
 check('Miss cannot be confirmed before forecast deadline', () => assert.equal(first.data().cases[0].review, null));
 const later = boot('2026-12-02T10:00:00Z');
 later.submit('apv-review-case', {
   case_id: caseId, decision: 'miss', reviewer: 'Synthetic reviewer',
-  evidence_ref: 'synthetic-followup', review_note: 'Complete dated surveillance recorded'
+  evidence_ref: 'synthetic-followup', criterion_assessment: 'no',
+  criterion_observation: 'No signed offer was documented through November 30', review_note: 'Complete dated surveillance recorded'
 });
 check('Documented closed-window miss is reviewable', () => {
   assert.equal(later.data().cases[0].review.decision, 'miss');
@@ -142,7 +144,8 @@ later.submit('apv-new-case', {
 const historicalCase = later.data().cases.at(-1);
 later.submit('apv-review-case', {
   case_id: historicalCase.case_id, decision: 'match', reviewer: 'Synthetic reviewer',
-  evidence_ref: 'synthetic-history', review_note: 'Attempting match without reviewed event source'
+  evidence_ref: 'synthetic-history', criterion_assessment: 'yes',
+  criterion_observation: 'A promotion was documented in May 2025', review_note: 'Attempting match without reviewed event source'
 });
 check('Unreviewed event source blocks even an apparently matching case', () => {
   assert.equal(later.data().cases.at(-1).review, null);
@@ -153,11 +156,30 @@ later.submit('apv-review-source', {
 });
 later.submit('apv-review-case', {
   case_id: historicalCase.case_id, decision: 'match', reviewer: 'Synthetic reviewer',
-  evidence_ref: 'synthetic-history', review_note: 'Retrospective overlap only'
+  evidence_ref: 'synthetic-history', criterion_assessment: 'unknown',
+  criterion_observation: 'Only an in-window event is known, the frozen criterion is not established',
+  review_note: 'Must not treat time overlap as proof of the original claim'
+});
+check('Date overlap without affirmative criterion evidence cannot pass as a match', () => {
+  assert.equal(later.data().cases.at(-1).review, null);
+});
+later.submit('apv-review-case', {
+  case_id: historicalCase.case_id, decision: 'match', reviewer: 'Synthetic reviewer',
+  evidence_ref: 'synthetic-history', criterion_assessment: 'yes',
+  criterion_observation: 'A promotion was documented in May 2025', review_note: 'Retrospective overlap only'
 });
 check('Evidence-reviewed retrospective match never counts as prospective', () => {
   assert.equal(later.data().cases.at(-1).review.decision, 'match');
   assert.equal(later.summary().prospective_matches, 0);
+});
+later.submit('apv-review-case', {
+  case_id: historicalCase.case_id, decision: 'miss', reviewer: 'Synthetic reviewer',
+  evidence_ref: 'synthetic-history', criterion_assessment: 'no',
+  criterion_observation: 'Attempt to overwrite an already locked case decision',
+  review_note: 'This should be rejected'
+});
+check('Recorded reviewer decision cannot be silently overwritten', () => {
+  assert.equal(later.data().cases.at(-1).review.decision, 'match');
 });
 check('Backdated frozen claims are not relabeled prospective', () => {
   assert.equal(historicalCase.evaluation_mode, 'retrospective_exploratory');
