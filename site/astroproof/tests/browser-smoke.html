@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AstroProof Browser Smoke — Synthetic QA</title>
+<style>body{font:15px system-ui,sans-serif;padding:12px;margin:0}iframe{border:1px solid #999;width:390px;max-width:100%;height:680px}pre{white-space:pre-wrap}</style></head>
+<body><h1>AstroProof Browser Smoke — Fictional Data Only</h1>
+<pre id="result">APV_BROWSER_PENDING</pre>
+<iframe id="application" src="../index.html" title="AstroProof test frame"></iframe>
+<script>
+'use strict';
+const status=document.getElementById('result');
+const checks=[];
+const assert=(condition,message)=>{if(!condition)throw new Error(message);checks.push(message)};
+const fill=(form,name,value)=>{
+  const el=form.elements.namedItem(name);
+  if(!el)throw new Error('Form field unavailable: '+name);
+  el.value=value;
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+};
+async function run(){
+  const frame=document.getElementById('application');
+  const w=frame.contentWindow,doc=frame.contentDocument;
+  w.confirm=()=>true; // Synthetic QA only.
+  const nav=doc.querySelector('[data-page="validation"]');
+  assert(!!nav,'Validation menu exists');
+  assert(!!w.AstroProofValidation,'Validation module initialized');
+  nav.click();
+  assert(doc.querySelector('#validation')?.classList.contains('active'),'Evidence workspace opens through navigation');
+  let root=doc.querySelector('#apv-root');
+  assert(!!root.querySelector('[data-apv-tab="events"]'),'Event archive tab exists');
+  assert(w.AstroProofValidation.getSummary().progress_percent===0,'Empty browser starts with 0% evidence progress');
+  root.querySelector('[data-apv-tab="events"]').click();
+  let form=root.querySelector('#apv-new-event');
+  assert(!!form,'Event entry form opens');
+  fill(form,'event_type','promotion');
+  fill(form,'life_area','career');
+  fill(form,'event_start','2024-05-15');
+  fill(form,'date_precision','exact');
+  fill(form,'purpose','validation_holdout');
+  fill(form,'source_kind','personal_recollection');
+  fill(form,'note','Synthetic promotion, not a real user event');
+  form.requestSubmit();
+  assert(w.AstroProofValidation.getSummary().events===1,'Fictional event records locally');
+  assert(w.AstroProofValidation.getSummary().progress_percent===0,'Unreviewed event cannot advance evidence progress');
+  root.querySelector('[data-apv-tab="predictions"]').click();
+  form=root.querySelector('#apv-new-prediction');
+  assert(!!form,'Prediction draft form opens');
+  fill(form,'life_area','career');
+  fill(form,'specificity_class','specific');
+  fill(form,'claim','Synthetic signed employment offer');
+  fill(form,'pass_fail_criteria','Signed document received in target window');
+  fill(form,'window_start','2090-04-10');
+  fill(form,'window_end','2090-04-20');
+  fill(form,'calculation_version','synthetic-browser-fixture');
+  fill(form,'source_ref','synthetic-source-not-real');
+  fill(form,'rule_ids','FICTIONAL-UI-001');
+  fill(form,'assumptions','Synthetic-only test, not a genuine forecast');
+  form.requestSubmit();
+  assert(w.AstroProofValidation.getSummary().predictions===1,'Draft prediction saved');
+  assert(w.AstroProofValidation.getSummary().progress_percent===0,'Draft prediction does not count as frozen evidence');
+  const freeze=root.querySelector('[data-apv-action="freeze"]');
+  assert(!!freeze,'Freeze action is visible');
+  freeze.click();
+  assert(root.textContent.includes('Frozen · not validated'),'Prediction visibly frozen without validation');
+  const m=doc.documentElement.scrollWidth;
+  const frameWidth=frame.clientWidth;
+  assert(m<=frameWidth+25,'Mobile-sized layout has no major horizontal overflow: '+m+'px vs '+frameWidth+'px');
+  const summary=w.AstroProofValidation.getSummary();
+  assert(summary.prospective_matches===0&&summary.prospective_misses===0,'No match or miss fabricated by UI');
+  w.localStorage.removeItem('astroproof.validation.v1');
+  status.textContent='APV_BROWSER_PASS — '+checks.length+' browser assertions\n'+checks.join('\n');
+}
+window.addEventListener('load',()=>{
+  Promise.resolve().then(run).catch(e=>{
+    status.textContent='APV_BROWSER_FAIL — '+String(e.stack||e);
+  });
+});
+</script></body></html>
