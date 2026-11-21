@@ -1,6 +1,7 @@
 'use strict';
 (()=>{
 const KEY='astroproof.web.v05';
+const CALCULATION_VERSION='astroproof-browser-calculation-2026-11-21-v1.1';
 const Z=['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
 const NAK=['Ashwini','Bharani','Krittika','Rohini','Mrigashira','Ardra','Punarvasu','Pushya','Ashlesha','Magha','Purva Phalguni','Uttara Phalguni','Hasta','Chitra','Swati','Vishakha','Anuradha','Jyeshtha','Mula','Purva Ashadha','Uttara Ashadha','Shravana','Dhanishta','Shatabhisha','Purva Bhadrapada','Uttara Bhadrapada','Revati'];
 const DASHA_LORDS=['Ketu','Venus','Sun','Moon','Mars','Rahu','Jupiter','Saturn','Mercury'], DASHA_YEARS=[7,20,6,10,7,18,16,19,17];
@@ -31,11 +32,42 @@ function save(){localStorage.setItem(KEY,JSON.stringify(state))}function load(){
 function page(id){document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id===id));document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('active',x.dataset.page===id));$('crumb').textContent='PERSONAL ATLAS / '+id.toUpperCase();window.scrollTo(0,0);if(id==='reports')renderReport();if(id==='timeline')renderTimeline();if(id==='history')renderLifeEvents();if(id==='council')renderCouncil();if(id==='ledger')renderLedger();if(id==='validation')window.AstroProofValidation?.render()}
 function mod(n,m){return ((n%m)+m)%m}function reduce(n){while(n>9&&![11,22,33].includes(n))n=String(n).split('').reduce((a,b)=>a+Number(b),0);return n}function signInfo(lon){lon=mod(lon,360);const i=Math.floor(lon/30);return {longitude:lon,sign:Z[i],sign_index:i,degree_in_sign:lon-i*30}}
 function nameNumber(name,mode='all'){const vowels='AEIOU';let sum=0;for(const ch of (name||'').toUpperCase().normalize('NFKD'))if(ch>='A'&&ch<='Z'&&(mode==='all'||(mode==='vowel')===vowels.includes(ch)))sum+=((ch.charCodeAt(0)-65)%9)+1;return sum?reduce(sum):null}
-function numerology(dateStr,name){const [y,m,d]=dateStr.split('-').map(Number), lp=reduce(reduce(m)+reduce(d)+reduce(y)),py=reduce(reduce(m)+reduce(d)+reduce(new Date().getFullYear()));return {life_path:lp,birthday:reduce(d),personal_year:py,expression:nameNumber(name),soul_urge:nameNumber(name,'vowel'),personality:nameNumber(name,'consonant')}}
+function chaldeanNameNumber(name){
+  const mapping={A:1,B:2,C:3,D:4,E:5,F:8,G:3,H:5,I:1,J:1,K:2,L:3,M:4,N:5,O:7,P:8,Q:1,R:2,S:3,T:4,U:6,V:6,W:6,X:5,Y:1,Z:7};
+  const letters=(name||'').toUpperCase().normalize('NFKD').replace(/[^A-Z]/g,'');
+  if(!letters)return null;
+  const compound=[...letters].reduce((sum,c)=>sum+mapping[c],0);
+  return {compound,reduced:reduce(compound),convention:'Chaldean 1-8 letter mapping; no letter assigned 9'};
+}
+function numerology(dateStr,name){const [y,m,d]=dateStr.split('-').map(Number), lp=reduce(reduce(m)+reduce(d)+reduce(y)),py=reduce(reduce(m)+reduce(d)+reduce(new Date().getFullYear()));return {life_path:lp,birthday:reduce(d),personal_year:py,expression:nameNumber(name),soul_urge:nameNumber(name,'vowel'),personality:nameNumber(name,'consonant'),chaldean_expression:chaldeanNameNumber(name)}}
 function zoneParts(date,tz){const p=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(date);const o={};for(const x of p)if(x.type!=='literal')o[x.type]=Number(x.value);return o}
-function localToUtc(dateStr,timeStr,tz){const [y,m,d]=dateStr.split('-').map(Number),[hh,mm]=timeStr.split(':').map(Number);let guess=new Date(Date.UTC(y,m-1,d,hh,mm,0));for(let i=0;i<3;i++){const q=zoneParts(guess,tz);const got=Date.UTC(q.year,q.month-1,q.day,q.hour,q.minute,q.second);const want=Date.UTC(y,m-1,d,hh,mm,0);guess=new Date(guess.getTime()+(want-got))}return guess}
+function localToUtc(dateStr,timeStr,tz){
+  const [y,m,d]=dateStr.split('-').map(Number),[hh,mm]=timeStr.split(':').map(Number);
+  const target=Date.UTC(y,m-1,d,hh,mm,0);
+  const valid=Number.isInteger(y)&&Number.isInteger(m)&&Number.isInteger(d)
+    &&Number.isInteger(hh)&&Number.isInteger(mm)&&m>=1&&m<=12&&hh>=0&&hh<=23&&mm>=0&&mm<=59
+    &&new Date(Date.UTC(y,m-1,d)).toISOString().slice(0,10)===dateStr;
+  if(!valid)throw new Error('Invalid birth date/time; use a real date and HH:MM.');
+  // Historical IANA time zones can have nonexistent spring-forward minutes and
+  // repeated fall-back minutes. Enumerate candidate offsets instead of guessing.
+  const offsets=new Set();
+  for(const hours of [-48,-36,-24,-12,0,12,24,36,48]){
+    const probe=target+hours*3600000,q=zoneParts(new Date(probe),tz);
+    offsets.add(Date.UTC(q.year,q.month-1,q.day,q.hour,q.minute,q.second)-probe);
+  }
+  const matches=[];
+  for(const offset of offsets){
+    const candidate=target-offset,q=zoneParts(new Date(candidate),tz);
+    if(q.year===y&&q.month===m&&q.day===d&&q.hour===hh&&q.minute===mm)
+      matches.push(candidate);
+  }
+  const unique=[...new Set(matches)];
+  if(unique.length===0)throw new Error('Birth time does not exist in selected time zone (clock change).');
+  if(unique.length>1)throw new Error('Birth time is ambiguous in selected time zone (clock repeated).');
+  return new Date(unique[0]);
+}
 function ayanamsaApprox(date){const y=date.getUTCFullYear()+(date.getUTCMonth()+0.5)/12;return 23.85675+(y-2000)*50.29/3600}
-function ascendant(date,lat,lon){const theta=mod(Astronomy.SiderealTime(date)*15+lon,360)*Math.PI/180;const phi=lat*Math.PI/180;const T=(date.getTime()-Date.UTC(2000,0,1,12))/86400000/36525;const eps=(23.439291-0.0130042*T)*Math.PI/180;let lam=Math.atan2(-Math.cos(theta),Math.sin(theta)*Math.cos(eps)+Math.tan(phi)*Math.sin(eps))*180/Math.PI;return mod(lam,360)}
+function ascendant(date,lat,lon){const theta=mod(Astronomy.SiderealTime(date)*15+lon,360)*Math.PI/180;const phi=lat*Math.PI/180;const T=(date.getTime()-Date.UTC(2000,0,1,12))/86400000/36525;const eps=(23.439291-0.0130042*T)*Math.PI/180;let lam=Math.atan2(-Math.cos(theta),Math.sin(theta)*Math.cos(eps)+Math.tan(phi)*Math.sin(eps))*180/Math.PI;return mod(lam+180,360)}
 function geoLon(name,date){const body=Astronomy.Body[name],vec=Astronomy.GeoVector(body,date,true),ecl=Astronomy.Ecliptic(vec);return mod(ecl.elon,360)}
 function signedAngularDelta(a,b){return mod(b-a+180,360)-180}
 function planetary(date,withMotion=false){const names=['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto'],out={};for(const name of names){const lon=geoLon(name,date),p=signInfo(lon);if(withMotion&& !['Sun','Moon'].includes(name)){const before=geoLon(name,new Date(date.getTime()-43200000)),after=geoLon(name,new Date(date.getTime()+43200000));p.retrograde=signedAngularDelta(before,after)<0}out[name]=p}return out}
@@ -100,6 +132,12 @@ function engineSelfTest(){
   add('Mars 4th drishti',dr.some(x=>x.from==='Mars'&&x.to==='Venus'&&x.count===4));
   add('Jupiter 9th drishti',dr.some(x=>x.from==='Jupiter'&&x.to==='Sun'&&x.count===9));
   add('Saturn 3rd drishti',dr.some(x=>x.from==='Saturn'&&x.to==='Sun'&&x.count===3));
+  // Synthetic reference cases independently calculated with Swiss Ephemeris 2.10.03 (tropical Ascendant).
+  // Never embed a private user's natal data in a public regression fixture.
+  const ascDelhi=ascendant(new Date('2024-01-01T12:00:00Z'),28.6139,77.2090);
+  const ascSydney=ascendant(new Date('2022-10-29T22:06:00Z'),-33.8688,151.2093);
+  add('Ascendant parity — synthetic Delhi reference',angularSep(ascDelhi,100.356503658)<0.2,ascDelhi.toFixed(6)+'°');
+  add('Ascendant parity — synthetic Sydney reference',angularSep(ascSydney,268.006553863)<0.2,ascSydney.toFixed(6)+'°');
   return {passed:checks.filter(x=>x.ok).length,total:checks.length,ok:checks.every(x=>x.ok),checks};
 }
 function vimshottari(date,moonLon,atDate=new Date()){
@@ -126,7 +164,35 @@ function vimshottari(date,moonLon,atDate=new Date()){
   }
   return {nakshatra:NAK[ix],pada:Math.floor((mod(moonLon,span))/(span/4))+1,first_lord:DASHA_LORDS[li],active}
 }
-function chinese(date,timeKnown,localHour){const y=date.getUTCFullYear(),cy=mod(y-1984,60),ys=cy%10,yb=cy%12;const dayNum=Math.floor(Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),date.getUTCDate())/86400000);const ref=Math.floor(Date.UTC(1984,1,2)/86400000);const dc=mod(dayNum-ref,60),ds=dc%10,db=dc%12;let hour=null;if(timeKnown){const hb=localHour>=23||localHour<1?0:Math.floor((localHour+1)/2)%12,hs=mod((ds%5)*2+hb,10);hour={stem:STEMS[hs],branch:BR[hb]}}return {year:{stem:STEMS[ys],branch:BR[yb],animal:ANIMALS[yb]},day:{stem:STEMS[ds],branch:BR[db],element:CH_ELEMENTS[ds],polarity:ds%2?'Yin':'Yang'},hour,method:'Sexagenary year/day/hour browser research convention; month pillar and true-solar-time refinement remain pending in this hosted build.'}}
+function chinese(date,timeKnown,timeZone){
+  // Solar-term BaZi convention: Li Chun (apparent Sun at 315°) starts the year;
+  // each 30° ecliptic longitude sector beginning at Li Chun starts a Jie month.
+  // Day/hour follow the explicitly declared civil-local-time + 23:00 rollover rule.
+  // True-solar-time and equation-of-time adjustments are NOT applied.
+  const sunLongitude=mod(Astronomy.SunPosition(date).elon,360);
+  const local=zoneParts(date,timeZone);
+  let effectiveYear=local.year;
+  if(local.month<=2&&sunLongitude>=270&&sunLongitude<315)effectiveYear--;
+  const cy=mod(effectiveYear-1984,60),ys=cy%10,yb=cy%12;
+  const monthIndex=Math.floor(mod(sunLongitude-315,360)/30);
+  const monthStem=mod((ys%5)*2+2+monthIndex,10);
+  const monthBranch=mod(2+monthIndex,12);
+  const dayRollover=timeKnown&&local.hour>=23?1:0;
+  const jdn=Math.floor(Date.UTC(local.year,local.month-1,local.day)/86400000)+2440588+dayRollover;
+  const dc=mod(jdn+49,60),ds=dc%10,db=dc%12;
+  let hour=null;
+  if(timeKnown){
+    const hb=(local.hour>=23||local.hour<1)?0:Math.floor((local.hour+1)/2)%12;
+    hour={stem:STEMS[mod((ds%5)*2+hb,10)],branch:BR[hb]};
+  }
+  return {
+    year:{stem:STEMS[ys],branch:BR[yb],animal:ANIMALS[yb],effective_solar_year:effectiveYear},
+    month:{stem:STEMS[monthStem],branch:BR[monthBranch],solar_longitude:sunLongitude,month_index:monthIndex},
+    day:{stem:STEMS[ds],branch:BR[db],element:CH_ELEMENTS[ds],polarity:ds%2?'Yin':'Yang',uncertain:!timeKnown},
+    hour,
+    method:'BaZi apparent solar longitude: Li Chun 315° year, Jie 30° month; local civil day/hour with 23:00 rollover; true-solar-time correction is not yet certified.'
+  };
+}
 function calculateChart(p,options={}){
   const timeKnown=!p.timeunknown,t=timeKnown?p.birthtime:'12:00',date=localToUtc(p.birthdate,t,p.timezone);
   const trop=planetary(date,true),asc=timeKnown?ascendant(date,p.latitude,p.longitude):null;
@@ -137,8 +203,8 @@ function calculateChart(p,options={}){
   sid.Rahu=rahu;sid.Ketu=signInfo(rahu.longitude+180);sid.Ketu.retrograde=true;sid.Ketu.node_convention='opposite mean lunar node';
   const ascSid=asc==null?null:mod(asc-ay,360);houses(sid,ascSid);
   const conditions=vedicConditionsPure(sid),drishti=vedicDrishtiPure(sid),conjunctions=vedicConjunctionsPure(sid),yogas=vedicYogaCandidatesPure(sid,ascSid,conditions);
-  const vd=vimshottari(date,sid.Moon.longitude),n=numerology(p.birthdate,p.birth_name),chineseProfile=chinese(date,timeKnown,Number(t.split(':')[0]));
-  return {meta:{utc:date.toISOString(),time_known:timeKnown,place:p.place,latitude:p.latitude,longitude:p.longitude,timezone:p.timezone,ayanamsa_deg:ay,engine:'Astronomy Engine (MIT) tropical + approximate Lahiri-style sidereal conversion; mean lunar node from Meeus polynomial'},western:{planets:trop,ascendant:asc==null?null:signInfo(asc),aspects:aspects(trop)},vedic:{planets:sid,ascendant:ascSid==null?null:signInfo(ascSid),moon_nakshatra:vd.nakshatra,moon_pada:vd.pada,dasha:vd,conditions,drishti,conjunctions,yogas,gochar:options.skipDynamic?null:currentVedicGochar(sid),divisional:{D9:divisionalChart(sid,9,ascSid),D10:divisionalChart(sid,10,ascSid)}},numerology:n,chinese:chineseProfile,warnings:['Astrology/numerology interpretations are traditional frameworks, not established predictors of individual outcomes.','Hosted Vedic sidereal conversion is an approximation pending independent production certification.','Rahu/Ketu use the mean-node convention; true-node charts can differ.','Yoga detectors report rule-specific structural candidates, not guaranteed life outcomes.']};
+  const vd=vimshottari(date,sid.Moon.longitude),n=numerology(p.birthdate,p.birth_name),chineseProfile=chinese(date,timeKnown,p.timezone);
+  return {meta:{calculation_version:CALCULATION_VERSION,utc:date.toISOString(),time_known:timeKnown,place:p.place,latitude:p.latitude,longitude:p.longitude,timezone:p.timezone,ayanamsa_deg:ay,engine:'Astronomy Engine (MIT) tropical + approximate Lahiri-style sidereal conversion; mean lunar node from Meeus polynomial'},western:{planets:trop,ascendant:asc==null?null:signInfo(asc),aspects:aspects(trop)},vedic:{planets:sid,ascendant:ascSid==null?null:signInfo(ascSid),moon_nakshatra:vd.nakshatra,moon_pada:vd.pada,dasha:vd,conditions,drishti,conjunctions,yogas,gochar:options.skipDynamic?null:currentVedicGochar(sid),divisional:{D9:divisionalChart(sid,9,ascSid),D10:divisionalChart(sid,10,ascSid)}},numerology:n,chinese:chineseProfile,warnings:['Astrology/numerology interpretations are traditional frameworks, not established predictors of individual outcomes.','Hosted Vedic sidereal conversion is an approximation pending independent production certification.','Rahu/Ketu use the mean-node convention; true-node charts can differ.','Yoga detectors report rule-specific structural candidates, not guaranteed life outcomes.']};
 }
 function wheel(group,label){const polar=(d,r)=>{const a=(d-90)*Math.PI/180;return[180+r*Math.cos(a),180+r*Math.sin(a)]};let s=`<svg class="wheel" viewBox="0 0 360 360" role="img" aria-label="${esc(label)} zodiac wheel"><circle cx="180" cy="180" r="164" fill="#0e1020" stroke="#8f7cff"/><circle cx="180" cy="180" r="126" fill="none" stroke="#4b5278"/>`;Z.forEach((z,i)=>{const[a,b]=polar(i*30,126),[c,d]=polar(i*30,164),[x,y]=polar(i*30+15,145);s+=`<line x1="${a}" y1="${b}" x2="${c}" y2="${d}" stroke="#4b5278"/><text x="${x}" y="${y}" text-anchor="middle" fill="#e0c279" font-size="9">${z.slice(0,3)}</text>`});Object.entries(group.planets).forEach(([n,p],i)=>{const[x,y]=polar(p.longitude,105-(i%3)*8);s+=`<circle cx="${x}" cy="${y}" r="3" fill="#f0d492"/><text x="${x}" y="${y-6}" text-anchor="middle" fill="#eee8ff" font-size="7">${n.slice(0,2)}</text>`});return s+`<text x="180" y="179" text-anchor="middle" fill="#fff" font-size="12">${esc(label)}</text></svg>`}
 
@@ -605,7 +671,7 @@ function init(){populate();listeners();load();fillProfile();renderLifeEvents();r
 
 window.AstroProofBridge={
   getProfile:()=>state.profile?JSON.parse(JSON.stringify(state.profile)):null,
-  getChartSummary:()=>chart?{engine:chart.meta?.engine,calculated_birth_utc:chart.meta?.utc,ayanamsa_deg:chart.meta?.ayanamsa_deg,ascendant:chart.vedic?.ascendant?.sign,moon_nakshatra:chart.vedic?.moon_nakshatra}:null,
+  getChartSummary:()=>chart?{calculation_version:chart.meta?.calculation_version,engine:chart.meta?.engine,calculated_birth_utc:chart.meta?.utc,ayanamsa_deg:chart.meta?.ayanamsa_deg,ascendant:chart.vedic?.ascendant?.sign,moon_nakshatra:chart.vedic?.moon_nakshatra}:null,
   getBirthSensitivity:()=>state.profile?birthTimeSensitivity(state.profile):{available:false,reason:'Birth profile not entered'},
   getCandidateComparison:(delta,eventStart,eventEnd)=>{
     if(!state.profile||state.profile.timeunknown||!chart)return {available:false,reason:'Birth time is unknown or no chart is available.'};
@@ -631,13 +697,13 @@ window.AstroProofBridge={
       });
     };
     return {
-      available:true,offset_min:delta,calculation_version:'astroproof-hosted-provisional-1.0',
+      available:true,offset_min:delta,calculation_version:CALCULATION_VERSION,
       baseline:{...info(chart),at_event:eventPeriods(chart)},
       candidate:{...info(candidate),at_event:eventPeriods(candidate)},
       warning:'Comparison only: changed chart features are not evidence of a corrected birth time. Dasha timing is approximate and dates may vary with year-length conventions.'
     };
   },
-  getForecastCandidates:()=>chart?rankForecasts(transitForecast(365,1)).slice(0,14).map(x=>({life_area:x.topic,signal:x.mover+' '+x.aspect+' '+x.target,window_start:x.window_start,window_end:x.window_end,peak_at:x.peak_at,orb:x.orb,timing_precision:x.timing_precision,rank_score:x.score,calculation_version:'astroproof-hosted-provisional-1.0'})):[],
+  getForecastCandidates:()=>chart?rankForecasts(transitForecast(365,1)).slice(0,14).map(x=>({life_area:x.topic,signal:x.mover+' '+x.aspect+' '+x.target,window_start:x.window_start,window_end:x.window_end,peak_at:x.peak_at,orb:x.orb,timing_precision:x.timing_precision,rank_score:x.score,calculation_version:CALCULATION_VERSION})):[],
   getLegacyEvents:()=>JSON.parse(JSON.stringify(state.lifeEvents||[]))
 };
 

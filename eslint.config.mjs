@@ -11,6 +11,8 @@ export default tseslint.config(
       '**/coverage/**',
       '**/.turbo/**',
       '**/node_modules/**',
+      // Vendored astronomy-engine bundle is generated third-party code, not owned source.
+      'site/astroproof/astronomy.browser.min.js',
     ],
   },
 
@@ -19,6 +21,21 @@ export default tseslint.config(
     ...js.configs.recommended,
     languageOptions: {
       globals: globals.node,
+    },
+  },
+
+  // Browser scripts and service workers use DOM and browser globals.
+  {
+    files: ['site/astroproof/app.js', 'site/astroproof/validation.js', 'site/daily-intelligence/sw.js'],
+    languageOptions: {
+      globals: { ...globals.browser, Astronomy: 'readonly' },
+    },
+    rules: {
+      // Legacy unused helpers remain explicitly tracked, not blanket-disabled.
+      'no-unused-vars': ['error', {
+        varsIgnorePattern: '^(evidenceLadder|buildLifeBrief|councilData|label|short|filtered|candidateIndex)$',
+        argsIgnorePattern: '^event$',
+      }],
     },
   },
 

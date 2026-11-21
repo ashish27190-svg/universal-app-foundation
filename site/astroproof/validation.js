@@ -82,9 +82,14 @@
     if(!p||!p.freeze_snapshot||typeof p.freeze_snapshot!=='object')return false;
     return FROZEN_FIELDS.every(key=>JSON.stringify(p[key])===JSON.stringify(p.freeze_snapshot[key]));
   }
+  // Preserve original frozen claims while quarantining forecasts produced by
+  // the pre-fix hosted calculation engine. Never rewrite history or count a legacy hit.
+  function isLegacyCalculation(p){
+    return !!(p&&clean(p.calculation_version)==='astroproof-hosted-provisional-1.0');
+  }
   function predictionReady(p){
     return !!(p&&p.status==='frozen'&&p.frozen_at&&clean(p.claim)&&clean(p.pass_fail_criteria)&&
-      validRange(p.window_start,p.window_end)&&clean(p.calculation_version)&&freezeSnapshotAgrees(p));
+      validRange(p.window_start,p.window_end)&&clean(p.calculation_version)&&!isLegacyCalculation(p)&&freezeSnapshotAgrees(p));
   }
   function isFutureAtFreeze(p){
     return !!(p&&p.frozen_at&&p.window_start>p.frozen_at.slice(0,10));
@@ -108,6 +113,7 @@
   }
   function checkCaseReview(c,p,e){
     if(!c||!p)return 'Missing prediction or case.';
+    if(isLegacyCalculation(p))return 'Legacy calculation version quarantined pending independent recalculation.';
     if(!predictionReady(p))return 'Prediction was not frozen.';
     if(c.event_id&&(!e||!caseSafety(p,e).allowed))return 'Event is missing or barred by leakage rules.';
     if(c.event_id&&!refText(e))return 'Event source evidence reference is missing.';
@@ -287,7 +293,7 @@
     const cards=q.items.map(p=>{
       const why=p.state==='overdue_unreported'?'No outcome has been recorded. Absence of a report is NOT evidence of a miss.':
       p.state==='active_window'?'Record only what actually happens; a final miss cannot be judged until the full window has ended.':
-      p.state==='integrity_blocked'?'This freeze is inconsistent or missing required fields. No score can be admitted.':
+      p.state==='integrity_blocked'?'This freeze may use the old calculation engine or have invalid fields. Inspect calculation version before scoring.':
       p.state==='future'?'Forecast is frozen; outcome monitoring has not started.':
       p.state==='pending_evidence_review'?'Source or criterion-specific review is incomplete; no verified outcome is inferred.':
       p.state==='reviewed_exploratory'?'A retrospective review must not be counted as a prospective success.':
@@ -316,12 +322,13 @@
       action('tab','predictions','Draft a prediction')+'</div>';
   }
   function overview(){
-    const s=stats(),ev=s.ev;
+    const s=stats(),ev=s.ev,legacyCount=db.predictions.filter(isLegacyCalculation).length;
     return '<div class="apv-warning"><b>Evidence status:</b> '+s.completed+' of '+s.gs.length+
       ' workflow gates documented. This bar measures recorded review work—not astrology accuracy, objective proof, or a prediction success rate. Browser storage is editable; no external audit or truly blind experiment is claimed.</div>'+
       '<h3 class="apv-section-title">Evidence-recorded workflow progress: '+s.percent+'%</h3>'+
       '<div class="apv-progress" role="progressbar" aria-valuenow="'+s.percent+'" aria-valuemin="0" aria-valuemax="100" aria-label="Evidence-backed workflow progress"><div style="width:'+s.percent+'%"></div></div>'+
       '<div class="apv-checks">'+s.gs.map(g=>'<div>'+status(g.done?'Evidence recorded':'Pending')+' '+escapeHTML(g.name)+'</div>').join('')+'</div>'+
+      '<div class="apv-card"><h3>Legacy calculation audit</h3><p>Predictions from the retired browser engine: <b>'+legacyCount+'</b>. Preserved but blocked from accuracy scoring; review and re-freeze new versions separately.</p></div>'+ 
       '<div class="apv-card"><h3>Forecast follow-up</h3><p>Closed windows without an outcome report: <b>'+ (followups().counts.overdue_unreported||0) +
       '</b> · Active windows: <b>'+(followups().counts.active_window||0)+
       '</b> · Pending evidence review: <b>'+(followups().counts.pending_evidence_review||0)+
@@ -765,6 +772,7 @@
       const event=caseRecord?.event_id?getEvt(caseRecord.event_id):null;
       const reasons=[];
       if(p.status!=='frozen')reasons.push('draft_not_frozen');
+      if(isLegacyCalculation(p))reasons.push('legacy_calculation_version_quarantined');
       if(!predictionReady(p))reasons.push('frozen_fields_not_admissible_or_snapshot_mismatch');
       if(!(p.rule_ids||[]).length)reasons.push('rule_ids_missing');
       if(!clean(p.source_ref))reasons.push('calculation_source_missing');
@@ -1069,7 +1077,7 @@
     getAdmissionSummary:()=>admissionPack().totals,
     getFollowupSummary:()=>{const q=followups();return {today:q.today,total:q.items.length,counts:q.counts,items:q.items}},
     getSummary:()=>{const s=stats();return {progress_percent:s.percent,evidence_gates:s.completed,total_gates:s.gs.length,
-       events:db.events.length,predictions:db.predictions.length,cases:db.cases.length,reviewed_cases:evaluation().reviewed.length,
+       events:db.events.length,predictions:db.predictions.length,legacy_quarantined:db.predictions.filter(isLegacyCalculation).length,cases:db.cases.length,reviewed_cases:evaluation().reviewed.length,
        prospective_matches:evaluation().matched,prospective_misses:evaluation().missed}},
     testGuards:()=>({
       rectificationBlocked:caseSafety({frozen_at:now(),claim:'x',pass_fail_criteria:'x',window_start:'2026-01-01',window_end:'2026-12-31',calculation_version:'x',calibration_event_ids:[]},
