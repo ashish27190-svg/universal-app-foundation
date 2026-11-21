@@ -37,6 +37,65 @@ const check = (name, fn) => {
   fn();
   report.push(name);
 };
+
+// Solar-term/JDN tests use published synthetic calendar references, not private natal data.
+const bzStart=natalSource.indexOf('function chinese(');
+const bzEnd=natalSource.indexOf('\nfunction calculateChart(',bzStart);
+const zoneStart=natalSource.indexOf('function zoneParts(');
+const zoneEnd=natalSource.indexOf('\nfunction localToUtc(',zoneStart);
+const chStart=natalSource.indexOf('function chaldeanNameNumber(');
+const chEnd=natalSource.indexOf('\nfunction numerology(',chStart);
+assert.ok(bzStart>=0&&bzEnd>bzStart&&zoneStart>=0&&zoneEnd>zoneStart&&chStart>=0&&chEnd>chStart);
+const solarLon={
+  '2024-02-03':313.6281312, '2024-02-05':315.6571183, '2024-02-10':321.0
+};
+const bazi = vm.runInNewContext([
+  'function mod(n,m){return ((n%m)+m)%m}',
+  "const STEMS=['Jia','Yi','Bing','Ding','Wu','Ji','Geng','Xin','Ren','Gui'];",
+  "const BR=['Zi','Chou','Yin','Mao','Chen','Si','Wu','Wei','Shen','You','Xu','Hai'];",
+  "const ANIMALS=['Rat','Ox','Tiger','Rabbit','Dragon','Snake','Horse','Goat','Monkey','Rooster','Dog','Pig'];",
+  "const CH_ELEMENTS=['Wood','Wood','Fire','Fire','Earth','Earth','Metal','Metal','Water','Water'];",
+  natalSource.slice(zoneStart,zoneEnd),
+  natalSource.slice(bzStart,bzEnd),
+  'chinese'
+].join('\n'),{
+  Astronomy:{SunPosition(date){
+    const day=date.toISOString().slice(0,10);
+    assert.ok(Object.hasOwn(solarLon,day),'Reference solar longitude missing for '+day);
+    return {elon:solarLon[day]};
+  }}
+});
+check('BaZi early-February year before Li Chun remains previous year',()=>{
+  const c=bazi(new Date('2024-02-03T00:00:00Z'),true,'Asia/Tokyo');
+  assert.equal(c.year.stem,'Gui');assert.equal(c.year.branch,'Mao');assert.equal(c.month.branch,'Chou');
+});
+check('BaZi year and Jie month switch after Li Chun',()=>{
+  const c=bazi(new Date('2024-02-05T00:00:00Z'),true,'Asia/Tokyo');
+  assert.equal(c.year.stem,'Jia');assert.equal(c.year.branch,'Chen');
+  assert.equal(c.month.stem,'Bing');assert.equal(c.month.branch,'Yin');
+});
+check('BaZi sexagenary day uses local Julian day: 2024-02-10 Jia-Chen',()=>{
+  const c=bazi(new Date('2024-02-10T12:00:00Z'),true,'Asia/Tokyo');
+  assert.equal(c.day.stem,'Jia');assert.equal(c.day.branch,'Chen');
+});
+check('BaZi 23:00 civil day boundary updates day and hour',()=>{
+  const c=bazi(new Date('2024-02-10T14:00:00Z'),true,'Asia/Tokyo');
+  assert.equal(c.day.stem,'Yi');assert.equal(c.day.branch,'Si');
+  assert.equal(c.hour.stem,'Bing');assert.equal(c.hour.branch,'Zi');
+});
+check('BaZi unknown birth time does not invent an hour',()=>{
+  const c=bazi(new Date('2024-02-10T00:00:00Z'),false,'Asia/Tokyo');
+  assert.equal(c.hour,null);assert.equal(c.day.uncertain,true);
+});
+const chaldean=vm.runInNewContext(
+  'function reduce(n){while(n>9&&![11,22,33].includes(n))n=String(n).split("").reduce((a,b)=>a+Number(b),0);return n}\n'
+  +natalSource.slice(chStart,chEnd)+'\nchaldeanNameNumber',
+  {}
+);
+check('Chaldean expression remains distinct from Pythagorean',()=>{
+  const n=chaldean('ALICE');assert.equal(n.compound,13);assert.equal(n.reduced,4);
+});
+
 function boot(at) {
   const root = { innerHTML: '', className: '', listeners: {}, addEventListener(type, callback) { this.listeners[type] = callback; } };
   const document = { getElementById(id) { return id === 'apv-root' ? root : null; } };
