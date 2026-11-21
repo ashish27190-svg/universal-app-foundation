@@ -30,6 +30,8 @@ function reviewDecision(c){
 function assess(row,generatedAt){
   const reasons=[],add=x=>{if(!reasons.includes(x))reasons.push(x)};
   const p=row||{},c=p.case||null,e=c?.observed_event||null;
+  // The hosted pre-fix engine returned the antipodal Ascendant; do not score its old forecasts.
+  if(p.calculation_version==='astroproof-hosted-provisional-1.0')add('legacy_calculation_version_quarantined');
   const today=generatedAt.slice(0,10);
   if(p.status!=='frozen'||!instant(p.frozen_at))add('draft_or_invalid_freeze');
   if(!nonempty(p.claim)||!nonempty(p.pass_fail_criteria)||!nonempty(p.calculation_version)||
