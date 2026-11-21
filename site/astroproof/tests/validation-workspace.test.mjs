@@ -7,6 +7,29 @@ import vm from 'node:vm';
 
 const code = fs.readFileSync(new URL('../validation.js', import.meta.url), 'utf8');
 new vm.Script(code, { filename: 'validation.js' });
+
+// Independent, deterministic reference regression for the hosted natal Ascendant formula.
+// Source code is loaded as text; only this pure function is evaluated with controlled sidereal times.
+// Synthetic inputs avoid putting anyone's private birth record into a public repository.
+const natalSource=fs.readFileSync(new URL('../app.js', import.meta.url),'utf8');
+const startNatal=natalSource.indexOf('function ascendant(date,lat,lon){');
+const endNatal=natalSource.indexOf('\nfunction geoLon',startNatal);
+assert.ok(startNatal>=0&&endNatal>startNatal,'Ascendant function must remain present');
+const ascSource=natalSource.slice(startNatal,endNatal);
+const ascReferences=[
+  {date:'2024-01-01T12:00:00.000Z',lat:28.6139,lon:77.209,siderealHours:18.709604672038,expected:100.356503658},
+  {date:'2022-10-29T22:06:00.000Z',lat:-33.8688,lon:151.2093,siderealHours:0.647612602816,expected:268.006553863}
+];
+const ascReferenceFunction=vm.runInNewContext(
+  'function mod(n,m){return ((n%m)+m)%m}\n'+ascSource+'\nascendant',
+  {Astronomy:{SiderealTime(date){const row=ascReferences.find(x=>x.date===date.toISOString());assert.ok(row,'Only declared synthetic reference dates are allowed');return row.siderealHours}}}
+);
+for(const ref of ascReferences){
+  const actual=ascReferenceFunction(new Date(ref.date),ref.lat,ref.lon);
+  const angularError=Math.abs(((actual-ref.expected+540)%360)-180);
+  assert.ok(angularError<0.2,'Ascendant parity failed: '+ref.date+' expected '+ref.expected+'°, actual '+actual+'°');
+}
+
 const local = new Map();
 let sequence = 0;
 const report = [];
