@@ -96,6 +96,27 @@ check('Chaldean expression remains distinct from Pythagorean',()=>{
   const n=chaldean('ALICE');assert.equal(n.compound,13);assert.equal(n.reduced,4);
 });
 
+
+const utcStart=natalSource.indexOf('function localToUtc(');
+const utcEnd=natalSource.indexOf('\nfunction ayanamsaApprox(',utcStart);
+assert.ok(utcStart>=0&&utcEnd>utcStart,'IANA conversion implementation missing');
+const strictBirthTime=vm.runInNewContext(
+  natalSource.slice(zoneStart,zoneEnd)+'\n'+natalSource.slice(utcStart,utcEnd)+'\nlocalToUtc',
+  {}
+);
+check('IANA conversion resolves unambiguous India time',()=>{
+  assert.equal(strictBirthTime('2024-02-15','09:00','Asia/Kolkata').toISOString(),'2024-02-15T03:30:00.000Z');
+});
+check('IANA conversion rejects spring-forward nonexistent wall time',()=>{
+  assert.throws(()=>strictBirthTime('2024-03-10','02:30','America/New_York'),/does not exist/);
+});
+check('IANA conversion rejects fall-back repeated wall time',()=>{
+  assert.throws(()=>strictBirthTime('2024-11-03','01:30','America/New_York'),/ambiguous/);
+});
+check('IANA conversion accepts valid time after DST transition',()=>{
+  assert.equal(strictBirthTime('2024-03-10','03:30','America/New_York').toISOString(),'2024-03-10T07:30:00.000Z');
+});
+
 function boot(at) {
   const root = { innerHTML: '', className: '', listeners: {}, addEventListener(type, callback) { this.listeners[type] = callback; } };
   const document = { getElementById(id) { return id === 'apv-root' ? root : null; } };
