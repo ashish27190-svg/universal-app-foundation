@@ -35,7 +35,7 @@ function numerology(dateStr,name){const [y,m,d]=dateStr.split('-').map(Number), 
 function zoneParts(date,tz){const p=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(date);const o={};for(const x of p)if(x.type!=='literal')o[x.type]=Number(x.value);return o}
 function localToUtc(dateStr,timeStr,tz){const [y,m,d]=dateStr.split('-').map(Number),[hh,mm]=timeStr.split(':').map(Number);let guess=new Date(Date.UTC(y,m-1,d,hh,mm,0));for(let i=0;i<3;i++){const q=zoneParts(guess,tz);const got=Date.UTC(q.year,q.month-1,q.day,q.hour,q.minute,q.second);const want=Date.UTC(y,m-1,d,hh,mm,0);guess=new Date(guess.getTime()+(want-got))}return guess}
 function ayanamsaApprox(date){const y=date.getUTCFullYear()+(date.getUTCMonth()+0.5)/12;return 23.85675+(y-2000)*50.29/3600}
-function ascendant(date,lat,lon){const theta=mod(Astronomy.SiderealTime(date)*15+lon,360)*Math.PI/180;const phi=lat*Math.PI/180;const T=(date.getTime()-Date.UTC(2000,0,1,12))/86400000/36525;const eps=(23.439291-0.0130042*T)*Math.PI/180;let lam=Math.atan2(-Math.cos(theta),Math.sin(theta)*Math.cos(eps)+Math.tan(phi)*Math.sin(eps))*180/Math.PI;return mod(lam,360)}
+function ascendant(date,lat,lon){const theta=mod(Astronomy.SiderealTime(date)*15+lon,360)*Math.PI/180;const phi=lat*Math.PI/180;const T=(date.getTime()-Date.UTC(2000,0,1,12))/86400000/36525;const eps=(23.439291-0.0130042*T)*Math.PI/180;let lam=Math.atan2(-Math.cos(theta),Math.sin(theta)*Math.cos(eps)+Math.tan(phi)*Math.sin(eps))*180/Math.PI;return mod(lam+180,360)}
 function geoLon(name,date){const body=Astronomy.Body[name],vec=Astronomy.GeoVector(body,date,true),ecl=Astronomy.Ecliptic(vec);return mod(ecl.elon,360)}
 function signedAngularDelta(a,b){return mod(b-a+180,360)-180}
 function planetary(date,withMotion=false){const names=['Sun','Moon','Mercury','Venus','Mars','Jupiter','Saturn','Uranus','Neptune','Pluto'],out={};for(const name of names){const lon=geoLon(name,date),p=signInfo(lon);if(withMotion&& !['Sun','Moon'].includes(name)){const before=geoLon(name,new Date(date.getTime()-43200000)),after=geoLon(name,new Date(date.getTime()+43200000));p.retrograde=signedAngularDelta(before,after)<0}out[name]=p}return out}
@@ -100,6 +100,12 @@ function engineSelfTest(){
   add('Mars 4th drishti',dr.some(x=>x.from==='Mars'&&x.to==='Venus'&&x.count===4));
   add('Jupiter 9th drishti',dr.some(x=>x.from==='Jupiter'&&x.to==='Sun'&&x.count===9));
   add('Saturn 3rd drishti',dr.some(x=>x.from==='Saturn'&&x.to==='Sun'&&x.count===3));
+  // Synthetic reference cases independently calculated with Swiss Ephemeris 2.10.03 (tropical Ascendant).
+  // Never embed a private user's natal data in a public regression fixture.
+  const ascDelhi=ascendant(new Date('2024-01-01T12:00:00Z'),28.6139,77.2090);
+  const ascSydney=ascendant(new Date('2022-10-29T22:06:00Z'),-33.8688,151.2093);
+  add('Ascendant parity — synthetic Delhi reference',angularSep(ascDelhi,100.356503658)<0.2,ascDelhi.toFixed(6)+'°');
+  add('Ascendant parity — synthetic Sydney reference',angularSep(ascSydney,268.006553863)<0.2,ascSydney.toFixed(6)+'°');
   return {passed:checks.filter(x=>x.ok).length,total:checks.length,ok:checks.every(x=>x.ok),checks};
 }
 function vimshottari(date,moonLon,atDate=new Date()){
