@@ -154,7 +154,7 @@ function chinese(date,timeKnown,timeZone){
   const monthBranch=mod(2+monthIndex,12);
   const local=zoneParts(date,timeZone);
   const dayRollover=timeKnown&&local.hour>=23?1:0;
-  const jdn=Math.floor(Date.UTC(local.year,local.month-1,local.day)/86400000)+2440588+dayRollo;
+  const jdn=Math.floor(Date.UTC(local.year,local.month-1,local.day)/86400000)+2440588+dayRollover;
   const dc=mod(jdn+49,60),ds=dc%10,db=dc%12;
   let hour=null;
   if(timeKnown){
