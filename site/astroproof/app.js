@@ -170,13 +170,13 @@ function chinese(date,timeKnown,timeZone){
   // Day/hour follow the explicitly declared civil-local-time + 23:00 rollover rule.
   // True-solar-time and equation-of-time adjustments are NOT applied.
   const sunLongitude=mod(Astronomy.SunPosition(date).elon,360);
-  let effectiveYear=date.getUTCFullYear();
-  if(date.getUTCMonth()<2&&sunLongitude>=270&&sunLongitude<315)effectiveYear--;
+  const local=zoneParts(date,timeZone);
+  let effectiveYear=local.year;
+  if(local.month<=2&&sunLongitude>=270&&sunLongitude<315)effectiveYear--;
   const cy=mod(effectiveYear-1984,60),ys=cy%10,yb=cy%12;
   const monthIndex=Math.floor(mod(sunLongitude-315,360)/30);
   const monthStem=mod((ys%5)*2+2+monthIndex,10);
   const monthBranch=mod(2+monthIndex,12);
-  const local=zoneParts(date,timeZone);
   const dayRollover=timeKnown&&local.hour>=23?1:0;
   const jdn=Math.floor(Date.UTC(local.year,local.month-1,local.day)/86400000)+2440588+dayRollover;
   const dc=mod(jdn+49,60),ds=dc%10,db=dc%12;
