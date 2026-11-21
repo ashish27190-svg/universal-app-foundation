@@ -47,7 +47,7 @@ const chStart=natalSource.indexOf('function chaldeanNameNumber(');
 const chEnd=natalSource.indexOf('\nfunction numerology(',chStart);
 assert.ok(bzStart>=0&&bzEnd>bzStart&&zoneStart>=0&&zoneEnd>zoneStart&&chStart>=0&&chEnd>chStart);
 const solarLon={
-  '2024-02-03':313.6281312, '2024-02-05':315.6571183, '2024-02-10':321.0
+  '2023-12-31':279.0, '2024-02-03':313.6281312, '2024-02-05':315.6571183, '2024-02-10':321.0
 };
 const bazi = vm.runInNewContext([
   'function mod(n,m){return ((n%m)+m)%m}',
@@ -68,6 +68,11 @@ const bazi = vm.runInNewContext([
 check('BaZi early-February year before Li Chun remains previous year',()=>{
   const c=bazi(new Date('2024-02-03T00:00:00Z'),true,'Asia/Tokyo');
   assert.equal(c.year.stem,'Gui');assert.equal(c.year.branch,'Mao');assert.equal(c.month.branch,'Chou');
+});
+check('BaZi local year at international date line is not the UTC year',()=>{
+  const c=bazi(new Date('2023-12-31T12:00:00Z'),true,'Pacific/Kiritimati');
+  assert.equal(c.year.effective_solar_year,2023);
+  assert.equal(c.year.stem,'Gui');assert.equal(c.year.branch,'Mao');
 });
 check('BaZi year and Jie month switch after Li Chun',()=>{
   const c=bazi(new Date('2024-02-05T00:00:00Z'),true,'Asia/Tokyo');
