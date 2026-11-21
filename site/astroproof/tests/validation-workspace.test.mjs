@@ -127,7 +127,7 @@ check('IANA conversion accepts valid time after DST transition',()=>{
 // not a mocked sidereal-time provider. Comparison points from Swiss Ephemeris 2.10.03.
 const astronomyBundle=fs.readFileSync(new URL('../astronomy.browser.min.js',import.meta.url),'utf8');
 const astronomicalWindow={};
-vm.runInNewContext(astronomyBundle,{window:astronomicalWindow});
+vm.runInNewContext(astronomyBundle,{window:astronomicalWindow,Date});
 assert.ok(astronomicalWindow.Astronomy?.SiderealTime);
 assert.ok(astronomicalWindow.Astronomy?.SunPosition);
 const liveAscendant=vm.runInNewContext(
