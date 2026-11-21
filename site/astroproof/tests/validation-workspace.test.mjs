@@ -490,5 +490,27 @@ check('Linking an event never automatically counts a validation match',()=>{
   const admitted=monitorLater.window.AstroProofValidation.getAdmissionSummary();
   assert.equal(admitted.admitted_matches,0);
 });
+
+// A pre-fix forecast remains visible and frozen, but MUST NOT count as a validated case.
+const legacy=boot('2026-11-20T09:00:00Z');
+legacy.submit('apv-new-prediction',{
+  life_area:'career',claim:'Synthetic legacy software forecast',
+  pass_fail_criteria:'Recorded fictional event before the test deadline',
+  specificity_class:'specific',window_start:'2026-11-25',window_end:'2026-11-30',
+  calculation_version:'astroproof-hosted-provisional-1.0',source_ref:'synthetic-reference',
+  rule_ids:'FICTIONAL-LEGACY',calibration_event_ids:'',assumptions:'Synthetic only',
+  competing_interpretations:'Unreliable chart version'
+});
+const legacyId=legacy.data().predictions.at(-1).prediction_id;
+legacy.action('freeze',legacyId);
+check('Pre-fix frozen forecast is quarantined without deletion or alteration',()=>{
+  const p=legacy.data().predictions.find(x=>x.prediction_id===legacyId);
+  assert.equal(p.status,'frozen');
+  assert.equal(p.calculation_version,'astroproof-hosted-provisional-1.0');
+  assert.equal(legacy.summary().legacy_quarantined,1);
+  assert.equal(legacy.window.AstroProofValidation.getFollowupSummary().items
+    .find(x=>x.prediction_id===legacyId).state,'integrity_blocked');
+});
+
 console.log('PASS: ' + report.length + ' synthetic AstroProof validation workflow checks');
 for (const name of report) console.log('  ✓ ' + name);
