@@ -156,6 +156,29 @@ for(const [date,expected] of [['2024-02-03T00:00:00Z',313.6281312],['2024-02-05T
   });
 }
 
+
+// A second independent parity layer exercises actual geocentric planetary code.
+const geoStart=natalSource.indexOf('function geoLon(');
+const geoEnd=natalSource.indexOf('\nfunction signedAngularDelta(',geoStart);
+assert.ok(geoStart>=0&&geoEnd>geoStart,'Planetary longitude implementation missing');
+const liveGeo=vm.runInNewContext(
+  'function mod(n,m){return ((n%m)+m)%m}\n'+natalSource.slice(geoStart,geoEnd)+'\ngeoLon',
+  {Astronomy:astronomicalWindow.Astronomy}
+);
+// Swiss Ephemeris 2.10.03 apparent tropical longitudes for 2024-01-01 12 UTC.
+const syntheticPlanetReferences=[
+  ['Sun',280.548484676],['Moon',161.906736285],['Mercury',262.212010208],
+  ['Venus',243.220438286],['Mars',267.679166905],
+  ['Jupiter',35.584376031],['Saturn',333.287953751]
+];
+for(const [planet,expected] of syntheticPlanetReferences){
+  check('Independent real-bundle planet longitude: '+planet,()=>{
+    const actual=liveGeo(planet,new Date('2024-01-01T12:00:00Z'));
+    const err=Math.abs(((actual-expected+540)%360)-180);
+    assert.ok(err<0.2,'Swiss apparent longitude mismatch for '+planet+': '+err+'°');
+  });
+}
+
 function boot(at) {
   const root = { innerHTML: '', className: '', listeners: {}, addEventListener(type, callback) { this.listeners[type] = callback; } };
   const document = { getElementById(id) { return id === 'apv-root' ? root : null; } };
