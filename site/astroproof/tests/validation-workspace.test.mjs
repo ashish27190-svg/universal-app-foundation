@@ -122,6 +122,40 @@ check('IANA conversion accepts valid time after DST transition',()=>{
   assert.equal(strictBirthTime('2024-03-10','03:30','America/New_York').toISOString(),'2024-03-10T07:30:00.000Z');
 });
 
+
+// End-to-end reference: execute the actual vendored Astronomy Engine library,
+// not a mocked sidereal-time provider. Comparison points from Swiss Ephemeris 2.10.03.
+const astronomyBundle=fs.readFileSync(new URL('../astronomy.browser.min.js',import.meta.url),'utf8');
+const astronomicalWindow={};
+vm.runInNewContext(astronomyBundle,{window:astronomicalWindow});
+assert.ok(astronomicalWindow.Astronomy?.SiderealTime);
+assert.ok(astronomicalWindow.Astronomy?.SunPosition);
+const liveAscendant=vm.runInNewContext(
+  'function mod(n,m){return ((n%m)+m)%m}\n'+ascSource+'\nascendant',
+  {Astronomy:astronomicalWindow.Astronomy}
+);
+const independentAscendantReferences=[
+  {date:'2024-01-01T12:00:00Z',lat:28.6139,lon:77.2090,expected:100.356503658},
+  {date:'2022-10-29T22:06:00Z',lat:-33.8688,lon:151.2093,expected:268.006553863},
+  {date:'2000-06-21T00:00:00Z',lat:51.5074,lon:-0.1278,expected:358.484317719},
+  {date:'2050-10-01T18:10:00Z',lat:40.7128,lon:-74.0060,expected:276.858662506},
+  {date:'1980-03-15T03:45:00Z',lat:19.0760,lon:72.8777,expected:39.638604376}
+];
+for(const ref of independentAscendantReferences){
+  check('Real browser astronomy parity: '+ref.date,()=>{
+    const actual=liveAscendant(new Date(ref.date),ref.lat,ref.lon);
+    const error=Math.abs(((actual-ref.expected+540)%360)-180);
+    assert.ok(error<0.15,'Independent Swiss Ascendant parity: '+ref.date+' error '+error+' degrees');
+  });
+}
+for(const [date,expected] of [['2024-02-03T00:00:00Z',313.6281312],['2024-02-05T00:00:00Z',315.6571183]]){
+  check('Real browser astronomy solar longitude: '+date,()=>{
+    const actual=astronomicalWindow.Astronomy.SunPosition(new Date(date)).elon;
+    const error=Math.abs(((actual-expected+540)%360)-180);
+    assert.ok(error<0.15,'Swiss solar longitude parity: '+date+' error '+error+' degrees');
+  });
+}
+
 function boot(at) {
   const root = { innerHTML: '', className: '', listeners: {}, addEventListener(type, callback) { this.listeners[type] = callback; } };
   const document = { getElementById(id) { return id === 'apv-root' ? root : null; } };
