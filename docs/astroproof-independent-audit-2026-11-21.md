@@ -51,3 +51,30 @@ A local independent formula comparison matched the corrected branch within 0.002
 - **Interpretation fidelity:** not independently source-audited.
 - **Predictive validity:** **NOT ESTABLISHED**; no reliable numeric prediction probability or headline success percentage can be reported.
 - **Public launch / paid accuracy claims:** **NO-GO**.
+
+## Continuation checkpoint — additional implementation and verification
+
+- `eslint.config.mjs` now specifies browser globals for owned site scripts and excludes vendored minified astronomy code. A clean UAF build/lint/typecheck/test run was confirmed after this repair.
+- `package.json` now requires the AstroProof synthetic validation suite as part of the standard CI test command.
+- The browser uses a versioned calculation identifier (`astroproof-browser-calculation-2026-11-21-v1.1`) for future forecast candidates and chart bridge metadata.
+- The BaZi browser calculation now applies the observed Li Chun solar-longitude boundary for the year, Jie month divisions, local-day Julian cycle and an explicit civil-clock 23:00 rollover. True-solar-time and independent multi-century convention certification remain pending.
+- The hosted numerology engine adds a distinct Chaldean expression mapping; its pre-existing Pythagorean expression is retained.
+- IANA conversion now rejects non-existent DST wall times and repeated clock times rather than silently selecting an offset.
+- The validation workspace preserves the old pre-fix frozen snapshots, but quarantines forecasts marked `astroproof-hosted-provisional-1.0` from prospective scoring.
+- An independent research-branch draft PR also excludes old-version forecasts from admission scoring. Its synthetic evaluator CI passed.
+- Additional **fictional/synthetic** cases cover Li Chun, Jie month, local day, hour, Chaldean, DST gap/fold, date-line rollover and legacy forecast quarantine.
+- Real vendored Astronomy Engine parity assertions against independently computed Swiss Ephemeris reference longitudes for 5 Ascendant positions, 2 solar-term positions and 7 geocentric planetary positions were added for full CI; merge requires the actual successful check.
+- This validates astronomical calculations and software controls only; **no demonstrated individual predictive validity** exists.
+
+### Recalculation and evidence policy
+
+Never alter previously frozen prediction wording, dates, timestamps, source claims or prior outcomes. Record retired engine versions transparently. If a faulty historical forecast is re-issued, the corrected forecast must receive a new ID, version, genuinely prospective freeze timestamp, and new outcome window; it must not be retroactively counted as a success.
+
+### Remaining high-level research gates
+
+- Broad independently verified reference corpus for astronomy, BaZi true-solar-time conventions and historically ambiguous birth-time rules.
+- Source-by-source traditional rule verification and interpretation audit.
+- Authenticated source storage, time seals, and real participant consent for prospective evaluation.
+- Complete sampling denominators, blinded outcome reporting, pre-specified predictions and comparisons with base-rate/no-astrology baselines.
+- Appropriate probability calibration and independent replication before any public accuracy claims.
+- Explicit approval before publishing changed charts or deploying corrected site.
