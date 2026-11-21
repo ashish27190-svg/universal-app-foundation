@@ -41,7 +41,31 @@ function chaldeanNameNumber(name){
 }
 function numerology(dateStr,name){const [y,m,d]=dateStr.split('-').map(Number), lp=reduce(reduce(m)+reduce(d)+reduce(y)),py=reduce(reduce(m)+reduce(d)+reduce(new Date().getFullYear()));return {life_path:lp,birthday:reduce(d),personal_year:py,expression:nameNumber(name),soul_urge:nameNumber(name,'vowel'),personality:nameNumber(name,'consonant'),chaldean_expression:chaldeanNameNumber(name)}}
 function zoneParts(date,tz){const p=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(date);const o={};for(const x of p)if(x.type!=='literal')o[x.type]=Number(x.value);return o}
-function localToUtc(dateStr,timeStr,tz){const [y,m,d]=dateStr.split('-').map(Number),[hh,mm]=timeStr.split(':').map(Number);let guess=new Date(Date.UTC(y,m-1,d,hh,mm,0));for(let i=0;i<3;i++){const q=zoneParts(guess,tz);const got=Date.UTC(q.year,q.month-1,q.day,q.hour,q.minute,q.second);const want=Date.UTC(y,m-1,d,hh,mm,0);guess=new Date(guess.getTime()+(want-got))}return guess}
+function localToUtc(dateStr,timeStr,tz){
+  const [y,m,d]=dateStr.split('-').map(Number),[hh,mm]=timeStr.split(':').map(Number);
+  const target=Date.UTC(y,m-1,d,hh,mm,0);
+  const valid=Number.isInteger(y)&&Number.isInteger(m)&&Number.isInteger(d)
+    &&Number.isInteger(hh)&&Number.isInteger(mm)&&m>=1&&m<=12&&hh>=0&&hh<=23&&mm>=0&&mm<=59
+    &&new Date(Date.UTC(y,m-1,d)).toISOString().slice(0,10)===dateStr;
+  if(!valid)throw new Error('Invalid birth date/time; use a real date and HH:MM.');
+  // Historical IANA time zones can have nonexistent spring-forward minutes and
+  // repeated fall-back minutes. Enumerate candidate offsets instead of guessing.
+  const offsets=new Set();
+  for(const hours of [-48,-36,-24,-12,0,12,24,36,48]){
+    const probe=target+hours*3600000,q=zoneParts(new Date(probe),tz);
+    offsets.add(Date.UTC(q.year,q.month-1,q.day,q.hour,q.minute,q.second)-probe);
+  }
+  const matches=[];
+  for(const offset of offsets){
+    const candidate=target-offset,q=zoneParts(new Date(candidate),tz);
+    if(q.year===y&&q.month===m&&q.day===d&&q.hour===hh&&q.minute===mm)
+      matches.push(candidate);
+  }
+  const unique=[...new Set(matches)];
+  if(unique.length===0)throw new Error('Birth time does not exist in selected time zone (clock change).');
+  if(unique.length>1)throw new Error('Birth time is ambiguous in selected time zone (clock repeated).');
+  return new Date(unique[0]);
+}
 function ayanamsaApprox(date){const y=date.getUTCFullYear()+(date.getUTCMonth()+0.5)/12;return 23.85675+(y-2000)*50.29/3600}
 function ascendant(date,lat,lon){const theta=mod(Astronomy.SiderealTime(date)*15+lon,360)*Math.PI/180;const phi=lat*Math.PI/180;const T=(date.getTime()-Date.UTC(2000,0,1,12))/86400000/36525;const eps=(23.439291-0.0130042*T)*Math.PI/180;let lam=Math.atan2(-Math.cos(theta),Math.sin(theta)*Math.cos(eps)+Math.tan(phi)*Math.sin(eps))*180/Math.PI;return mod(lam+180,360)}
 function geoLon(name,date){const body=Astronomy.Body[name],vec=Astronomy.GeoVector(body,date,true),ecl=Astronomy.Ecliptic(vec);return mod(ecl.elon,360)}
