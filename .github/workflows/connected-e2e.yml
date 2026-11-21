@@ -1,8 +1,10 @@
-name: Connected E2E (Guarded Workflow Pending)
+name: Connected E2E
 
-# P0 protective kill switch. Removes the old unconditional weekly schedule.
-# Connected E2E requires isolated staging and two approved synthetic accounts;
-# the revised manual-only guarded suite lives in draft PR #5.
+# Run manually only after the dedicated staging services are active.
+# These tests execute in an ephemeral localhost Vite preview, connected to
+# REAL staging Supabase + PowerSync. They do NOT test the hosted Cloudflare
+# Worker or its SSO/Access policy; that requires separate hosted evidence.
+# Do not schedule guaranteed failures while staging is paused.
 on:
   workflow_dispatch:
 
@@ -10,11 +12,53 @@ permissions:
   contents: read
 
 jobs:
-  disabled:
+  household-vault:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    environment: staging
+    timeout-minutes: 30
+    env:
+      VITE_UAF_ENVIRONMENT: staging
+      STAGING_SUPABASE_PROJECT_REF: ${{ secrets.STAGING_SUPABASE_PROJECT_REF }}
+      VITE_SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.STAGING_SUPABASE_PUBLISHABLE_KEY }}
+      VITE_POWERSYNC_URL: ${{ secrets.STAGING_POWERSYNC_URL }}
+      E2E_EMAIL: ${{ secrets.STAGING_E2E_EMAIL }}
+      E2E_PASSWORD: ${{ secrets.STAGING_E2E_PASSWORD }}
+      E2E_SECOND_EMAIL: ${{ secrets.STAGING_E2E_SECOND_EMAIL }}
+      E2E_SECOND_PASSWORD: ${{ secrets.STAGING_E2E_SECOND_PASSWORD }}
+      E2E_BASE_URL: http://127.0.0.1:4173
     steps:
-      - name: Refuse legacy connected staging tests
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Fail closed if isolated staging or E2E credentials are missing
+        run: node scripts/validate-staging-readiness.mjs --e2e
+      - run: pnpm --filter @uaf/reference-app exec playwright install --with-deps chromium
+      - run: pnpm --filter @uaf/reference-app build
+      - name: Verify connected report gate with synthetic evidence
+        run: node scripts/validate-connected-e2e-results.mjs --self-test
+      - name: Discover required browser scenarios (no credentialed requests)
+        run: pnpm --filter @uaf/reference-app exec playwright test --list
+      - name: Start preview server
         run: |
-          echo "::error::Connected E2E is disabled until protected UAF staging and both test accounts are explicitly approved."
+          pnpm --filter @uaf/reference-app exec vite preview --host 127.0.0.1 --port 4173 > /tmp/uaf-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --output /dev/null http://127.0.0.1:4173/; then
+              echo "Private CI localhost preview is ready."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Local preview did not start; no connected evidence claimed." >&2
           exit 1
+      - name: Run connected reliability journeys and collect JSON evidence
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: /tmp/uaf-connected-e2e-report.json
+        run: pnpm --filter @uaf/reference-app test:e2e --reporter=dot,json
+      - name: Fail closed on skipped, flaky, or missing scenarios
+        if: always()
+        run: node scripts/validate-connected-e2e-results.mjs

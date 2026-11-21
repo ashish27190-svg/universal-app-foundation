@@ -1,3 +1,6 @@
+# Isolated, disposable local project. Not linked to a hosted Supabase project.
+project_id = "uaf-household-vault-local"
+
 [functions.sync-apply]
 verify_jwt = true
 

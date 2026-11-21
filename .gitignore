@@ -7,3 +7,7 @@ coverage/
 !.env.example
 .DS_Store
 *.log
+
+# Local-only Supabase state (never commit temporary credentials/config)
+infrastructure/supabase/.temp/
+infrastructure/supabase/.branches/

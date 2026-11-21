@@ -24,12 +24,28 @@ describe('HttpConflictResolver', () => {
     expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
+  it('requires a reviewed revision and sends it with reapply requests', async () => {
+    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        conflictId: 'conflict-2', choice: 'reapply_client', reviewedRevision: 7,
+      });
+      return Response.json({ status: 'resolved' });
+    });
+    const resolver = new HttpConflictResolver({
+      endpoint: 'https://example.test/resolve', auth: auth(), fetchImpl: fetchImpl as never,
+    });
+    await expect(resolver.resolve('conflict-2', 'reapply_client')).rejects.toThrow('Review the latest server revision');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    await resolver.resolve('conflict-2', 'reapply_client', 7 as never);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
   it('surfaces resolver failures without pretending resolution succeeded', async () => {
     const resolver = new HttpConflictResolver({
       endpoint: 'https://example.test/resolve',
       auth: auth(),
       fetchImpl: vi.fn(async () => Response.json({ message: 'changed again' }, { status: 409 })) as never,
     });
-    await expect(resolver.resolve('conflict-1', 'reapply_client')).rejects.toThrow('changed again');
+    await expect(resolver.resolve('conflict-1', 'reapply_client', 5 as never)).rejects.toThrow('changed again');
   });
 });

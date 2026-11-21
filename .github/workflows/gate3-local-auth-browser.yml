@@ -1,0 +1,52 @@
+name: Gate 3 Local Auth Browser (No Staging)
+
+# REAL local Supabase Auth+RPC, Chromium and account-bound SQLite.
+# Deliberately NO connected PowerSync server: not hosted/streaming acceptance.
+# All containers are disposable GitHub runner resources; no hosted database,
+# Cloudflare publishing, external credentials or project reactivation.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/gate3-local-auth-browser.yml'
+      - 'apps/reference-app/**'
+      - 'packages/**'
+      - 'infrastructure/supabase/**'
+      - 'scripts/gate3-seed-local-auth.mjs'
+      - 'pnpm-lock.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  disposable-auth-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: corepack enable && corepack prepare pnpm@10.15.1 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Start ONLY disposable local UAF Supabase Auth + API
+        run: |
+          cd infrastructure
+          ../node_modules/.bin/supabase start --exclude studio,imgproxy,mailpit,realtime,storage-api,logflare,vector,supavisor
+          ../node_modules/.bin/supabase db reset --local --no-seed
+      - name: Create two synthetic users and load only local browser config
+        run: node scripts/gate3-seed-local-auth.mjs
+      - name: Build local PWA with ephemeral Supabase URLs, no hosted PowerSync
+        run: pnpm build
+      - name: Install Chromium
+        run: pnpm --filter @uaf/reference-app exec playwright install --with-deps chromium
+      - name: Exercise real local Auth, workspace RPC and SQLite owner isolation
+        run: pnpm --filter @uaf/reference-app exec playwright test --config playwright.local-auth.config.ts
+      - name: Stop disposable Supabase and discard all synthetic data
+        if: always()
+        run: |
+          cd infrastructure
+          ../node_modules/.bin/supabase stop --no-backup || true
