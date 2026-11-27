@@ -130,3 +130,62 @@ test('legacy calculation version is excluded even when criterion otherwise match
   assert.equal(r.summary.admission_label_discrepancies,0);
   assert.equal(r.summary.excluded_by_reason.legacy_calculation_version_quarantined,1);
 });
+
+
+// Prospective probability scoring, explicitly paired with a frozen baseline.
+import {scoreProspectiveCohort} from '../score-prospective-cohort.mjs';
+function cohortFixture(){
+  const endpoint='A fictional employer-signed offer during the fixed period';
+  const row=(id,subject,y,p,q)=>({
+    id,subject_id:subject,frozen_at:'2026-11-22T12:00:00Z',
+    window_start:'2026-12-01',window_end:'2026-12-31',
+    forecast_version:'synthetic-engine-v1',freeze_receipt_ref:'fictional-receipt-'+id,
+    model_probability:p,baseline_probability:q,baseline_provenance_ref:'fictional-frozen-baseline',
+    endpoint_definition:endpoint,outcome:y,event_date:y?'2026-12-20':null,
+    reviewed_at:'2027-01-02T10:00:00Z',outcome_evidence_ref:'fictional-observation',
+    independent_review_ref:'fictional-review',full_window_observed:true,used_for_calibration:false
+  });
+  return {
+    format:'astroproof-prospective-cohort-v1',cohort_id:'synthetic-cohort',
+    protocol_frozen_at:'2026-11-20T12:00:00Z',
+    cohort_registry_frozen_at:'2026-11-21T12:00:00Z',
+    evaluated_at:'2027-01-03T12:00:00Z',
+    cohort_registry_ref:'fictional-registered-cohort',
+    registered_subject_ids:['fictional-A','fictional-B'],endpoint_definition:endpoint,
+    baseline_method:'Synthetic fixed 0.5 reference',model_method:'Synthetic probabilities only',
+    records:[row('r1','fictional-A',1,0.8,0.5),row('r2','fictional-B',0,0.2,0.5)]
+  };
+}
+test('paired prospective scoring computes Brier skill and log loss without claims of certification',()=>{
+  const r=scoreProspectiveCohort(cohortFixture());
+  assert.equal(r.complete,true);assert.equal(r.registered_records,2);
+  assert.ok(Math.abs(r.model_brier-0.04)<1e-12);
+  assert.ok(Math.abs(r.baseline_brier-0.25)<1e-12);
+  assert.ok(Math.abs(r.brier_skill-0.84)<1e-12);
+  assert.ok(Math.abs(r.model_log_loss+Math.log(0.8))<1e-12);
+  assert.equal(r.status,'descriptive_complete_cohort_not_certified');
+});
+test('missing registered participant is never dropped from denominator',()=>{
+  const p=cohortFixture();p.records.pop();const r=scoreProspectiveCohort(p);
+  assert.equal(r.complete,false);assert.equal(r.registered_records,2);
+  assert.equal(r.eligible_records,1);assert.equal(r.excluded_records,1);
+  assert.ok(r.exclusions.some(x=>x.reasons.includes('registered_record_missing')));
+});
+test('missing baseline, premature outcome, and calibration leakage fail closed',()=>{
+  const p=cohortFixture();p.records[0].baseline_probability=null;
+  p.records[1].reviewed_at='2026-12-20T12:00:00Z';p.records[1].used_for_calibration=true;
+  const r=scoreProspectiveCohort(p);
+  assert.equal(r.eligible_records,0);assert.equal(r.brier_skill,null);
+  assert.ok(r.exclusions.some(x=>x.reasons.includes('calibration_leakage_or_unknown')));
+});
+test('duplicate participants or participants outside the frozen inventory are rejected',()=>{
+  const p=cohortFixture();p.records[1].subject_id=p.records[0].subject_id;
+  assert.throws(()=>scoreProspectiveCohort(p),/duplicate subject/);
+  const q=cohortFixture();q.records[1].subject_id='not-registered';
+  assert.throws(()=>scoreProspectiveCohort(q),/not in frozen registry/);
+});
+test('legacy engine and future observation cannot qualify',()=>{
+  const p=cohortFixture();p.records[0].forecast_version='astroproof-hosted-provisional-1.0';
+  p.records[1].reviewed_at='2027-01-04T12:00:00Z';
+  assert.equal(scoreProspectiveCohort(p).eligible_records,0);
+});
