@@ -7,6 +7,29 @@ import vm from 'node:vm';
 
 const code = fs.readFileSync(new URL('../validation.js', import.meta.url), 'utf8');
 new vm.Script(code, { filename: 'validation.js' });
+
+// Independent, deterministic reference regression for the hosted natal Ascendant formula.
+// Source code is loaded as text; only this pure function is evaluated with controlled sidereal times.
+// Synthetic inputs avoid putting anyone's private birth record into a public repository.
+const natalSource=fs.readFileSync(new URL('../app.js', import.meta.url),'utf8');
+const startNatal=natalSource.indexOf('function ascendant(date,lat,lon){');
+const endNatal=natalSource.indexOf('\nfunction geoLon',startNatal);
+assert.ok(startNatal>=0&&endNatal>startNatal,'Ascendant function must remain present');
+const ascSource=natalSource.slice(startNatal,endNatal);
+const ascReferences=[
+  {date:'2024-01-01T12:00:00.000Z',lat:28.6139,lon:77.209,siderealHours:18.709604672038,expected:100.356503658},
+  {date:'2022-10-29T22:06:00.000Z',lat:-33.8688,lon:151.2093,siderealHours:0.647612602816,expected:268.006553863}
+];
+const ascReferenceFunction=vm.runInNewContext(
+  'function mod(n,m){return ((n%m)+m)%m}\n'+ascSource+'\nascendant',
+  {Astronomy:{SiderealTime(date){const row=ascReferences.find(x=>x.date===date.toISOString());assert.ok(row,'Only declared synthetic reference dates are allowed');return row.siderealHours}}}
+);
+for(const ref of ascReferences){
+  const actual=ascReferenceFunction(new Date(ref.date),ref.lat,ref.lon);
+  const angularError=Math.abs(((actual-ref.expected+540)%360)-180);
+  assert.ok(angularError<0.2,'Ascendant parity failed: '+ref.date+' expected '+ref.expected+'°, actual '+actual+'°');
+}
+
 const local = new Map();
 let sequence = 0;
 const report = [];
@@ -14,6 +37,148 @@ const check = (name, fn) => {
   fn();
   report.push(name);
 };
+
+// Solar-term/JDN tests use published synthetic calendar references, not private natal data.
+const bzStart=natalSource.indexOf('function chinese(');
+const bzEnd=natalSource.indexOf('\nfunction calculateChart(',bzStart);
+const zoneStart=natalSource.indexOf('function zoneParts(');
+const zoneEnd=natalSource.indexOf('\nfunction localToUtc(',zoneStart);
+const chStart=natalSource.indexOf('function chaldeanNameNumber(');
+const chEnd=natalSource.indexOf('\nfunction numerology(',chStart);
+assert.ok(bzStart>=0&&bzEnd>bzStart&&zoneStart>=0&&zoneEnd>zoneStart&&chStart>=0&&chEnd>chStart);
+const solarLon={
+  '2023-12-31':279.0, '2024-02-03':313.6281312, '2024-02-05':315.6571183, '2024-02-10':321.0
+};
+const bazi = vm.runInNewContext([
+  'function mod(n,m){return ((n%m)+m)%m}',
+  "const STEMS=['Jia','Yi','Bing','Ding','Wu','Ji','Geng','Xin','Ren','Gui'];",
+  "const BR=['Zi','Chou','Yin','Mao','Chen','Si','Wu','Wei','Shen','You','Xu','Hai'];",
+  "const ANIMALS=['Rat','Ox','Tiger','Rabbit','Dragon','Snake','Horse','Goat','Monkey','Rooster','Dog','Pig'];",
+  "const CH_ELEMENTS=['Wood','Wood','Fire','Fire','Earth','Earth','Metal','Metal','Water','Water'];",
+  natalSource.slice(zoneStart,zoneEnd),
+  natalSource.slice(bzStart,bzEnd),
+  'chinese'
+].join('\n'),{
+  Astronomy:{SunPosition(date){
+    const day=date.toISOString().slice(0,10);
+    assert.ok(Object.hasOwn(solarLon,day),'Reference solar longitude missing for '+day);
+    return {elon:solarLon[day]};
+  }}
+});
+check('BaZi early-February year before Li Chun remains previous year',()=>{
+  const c=bazi(new Date('2024-02-03T00:00:00Z'),true,'Asia/Tokyo');
+  assert.equal(c.year.stem,'Gui');assert.equal(c.year.branch,'Mao');assert.equal(c.month.branch,'Chou');
+});
+check('BaZi local year at international date line is not the UTC year',()=>{
+  const c=bazi(new Date('2023-12-31T12:00:00Z'),true,'Pacific/Kiritimati');
+  assert.equal(c.year.effective_solar_year,2023);
+  assert.equal(c.year.stem,'Gui');assert.equal(c.year.branch,'Mao');
+});
+check('BaZi year and Jie month switch after Li Chun',()=>{
+  const c=bazi(new Date('2024-02-05T00:00:00Z'),true,'Asia/Tokyo');
+  assert.equal(c.year.stem,'Jia');assert.equal(c.year.branch,'Chen');
+  assert.equal(c.month.stem,'Bing');assert.equal(c.month.branch,'Yin');
+});
+check('BaZi sexagenary day uses local Julian day: 2024-02-10 Jia-Chen',()=>{
+  const c=bazi(new Date('2024-02-10T12:00:00Z'),true,'Asia/Tokyo');
+  assert.equal(c.day.stem,'Jia');assert.equal(c.day.branch,'Chen');
+});
+check('BaZi 23:00 civil day boundary updates day and hour',()=>{
+  const c=bazi(new Date('2024-02-10T14:00:00Z'),true,'Asia/Tokyo');
+  assert.equal(c.day.stem,'Yi');assert.equal(c.day.branch,'Si');
+  assert.equal(c.hour.stem,'Bing');assert.equal(c.hour.branch,'Zi');
+});
+check('BaZi unknown birth time does not invent an hour',()=>{
+  const c=bazi(new Date('2024-02-10T00:00:00Z'),false,'Asia/Tokyo');
+  assert.equal(c.hour,null);assert.equal(c.day.uncertain,true);
+});
+const chaldean=vm.runInNewContext(
+  'function reduce(n){while(n>9&&![11,22,33].includes(n))n=String(n).split("").reduce((a,b)=>a+Number(b),0);return n}\n'
+  +natalSource.slice(chStart,chEnd)+'\nchaldeanNameNumber',
+  {}
+);
+check('Chaldean expression remains distinct from Pythagorean',()=>{
+  const n=chaldean('ALICE');assert.equal(n.compound,13);assert.equal(n.reduced,4);
+});
+
+
+const utcStart=natalSource.indexOf('function localToUtc(');
+const utcEnd=natalSource.indexOf('\nfunction ayanamsaApprox(',utcStart);
+assert.ok(utcStart>=0&&utcEnd>utcStart,'IANA conversion implementation missing');
+const strictBirthTime=vm.runInNewContext(
+  natalSource.slice(zoneStart,zoneEnd)+'\n'+natalSource.slice(utcStart,utcEnd)+'\nlocalToUtc',
+  {}
+);
+check('IANA conversion resolves unambiguous India time',()=>{
+  assert.equal(strictBirthTime('2024-02-15','09:00','Asia/Kolkata').toISOString(),'2024-02-15T03:30:00.000Z');
+});
+check('IANA conversion rejects spring-forward nonexistent wall time',()=>{
+  assert.throws(()=>strictBirthTime('2024-03-10','02:30','America/New_York'),/does not exist/);
+});
+check('IANA conversion rejects fall-back repeated wall time',()=>{
+  assert.throws(()=>strictBirthTime('2024-11-03','01:30','America/New_York'),/ambiguous/);
+});
+check('IANA conversion accepts valid time after DST transition',()=>{
+  assert.equal(strictBirthTime('2024-03-10','03:30','America/New_York').toISOString(),'2024-03-10T07:30:00.000Z');
+});
+
+
+// End-to-end reference: execute the actual vendored Astronomy Engine library,
+// not a mocked sidereal-time provider. Comparison points from Swiss Ephemeris 2.10.03.
+const astronomyBundle=fs.readFileSync(new URL('../astronomy.browser.min.js',import.meta.url),'utf8');
+const astronomicalWindow={};
+vm.runInNewContext(astronomyBundle,{window:astronomicalWindow,Date});
+assert.ok(astronomicalWindow.Astronomy?.SiderealTime);
+assert.ok(astronomicalWindow.Astronomy?.SunPosition);
+const liveAscendant=vm.runInNewContext(
+  'function mod(n,m){return ((n%m)+m)%m}\n'+ascSource+'\nascendant',
+  {Astronomy:astronomicalWindow.Astronomy}
+);
+const independentAscendantReferences=[
+  {date:'2024-01-01T12:00:00Z',lat:28.6139,lon:77.2090,expected:100.356503658},
+  {date:'2022-10-29T22:06:00Z',lat:-33.8688,lon:151.2093,expected:268.006553863},
+  {date:'2000-06-21T00:00:00Z',lat:51.5074,lon:-0.1278,expected:358.484317719},
+  {date:'2050-10-01T18:10:00Z',lat:40.7128,lon:-74.0060,expected:276.858662506},
+  {date:'1980-03-15T03:45:00Z',lat:19.0760,lon:72.8777,expected:39.638604376}
+];
+for(const ref of independentAscendantReferences){
+  check('Real browser astronomy parity: '+ref.date,()=>{
+    const actual=liveAscendant(new Date(ref.date),ref.lat,ref.lon);
+    const error=Math.abs(((actual-ref.expected+540)%360)-180);
+    assert.ok(error<0.15,'Independent Swiss Ascendant parity: '+ref.date+' error '+error+' degrees');
+  });
+}
+for(const [date,expected] of [['2024-02-03T00:00:00Z',313.6281312],['2024-02-05T00:00:00Z',315.6571183]]){
+  check('Real browser astronomy solar longitude: '+date,()=>{
+    const actual=astronomicalWindow.Astronomy.SunPosition(new Date(date)).elon;
+    const error=Math.abs(((actual-expected+540)%360)-180);
+    assert.ok(error<0.15,'Swiss solar longitude parity: '+date+' error '+error+' degrees');
+  });
+}
+
+
+// A second independent parity layer exercises actual geocentric planetary code.
+const geoStart=natalSource.indexOf('function geoLon(');
+const geoEnd=natalSource.indexOf('\nfunction signedAngularDelta(',geoStart);
+assert.ok(geoStart>=0&&geoEnd>geoStart,'Planetary longitude implementation missing');
+const liveGeo=vm.runInNewContext(
+  'function mod(n,m){return ((n%m)+m)%m}\n'+natalSource.slice(geoStart,geoEnd)+'\ngeoLon',
+  {Astronomy:astronomicalWindow.Astronomy}
+);
+// Swiss Ephemeris 2.10.03 apparent tropical longitudes for 2024-01-01 12 UTC.
+const syntheticPlanetReferences=[
+  ['Sun',280.548484676],['Moon',161.906736285],['Mercury',262.212010208],
+  ['Venus',243.220438286],['Mars',267.679166905],
+  ['Jupiter',35.584376031],['Saturn',333.287953751]
+];
+for(const [planet,expected] of syntheticPlanetReferences){
+  check('Independent real-bundle planet longitude: '+planet,()=>{
+    const actual=liveGeo(planet,new Date('2024-01-01T12:00:00Z'));
+    const err=Math.abs(((actual-expected+540)%360)-180);
+    assert.ok(err<0.2,'Swiss apparent longitude mismatch for '+planet+': '+err+'°');
+  });
+}
+
 function boot(at) {
   const root = { innerHTML: '', className: '', listeners: {}, addEventListener(type, callback) { this.listeners[type] = callback; } };
   const document = { getElementById(id) { return id === 'apv-root' ? root : null; } };
@@ -408,5 +573,27 @@ check('Linking an event never automatically counts a validation match',()=>{
   const admitted=monitorLater.window.AstroProofValidation.getAdmissionSummary();
   assert.equal(admitted.admitted_matches,0);
 });
+
+// A pre-fix forecast remains visible and frozen, but MUST NOT count as a validated case.
+const legacy=boot('2026-11-20T09:00:00Z');
+legacy.submit('apv-new-prediction',{
+  life_area:'career',claim:'Synthetic legacy software forecast',
+  pass_fail_criteria:'Recorded fictional event before the test deadline',
+  specificity_class:'specific',window_start:'2026-11-25',window_end:'2026-11-30',
+  calculation_version:'astroproof-hosted-provisional-1.0',source_ref:'synthetic-reference',
+  rule_ids:'FICTIONAL-LEGACY',calibration_event_ids:'',assumptions:'Synthetic only',
+  competing_interpretations:'Unreliable chart version'
+});
+const legacyId=legacy.data().predictions.at(-1).prediction_id;
+legacy.action('freeze',legacyId);
+check('Pre-fix frozen forecast is quarantined without deletion or alteration',()=>{
+  const p=legacy.data().predictions.find(x=>x.prediction_id===legacyId);
+  assert.equal(p.status,'frozen');
+  assert.equal(p.calculation_version,'astroproof-hosted-provisional-1.0');
+  assert.equal(legacy.summary().legacy_quarantined,1);
+  assert.equal(legacy.window.AstroProofValidation.getFollowupSummary().items
+    .find(x=>x.prediction_id===legacyId).state,'integrity_blocked');
+});
+
 console.log('PASS: ' + report.length + ' synthetic AstroProof validation workflow checks');
 for (const name of report) console.log('  ✓ ' + name);

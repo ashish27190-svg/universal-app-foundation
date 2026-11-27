@@ -99,6 +99,43 @@ async function run(){
   assert(m<=frameWidth+25,'Mobile-sized layout has no major horizontal overflow: '+m+'px vs '+frameWidth+'px');
   const summary=w.AstroProofValidation.getSummary();
   assert(summary.prospective_matches===0&&summary.prospective_misses===0,'No match or miss fabricated by UI');
+
+  // Exercise migration through the actual rendered app, using fictional records only.
+  root.querySelector('[data-apv-tab="predictions"]').click();
+  form=root.querySelector('#apv-new-prediction');
+  for(const [name,value] of Object.entries({
+    life_area:'career',specificity_class:'specific',claim:'Synthetic retired-engine prediction',
+    pass_fail_criteria:'Fictional test criterion',window_start:'2090-04-10',window_end:'2090-04-20',
+    calculation_version:'astroproof-hosted-provisional-1.0',source_ref:'fictional-legacy-source',rule_ids:'FICTIONAL-OLD-1',assumptions:'Fictional legacy migration case'
+  }))fill(form,name,value);
+  form.requestSubmit();
+  const legacyRecord=JSON.parse(w.localStorage.getItem('astroproof.validation.v1')).predictions.find(p=>p.claim==='Synthetic retired-engine prediction');
+  assert(!!legacyRecord,'Legacy fixture is stored for migration test');
+  root.querySelector('[data-apv-action="freeze"][data-id="'+legacyRecord.prediction_id+'"]').click();
+  const savedLegacy=JSON.parse(w.localStorage.getItem('astroproof.validation.v1')).predictions.find(p=>p.prediction_id===legacyRecord.prediction_id);
+  assert(savedLegacy.status==='frozen','Original old-engine record remains frozen');
+  assert(w.AstroProofValidation.getSummary().legacy_quarantined===1,'Old-engine record excluded from scoring');
+  assert(w.AstroProofValidation.getFollowupSummary().items.find(p=>p.prediction_id===legacyRecord.prediction_id).state==='integrity_blocked','Legacy forecast shows blocked follow-up state');
+  doc.querySelector('[data-page="profile"]').click();
+  for(const [id,value] of Object.entries({'birthdate':'2024-01-01','birthtime':'17:30','birth-name':'ALICE','preset':'Delhi'})){
+    const el=doc.getElementById(id);el.value=value;el.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  doc.getElementById('consent').checked=true;
+  doc.getElementById('birth-form').requestSubmit();
+  const calc=w.AstroProofBridge.getChartSummary();
+  assert(calc?.ascendant==='Gemini','Corrected synthetic Vedic Ascendant is Gemini, not Sagittarius');
+  assert(calc.calculation_version==='astroproof-browser-calculation-2026-11-21-v1.1','Chart version is recorded');
+  doc.querySelector('[data-page="charts"]').click();
+  assert(doc.querySelector('#charts-area').textContent.includes('Engine self-test: PASS'),'Actual chart self-test renders PASS');
+  assert(doc.querySelector('#charts-area').textContent.includes('Ascendant: Cancer 10.'),'Corrected tropical Ascendant renders in Cancer');
+  assert(doc.querySelector('#charts-area').textContent.includes('Chaldean compound/reduced: 13/4'),'Chaldean result renders separately');
+  assert(doc.querySelector('#charts-area').textContent.includes('Year: Gui Mao'),'Li Chun previous solar-year pillar renders');
+  assert(doc.querySelector('#charts-area').textContent.includes('Month:'),'BaZi month pillar renders');
+  doc.querySelector('[data-page="validation"]').click();
+  root.querySelector('[data-apv-tab="predictions"]').click();
+  assert(root.querySelector('#apv-new-prediction').elements.namedItem('calculation_version').value===calc.calculation_version,'New draft defaults to corrected version');
+  w.localStorage.removeItem('astroproof.web.v05');
+
   w.localStorage.removeItem('astroproof.validation.v1');
   status.setAttribute('data-qa-state','pass');
   status.setAttribute('data-qa-count',String(checks.length));
