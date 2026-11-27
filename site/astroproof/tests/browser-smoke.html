@@ -106,7 +106,7 @@ async function run(){
   for(const [name,value] of Object.entries({
     life_area:'career',specificity_class:'specific',claim:'Synthetic retired-engine prediction',
     pass_fail_criteria:'Fictional test criterion',window_start:'2090-04-10',window_end:'2090-04-20',
-    calculation_version:'astroproof-hosted-provisional-1.0',source_ref:'fictional-legacy-source',rule_ids:'FICTIONAL-OLD-1'
+    calculation_version:'astroproof-hosted-provisional-1.0',source_ref:'fictional-legacy-source',rule_ids:'FICTIONAL-OLD-1',assumptions:'Fictional legacy migration case'
   }))fill(form,name,value);
   form.requestSubmit();
   const legacyRecord=JSON.parse(w.localStorage.getItem('astroproof.validation.v1')).predictions.find(p=>p.claim==='Synthetic retired-engine prediction');
@@ -131,6 +131,9 @@ async function run(){
   assert(doc.querySelector('#charts-area').textContent.includes('Chaldean compound/reduced: 13/4'),'Chaldean result renders separately');
   assert(doc.querySelector('#charts-area').textContent.includes('Year: Gui Mao'),'Li Chun previous solar-year pillar renders');
   assert(doc.querySelector('#charts-area').textContent.includes('Month:'),'BaZi month pillar renders');
+  doc.querySelector('[data-page="validation"]').click();
+  root.querySelector('[data-apv-tab="predictions"]').click();
+  assert(root.querySelector('#apv-new-prediction').elements.namedItem('calculation_version').value===calc.calculation_version,'New draft defaults to corrected version');
   w.localStorage.removeItem('astroproof.web.v05');
 
   w.localStorage.removeItem('astroproof.validation.v1');
