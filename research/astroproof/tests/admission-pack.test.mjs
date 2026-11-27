@@ -118,3 +118,15 @@ test('related in-window event is not a miss until full-window negative surveilla
   assert.equal(r.summary.misses,1);
   assert.equal(r.summary.admitted_binary_prospective,1);
 });
+
+test('legacy calculation version is excluded even when criterion otherwise matches',()=>{
+  const p=fixture(),row=p.records[0];
+  row.calculation_version='astroproof-hosted-provisional-1.0';
+  row.freeze_snapshot.calculation_version=row.calculation_version;
+  row.admission={admitted_binary_prospective:false,reasons:['legacy_calculation_version_quarantined']};
+  const r=evaluateAdmissionPack(p);
+  assert.equal(r.summary.admitted_binary_prospective,0);
+  assert.equal(r.summary.matches,0);
+  assert.equal(r.summary.admission_label_discrepancies,0);
+  assert.equal(r.summary.excluded_by_reason.legacy_calculation_version_quarantined,1);
+});
