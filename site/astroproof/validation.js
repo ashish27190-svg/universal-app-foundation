@@ -416,7 +416,7 @@
       textarea('claim','Precisely what is predicted?',true,'e.g. A signed job offer will be received; do not enter a vague theme')+
       textarea('pass_fail_criteria','What counts as a match, and what counts as a miss?',true,'E.g. signed offer received by deadline; otherwise miss')+
       '<div class="apv-3">'+formField('window_start','Window starts','date',true)+formField('window_end','Window ends','date',true)+formField('peak_at','Refined timing peak (optional)','datetime-local',false)+'</div>'+
-      '<div class="apv-2">'+formField('calculation_version','Calculation version / method','text',true,' value="'+escapeAttr(sources?.engine?'astroproof-hosted-provisional-1.0':'unverified-method')+'"')+
+      '<div class="apv-2">'+formField('calculation_version','Calculation version / method','text',true,' value="'+escapeAttr(sources?.calculation_version||'unverified-method')+'"')+
       formField('source_ref','Rule / calculation source reference','text',false,' maxlength="400" placeholder="Name an actual reference or leave unknown"')+'</div>'+
       formField('rule_ids','Rule IDs separated by commas','text',false,' placeholder="Do not invent IDs; leave blank if unknown"')+
       formField('calibration_event_ids','Calibration event IDs used, comma-separated','text',false,' placeholder="Must never overlap scored holdouts"')+
