@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "turbo dev --parallel",
     "build": "turbo build",
-    "test": "turbo test && node site/astroproof/tests/validation-workspace.test.mjs",
+    "test": "turbo test && node site/astroproof/tests/validation-workspace.test.mjs && node site/astroproof/tests/run-browser-smoke.mjs",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "turbo typecheck",
     "format": "prettier --write .",
@@ -34,7 +34,8 @@
     "validate:monitoring": "node scripts/validate-monitoring.mjs",
     "connected:gate": "node scripts/connected-build-gate.mjs",
     "connected:e2e": "node scripts/connected-build-gate.mjs --with-e2e",
-    "test:astroproof": "node site/astroproof/tests/validation-workspace.test.mjs"
+    "test:astroproof": "node site/astroproof/tests/validation-workspace.test.mjs",
+    "test:astroproof:browser": "node site/astroproof/tests/run-browser-smoke.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
