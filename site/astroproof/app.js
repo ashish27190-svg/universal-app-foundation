@@ -494,7 +494,7 @@ function birthTimeSensitivity(p){
   const declared={recorded:2,approx5:5,approx15:15,approx30:30,unknown:30}[p.time_precision||'recorded']||2;
   const deltas=[-30,-15,-10,-5,-2,0,2,5,10,15,30],rows=[];
   for(const delta of deltas){
-    const sp=shiftedProfile(p,delta),ch=calculateChart(sp,{skipDynamic:true});
+    const sp=shiftedProfile(p,delta);let ch;try{ch=calculateChart(sp,{skipDynamic:true})}catch(err){return {available:false,reason:'Sensitivity range includes an unresolved civil time: '+err.message}}
     rows.push({delta,asc:ch.vedic.ascendant?.sign||'—',ascDeg:ch.vedic.ascendant?.degree_in_sign??null,d9:ch.vedic.divisional.D9.Ascendant||'—',d10:ch.vedic.divisional.D10.Ascendant||'—',sunHouse:ch.vedic.planets.Sun.house||null,moonHouse:ch.vedic.planets.Moon.house||null,saturnHouse:ch.vedic.planets.Saturn.house||null});
   }
   const inRange=rows.filter(r=>Math.abs(r.delta)<=declared),same=k=>new Set(inRange.map(r=>r[k])).size===1;
@@ -503,7 +503,7 @@ function birthTimeSensitivity(p){
 function renderTimeSensitivity(){
   const box=$('time-sensitivity');if(!box)return;
   if(!chart||!state.profile){box.innerHTML='Calculate a profile to inspect birth-time sensitivity.';return}
-  const s=birthTimeSensitivity(state.profile);
+  let s;try{s=birthTimeSensitivity(state.profile)}catch(err){box.textContent='Birth-time sensitivity unresolved: '+err.message;return}
   if(!s.available){box.innerHTML='<b>Birth-time sensitivity:</b> '+esc(s.reason);return}
   const mark=x=>x?'Stable':'Changes';
   box.innerHTML=`<b>Birth-time sensitivity within ±${s.declared} min</b><p>Vedic Ascendant: <b>${mark(s.stable.asc)}</b> · D9 Ascendant: <b>${mark(s.stable.d9)}</b> · D10 Ascendant: <b>${mark(s.stable.d10)}</b> · Sun/Moon/Saturn houses: <b>${mark(s.stable.sunHouse&&s.stable.moonHouse&&s.stable.saturnHouse)}</b></p><details><summary>Inspect ±30-minute matrix</summary><div class="table-wrap"><table><thead><tr><th>Offset</th><th>Asc</th><th>D9 Asc</th><th>D10 Asc</th><th>Sun H</th><th>Moon H</th><th>Saturn H</th></tr></thead><tbody>${s.rows.map(r=>`<tr><td>${r.delta>0?'+':''}${r.delta}m</td><td>${r.asc}</td><td>${r.d9}</td><td>${r.d10}</td><td>${r.sunHouse||'—'}</td><td>${r.moonHouse||'—'}</td><td>${r.saturnHouse||'—'}</td></tr>`).join('')}</tbody></table></div></details><span class="hint">This is a sensitivity test, not birth-time rectification. It shows which outputs survive the declared uncertainty.</span>`;
@@ -511,13 +511,14 @@ function renderTimeSensitivity(){
 function renderCharts(){
   if(!chart){$('charts-area').textContent='Create a birth profile first.';return}
   const self=engineSelfTest();
+  const n=chart.numerology,c=chart.chinese;
   const v=chart.vedic,cond=Object.entries(v.conditions).map(([n,x])=>`<tr><td>${n}</td><td>${x.retrograde?'Retrograde':'Direct'}</td><td>${x.solar_separation.toFixed(2)}°</td><td>${x.combust?'Combust':'Not combust'} (≤${x.combustion_threshold}°)</td></tr>`).join('');
   const yoga=v.yogas.map(y=>`<div class="record"><b>${esc(y.name)}</b><p>${esc(y.evidence)}</p><span class="hint">${esc(y.status)} · Rule ${esc(y.rule_id)} · ${esc(y.convention)}</span></div>`).join('')||'<p class="muted">No structural matches from the small audited yoga set.</p>';
   const go=v.gochar.rows.map(x=>`<tr><td>${x.planet}</td><td>${x.sign}</td><td>${x.house_from_moon}</td><td>${x.baseline_favorable?(x.vedha_blocked_by?.length?'Baseline favorable, Vedha by '+x.vedha_blocked_by.join(', '):'Favorable after implemented Vedha check'):'Not in baseline favorable set'}</td></tr>`).join('');
   const d9=Object.entries(v.divisional.D9).filter(([k])=>k!=='Ascendant').map(([k,s])=>k+' '+s).join(' · ');
   const d10=Object.entries(v.divisional.D10).filter(([k])=>k!=='Ascendant').map(([k,s])=>k+' '+s).join(' · ');
   $('charts-area').className='';
-  $('charts-area').innerHTML=`<div class="notice"><b>Engine self-test:</b> ${self.ok?'PASS':'FAIL'} · ${self.passed}/${self.total} deterministic checks${self.ok?'':' · '+self.checks.filter(x=>!x.ok).map(x=>x.name).join(', ')}</div><div class="wheel-wrap"><div class="wheel-card"><span class="eyebrow">WESTERN · TROPICAL</span>${wheel(chart.western,'Western')}</div><div class="wheel-card"><span class="eyebrow">VEDIC · SIDEREAL APPROX</span>${wheel(chart.vedic,'Vedic')}</div></div>
+  $('charts-area').innerHTML=`<div class="notice"><b>Engine self-test:</b> ${self.ok?'PASS':'FAIL'} · ${self.passed}/${self.total} deterministic checks${self.ok?'':' · '+self.checks.filter(x=>!x.ok).map(x=>x.name).join(', ')}</div><div class="notice" id="calc-version">Calculation version: ${esc(CALCULATION_VERSION)} · Research calculation; no verified predictive skill.</div><div class="grid2"><div class="card"><h3>Numerology calculations</h3><p>Life Path: ${n.life_path} · Birthday: ${n.birthday} · Pythagorean expression: ${n.expression??'—'} · Chaldean compound/reduced: ${n.chaldean_expression?esc(n.chaldean_expression.compound+'/'+n.chaldean_expression.reduced):'—'}</p></div><div class="card"><h3>BaZi four pillars</h3><p>Year: ${c.year.stem} ${c.year.branch} · Month: ${c.month.stem} ${c.month.branch} · Day: ${c.day.stem} ${c.day.branch}${c.day.uncertain?' (time unknown)':''} · Hour: ${c.hour?c.hour.stem+' '+c.hour.branch:'unknown'}</p><p class="hint">${esc(c.method)}</p></div></div><div class="wheel-wrap"><div class="wheel-card"><span class="eyebrow">WESTERN · TROPICAL</span>${wheel(chart.western,'Western')}</div><div class="wheel-card"><span class="eyebrow">VEDIC · SIDEREAL APPROX</span>${wheel(chart.vedic,'Vedic')}</div></div>
   <div class="grid2" style="margin-top:14px"><div class="card"><h3>Western positions</h3>${planetTable(chart.western)}<p class="hint">Ascendant: ${chart.western.ascendant?chart.western.ascendant.sign+' '+chart.western.ascendant.degree_in_sign.toFixed(2)+'°':'unknown'}</p></div><div class="card"><h3>Vedic positions + mean nodes</h3>${planetTable(chart.vedic)}<p class="hint">Moon nakshatra: ${v.moon_nakshatra}, pada ${v.moon_pada}. Rahu/Ketu convention: mean lunar node / exact opposite.</p></div></div>
   <div class="grid2" style="margin-top:14px"><div class="card"><h3>Planet condition facts</h3><div class="table-wrap"><table><thead><tr><th>Planet</th><th>Motion</th><th>Sun separation</th><th>Combustion</th></tr></thead><tbody>${cond}</tbody></table></div><p class="hint">Combustion thresholds are an explicit working convention and remain source-versioned; they are not a universal astronomical property.</p></div><div class="card"><h3>Parāśari full graha drishti</h3><p>${v.drishti.slice(0,18).map(x=>`${x.from}→${x.to} (${x.count}th)`).join(' · ')||'—'}</p><p class="hint">Default: all classical grahas 7th; Mars 4/7/8, Jupiter 5/7/9, Saturn 3/7/10. Node drishti is deliberately not asserted.</p></div></div>
   <div class="grid2" style="margin-top:14px"><div class="card"><h3>Audited yoga candidates</h3>${yoga}</div><div class="card"><h3>Current Vedic gochar baseline</h3><div class="table-wrap"><table><thead><tr><th>Planet</th><th>Sidereal sign</th><th>From natal Moon</th><th>Phaladeepika baseline</th></tr></thead><tbody>${go}</tbody></table></div><p><b>Sade Sati:</b> ${v.gochar.sade_sati||'Not in the 12th/1st/2nd Saturn-from-Moon zone.'}</p><p class="hint">${esc(v.gochar.convention)}. Jupiter/Saturn Vedha is now checked when the source mapping is explicit; Rahu/Ketu remain baseline-only. Ashtakavarga is not yet applied.</p></div></div>
@@ -615,7 +616,7 @@ function astroChatPacket(){
     packet_version:'astroproof-chat-bridge-v0.1',
     created_at:new Date().toISOString(),
     declared_birth_time_quality:state.profile?.time_precision||'unspecified',
-    computation:{engine:chart.meta.engine,ayanamsa_degrees:chart.meta.ayanamsa_deg,
+    computation:{calculation_version:CALCULATION_VERSION,engine:chart.meta.engine,ayanamsa_degrees:chart.meta.ayanamsa_deg,
       birth_instant_utc:chart.meta.utc,
       caveat:'Hosted browser research engine, not independently certified against precision ephemeris',
       conventions:['Vedic approximate Lahiri sidereal','mean lunar node','whole-sign house baseline']},
@@ -626,7 +627,7 @@ function astroChatPacket(){
       D9:chart.vedic.divisional?.D9,D10:chart.vedic.divisional?.D10,
       yoga_candidates:chart.vedic.yogas,gochar:chart.vedic.gochar},
     numerology:chart.numerology,
-    bazi:{year:chart.chinese.year,day:chart.chinese.day,hour:chart.chinese.hour,
+    bazi:{year:chart.chinese.year,month:chart.chinese.month,day:chart.chinese.day,hour:chart.chinese.hour,
       method:chart.chinese.method},
     calculated_recent_past_periods:past,
     current_30_day_transit_signals:recent,
@@ -678,7 +679,7 @@ window.AstroProofBridge={
     if(!Number.isInteger(delta)||Math.abs(delta)>30)return {available:false,reason:'Offset must be an integer within ±30 minutes.'};
     const shifted=shiftedProfile(state.profile,delta);
     if(!shifted)return {available:false,reason:'Cannot compute shifted birth time.'};
-    const candidate=calculateChart(shifted,{skipDynamic:true});
+    let candidate;try{candidate=calculateChart(shifted,{skipDynamic:true})}catch(err){return {available:false,reason:err.message}}
     const info=ch=>({
       ascendant:ch.vedic.ascendant?.sign||null,
       d9_ascendant:ch.vedic.divisional.D9.Ascendant||null,
