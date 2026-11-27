@@ -10,11 +10,14 @@ const avg=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:null;
 const loss=(p,y)=>y===1?-Math.log(Math.max(p,1e-15)):-Math.log(Math.max(1-p,1e-15));
 export function scoreProspectiveCohort(pack){
   if(pack?.format!=='astroproof-prospective-cohort-v1'||!time(pack.protocol_frozen_at)||!time(pack.evaluated_at)||!Array.isArray(pack.records)||!nonempty(pack.cohort_id)||!nonempty(pack.cohort_registry_ref)||!nonempty(pack.endpoint_definition)||!nonempty(pack.baseline_method)||!nonempty(pack.model_method)||!nonempty(pack.cohort_registry_frozen_at)||!time(pack.cohort_registry_frozen_at)||Date.parse(pack.protocol_frozen_at)>Date.parse(pack.cohort_registry_frozen_at)||Date.parse(pack.cohort_registry_frozen_at)>Date.parse(pack.evaluated_at))throw Error('Malformed pre-registered cohort');
+  if(!Array.isArray(pack.registered_subject_ids)||!pack.registered_subject_ids.every(nonempty)||new Set(pack.registered_subject_ids).size!==pack.registered_subject_ids.length)throw Error('Frozen participant inventory required');
+  const registry=new Set(pack.registered_subject_ids);
   const ids=new Set(),participants=new Set(),eligible=[],excluded=[];
   for(const r of pack.records){
     if(!nonempty(r.id)||ids.has(r.id))throw Error('Missing or duplicate record id');
     ids.add(r.id);
     if(!nonempty(r.subject_id)||participants.has(r.subject_id))throw Error('One record per participant per cohort/endpoint; missing or duplicate subject');
+    if(!registry.has(r.subject_id))throw Error('Subject not in frozen registry');
     participants.add(r.subject_id);
     const why=[];
     if(!time(r.frozen_at)||!iso(r.window_start)||!iso(r.window_end)||r.window_start>r.window_end||r.window_start<=r.frozen_at?.slice(0,10)||Date.parse(r.frozen_at)<Date.parse(pack.cohort_registry_frozen_at)||Date.parse(r.frozen_at)>Date.parse(pack.evaluated_at))why.push('invalid_freeze_or_window');
@@ -28,12 +31,13 @@ export function scoreProspectiveCohort(pack){
     if(r.used_for_calibration!==false)why.push('calibration_leakage_or_unknown');
     if(why.length)excluded.push({id:r.id,reasons:why});else eligible.push(r);
   }
-  const n=eligible.length,missing=pack.records.length-n;
+  const n=eligible.length,missing=registry.size-n;
+  for(const id of registry)if(!participants.has(id))excluded.push({subject_id:id,reasons:['registered_record_missing']});
   const model=eligible.map(r=>(r.model_probability-r.outcome)**2),base=eligible.map(r=>(r.baseline_probability-r.outcome)**2);
   const modelBrier=avg(model),baselineBrier=avg(base);
-  const complete=pack.records.length>0&&missing===0;
+  const complete=registry.size>0&&missing===0;
   return {protocol:'astroproof-paired-prospective-score-v1',cohort_id:pack.cohort_id,
-    registered_records:pack.records.length,eligible_records:n,excluded_records:missing,complete,
+    registered_records:registry.size,eligible_records:n,excluded_records:missing,complete,
     observed_event_rate:avg(eligible.map(r=>r.outcome)),
     model_brier:modelBrier,baseline_brier:baselineBrier,
     brier_skill:n&&baselineBrier>0?1-modelBrier/baselineBrier:null,
